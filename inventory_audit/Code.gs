@@ -20,6 +20,11 @@
  *   A single item can qualify for several categories (by design). It is one row
  *   in the data store, so a note saved against it shows on every category at
  *   once. Writes are keyed by row number (exact) with an item-name safety check.
+ *
+ *   The client (Index.html) holds the full data set in memory once loaded. Edits
+ *   are instant and client-side; they are written back to the sheet in batches
+ *   (saveNotesBatch), either on demand ("Sync now") or on a periodic auto-sync
+ *   timer, instead of one network round trip per keystroke/row.
  ******************************************************************************/
 
 /** ------------------------------------------------------------------ CONFIG */
@@ -31,6 +36,24 @@ const DATASTORE_HEADERS = [
 ];
 const HEADER_ROW = 1;
 const FIRST_DATA_ROW = 2;
+
+// All optional report columns the web view can show, in display order. "Item"
+// and "Notes" are core UI and are not part of this toggle list. Admins choose
+// which of these are visible via Settings ("adjust visible columns").
+const ALL_COLUMN_DEFS = [
+  { key: 'uom',           label: 'UofM' },
+  { key: 'currentQty',    label: 'Current Qty' },
+  { key: 'currentCost',   label: 'Current $ Cost' },
+  { key: 'currentTotal',  label: 'Current $ Total' },
+  { key: 'previousQty',   label: 'Previous Qty' },
+  { key: 'prevCost',      label: 'Prev $ Cost' },
+  { key: 'prevTotal',     label: 'Prev $ Total' },
+  { key: 'adjustment',    label: 'Adjustment' },
+  { key: 'costAcct',      label: 'Cost Acct' },
+  { key: 'inventoryAcct', label: 'Inventory Acct' },
+  { key: 'flag',          label: 'Flag' },
+  { key: 'variance',      label: 'Price Variance' }
+];
 
 const CONFIG = {
   // The data-store tables and how they surface as tabs.
@@ -56,15 +79,6 @@ const CONFIG = {
 
   ENABLE_AUDIT: true,   // stamp Reviewed By / Reviewed At on save
 
-  // Only these accounts may upload/replace or remove data from inside the web
-  // app. Everyone else in the domain can review and add notes but cannot wipe.
-  // Leave empty to disable admin actions entirely until you add an email.
-  // NOTE: identity resolves via the accessing user's email — reliable inside
-  // your own Workspace domain (see README, "Admin identity").
-  ADMIN_EMAILS: [
-    // 'robert.stevenson@atlasrestaurantgroup.com'
-  ],
-
   STATUS_RULES: [
     { prefix: 'CORRECT', status: 'correct' },
     { prefix: 'REVIEW',  status: 'review'  },
@@ -72,7 +86,114 @@ const CONFIG = {
   ]
 };
 
-/** --------------------------------------------------------- SHEET SHAPING */
+/** --------------------------------------------------------- SETTINGS STORE
+ * Admin-editable settings (admin emails, visible columns, note categories) are
+ * persisted in the spreadsheet's Document Properties — shared by everyone who
+ * opens the web app, but not visible in the sheet UI itself. This lets admins
+ * change them from inside the app (Settings panel) with no code redeploy.
+ */
+const SETTINGS_KEY = 'INVENTORY_AUDIT_SETTINGS_V1';
+
+const DEFAULT_SETTINGS = {
+  // Seed admin(s). Editable afterwards from the Settings panel. Kept non-empty
+  // here so the person installing the app is never locked out on first run.
+  adminEmails: ['rstevenson1237@gmail.com'],
+  visibleColumns: ALL_COLUMN_DEFS.map(function(c){ return c.key; }),
+  noteCategories: [
+    'CORRECT',
+    'CORRECT - ISSUE HAS BEEN RESOLVED',
+    'CORRECT - FIXED FROM LAST MONTH',
+    'REVIEW',
+    'REVIEW - DOUBLE CHECK COUNT',
+    'ADJUST',
+    'ADJUST - CASE AS BOTTLE PRICE',
+    'ADJUST - INCORRECT ITEM COUNTED',
+    'ADJUST - BOTTLE AS CASE PRICE',
+    'ADJUST - INCORRECT PRICE IN SYSTEM',
+    'ADJUST - PRODUCT NEEDS TO BE RECOSTED'
+  ]
+};
+
+function cloneDefaultSettings_() {
+  return JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+}
+
+/** Read settings from Document Properties, filling in defaults if unset/corrupt. */
+function loadSettings_() {
+  let raw = null;
+  try { raw = PropertiesService.getDocumentProperties().getProperty(SETTINGS_KEY); }
+  catch (e) { raw = null; }
+  if (!raw) return cloneDefaultSettings_();
+  try {
+    const parsed = JSON.parse(raw);
+    const d = cloneDefaultSettings_();
+    return {
+      adminEmails: (Array.isArray(parsed.adminEmails) && parsed.adminEmails.length)
+        ? parsed.adminEmails.map(String) : d.adminEmails,
+      visibleColumns: Array.isArray(parsed.visibleColumns)
+        ? parsed.visibleColumns.filter(function(k){ return ALL_COLUMN_DEFS.some(function(c){ return c.key === k; }); })
+        : d.visibleColumns,
+      noteCategories: (Array.isArray(parsed.noteCategories) && parsed.noteCategories.length)
+        ? parsed.noteCategories.map(String) : d.noteCategories
+    };
+  } catch (e) {
+    return cloneDefaultSettings_();
+  }
+}
+
+function persistSettings_(settings) {
+  PropertiesService.getDocumentProperties().setProperty(SETTINGS_KEY, JSON.stringify(settings));
+}
+
+/** Client-callable: current settings + column catalogue + this user's session. */
+function getSettings() {
+  const s = loadSettings_();
+  return {
+    adminEmails: s.adminEmails,
+    visibleColumns: s.visibleColumns,
+    noteCategories: s.noteCategories,
+    allColumns: ALL_COLUMN_DEFS,
+    isAdmin: isAdmin_(),
+    email: currentUserEmail_()
+  };
+}
+
+/**
+ * Admin-only. Replace settings wholesale. Validated: at least one admin email,
+ * at least one note category, every note category must start with a status
+ * prefix (CORRECT/REVIEW/ADJUST) so row colouring and the two-stage dropdown
+ * keep working, and visible columns must be known keys.
+ */
+function saveSettings(payload) {
+  requireAdmin_();
+  if (!payload || typeof payload !== 'object') throw new Error('saveSettings: invalid payload.');
+
+  const adminEmails = Array.isArray(payload.adminEmails)
+    ? payload.adminEmails.map(function(e){ return String(e).trim(); }).filter(Boolean) : [];
+  if (!adminEmails.length) throw new Error('At least one admin email is required.');
+
+  const validKeys = ALL_COLUMN_DEFS.map(function(c){ return c.key; });
+  const visibleColumns = Array.isArray(payload.visibleColumns)
+    ? payload.visibleColumns.filter(function(k){ return validKeys.indexOf(k) !== -1; }) : [];
+
+  const noteCategories = Array.isArray(payload.noteCategories)
+    ? payload.noteCategories.map(function(c){ return String(c).trim().toUpperCase(); }).filter(Boolean) : [];
+  if (!noteCategories.length) throw new Error('At least one note category is required.');
+  noteCategories.forEach(function(c){
+    const ok = CONFIG.STATUS_RULES.some(function(rule){ return c.indexOf(rule.prefix) === 0; });
+    if (!ok) throw new Error('"' + c + '" must start with CORRECT, REVIEW, or ADJUST.');
+  });
+
+  const settings = {
+    adminEmails: adminEmails,
+    visibleColumns: visibleColumns,
+    noteCategories: noteCategories
+  };
+  persistSettings_(settings);
+  return getSettings();
+}
+
+/** ---------------------------------------------------------- SHEET SHAPING */
 /** Write the bold, frozen header row that defines the table. */
 function formatHeaderRow_(sheet) {
   if (sheet.getMaxColumns() < DATASTORE_HEADERS.length) {
@@ -125,7 +246,8 @@ function currentUserEmail_() {
 function isAdmin_() {
   const email = currentUserEmail_().toLowerCase();
   if (!email) return false;
-  return CONFIG.ADMIN_EMAILS.map(function(e){ return String(e).toLowerCase(); }).indexOf(email) !== -1;
+  const settings = loadSettings_();
+  return settings.adminEmails.map(function(e){ return String(e).toLowerCase(); }).indexOf(email) !== -1;
 }
 
 /** Throw unless the accessing user is an admin. Guards every destructive call. */
@@ -178,6 +300,8 @@ function num_(v) {
   return isNaN(n) ? NaN : n;
 }
 
+function str_(v) { return v == null ? '' : String(v); }
+
 function statusForNote_(note) {
   if (!note) return '';
   const n = String(note).trim().toUpperCase();
@@ -205,10 +329,17 @@ function readRows_(sheet, cols) {
       uom: g(r, 'UofM'),
       currentQty: num_(g(r, 'Current Qty')),
       currentCost: num_(g(r, 'Current $ Cost')),
+      currentTotal: num_(g(r, 'Current $ Total')),
+      previousQty: num_(g(r, 'Previous Qty')),
       prevCost: num_(g(r, 'Prev $ Cost')),
+      prevTotal: num_(g(r, 'Prev $ Total')),
       adjustment: num_(g(r, 'Adjustment')),
-      flag: (function(){ const f = g(r, 'Flag'); return f == null ? '' : String(f); })(),
-      note: (function(){ const nt = g(r, 'Notes'); return nt == null ? '' : String(nt); })()
+      costAcct: str_(g(r, 'Cost Acct')),
+      inventoryAcct: str_(g(r, 'Inventory Acct')),
+      flag: str_(g(r, 'Flag')),
+      note: str_(g(r, 'Notes')),
+      reviewedBy: str_(g(r, 'Reviewed By')),
+      reviewedAt: str_(g(r, 'Reviewed At'))
     });
   });
   return rows;
@@ -218,6 +349,7 @@ function readRows_(sheet, cols) {
 function variance_(row) {
   if (row.currentCost === 0) return { valid: true, value: -1 };
   if (!isFinite(row.prevCost) || row.prevCost === 0) return { valid: false, value: null };
+  if (!isFinite(row.currentCost)) return { valid: false, value: null };
   return { valid: true, value: Math.abs((row.currentCost - row.prevCost) / row.prevCost) };
 }
 
@@ -232,7 +364,7 @@ function computeCategories_(rows) {
     .filter(function(x){ return x.r.currentQty > 0 && x.v.valid; })
     .sort(function(a, b){ return b.v.value - a.v.value; })
     .slice(0, L.priceChanges)
-    .map(function(x){ return decorate_(x.r, x.v.value); });
+    .map(function(x){ return decorate_(x.r); });
 
   // Decreases: all rows by Adjustment ascending; top 10.
   const decreases = rows.slice()
@@ -267,7 +399,9 @@ function computeCategories_(rows) {
            newItems: newItems, zeroCost: zeroCost, uncounted: uncounted };
 }
 
-function decorate_(r, varianceValue) {
+/** Shape a raw row for the client: full report columns + computed variance. */
+function decorate_(r) {
+  const v = variance_(r);
   return {
     type: 'item',
     row: r.row,
@@ -275,11 +409,19 @@ function decorate_(r, varianceValue) {
     uom: r.uom == null ? '' : String(r.uom),
     currentQty: isFinite(r.currentQty) ? r.currentQty : '',
     currentCost: isFinite(r.currentCost) ? r.currentCost : '',
+    currentTotal: isFinite(r.currentTotal) ? r.currentTotal : '',
+    previousQty: isFinite(r.previousQty) ? r.previousQty : '',
+    prevCost: isFinite(r.prevCost) ? r.prevCost : '',
+    prevTotal: isFinite(r.prevTotal) ? r.prevTotal : '',
     adjustment: isFinite(r.adjustment) ? r.adjustment : '',
+    costAcct: r.costAcct || '',
+    inventoryAcct: r.inventoryAcct || '',
     flag: r.flag || '',
-    variance: (varianceValue == null ? '' : varianceValue),
+    variance: (v.valid ? v.value : ''),
     note: r.note || '',
-    status: statusForNote_(r.note)
+    status: statusForNote_(r.note),
+    reviewedBy: r.reviewedBy || '',
+    reviewedAt: r.reviewedAt || ''
   };
 }
 
@@ -288,12 +430,24 @@ function decorate_(r, varianceValue) {
  * Returns, per datastore tab:
  *   { key, label, sheet, sections:[{ label, items:[...] }], counts:{ total, reviewed } }
  * counts are DISTINCT items across all categories (an item spanning several
- * categories is one unit of work).
+ * categories is one unit of work). Also includes the current settings (visible
+ * columns, note categories) and session, so the client needs one round trip to
+ * render everything.
  */
 function getInventoryData() {
   const ss = getSpreadsheet_();
-  const result = { tabs: [], generatedAt: new Date().toISOString(),
-                   session: { email: currentUserEmail_(), isAdmin: isAdmin_() } };
+  const settings = loadSettings_();
+  const result = {
+    tabs: [],
+    generatedAt: new Date().toISOString(),
+    session: { email: currentUserEmail_(), isAdmin: isAdmin_() },
+    settings: {
+      visibleColumns: settings.visibleColumns,
+      noteCategories: settings.noteCategories,
+      allColumns: ALL_COLUMN_DEFS,
+      adminEmails: settings.adminEmails
+    }
+  };
 
   CONFIG.DATASTORES.forEach(function(d){
     const sheet = ss.getSheetByName(d.sheet);
@@ -386,24 +540,41 @@ function saveNote(payload) {
   }
 }
 
-/** Batch save. entries: [{ datastore, row, note, expectedItem }]. */
+/**
+ * Batch save — the primary write path used by the client's in-memory sync
+ * queue (manual "Sync now" or the auto-sync timer). entries:
+ *   [{ datastore, row, note, expectedItem }]
+ * Returns one result per entry, IN THE SAME ORDER, so the client can reconcile
+ * its pending queue precisely: a row whose entry comes back { ok:false } stays
+ * pending (and marked as an error) instead of being silently dropped, which is
+ * what caused notes to appear to "not save" under the old per-row Save flow.
+ */
 function saveNotesBatch(entries) {
   if (!Array.isArray(entries)) throw new Error('saveNotesBatch expects an array.');
   const lock = LockService.getScriptLock();
-  lock.waitLock(30000);
+  try { lock.waitLock(30000); }
+  catch (e) { throw new Error('The data store is busy — another sync is in progress. Try again shortly.'); }
   try {
     const ss = getSpreadsheet_();
+    const sheetCache = {}, colsCache = {};
     const results = [];
     entries.forEach(function(e){
       try {
         const d = datastoreByKey_(e.datastore);
-        const sheet = ss.getSheetByName(d.sheet);
-        const cols = resolveColumns_(sheet);
+        if (!sheetCache[d.key]) {
+          sheetCache[d.key] = ss.getSheetByName(d.sheet);
+          if (!sheetCache[d.key]) throw new Error('Data-store sheet "' + d.sheet + '" not found.');
+          colsCache[d.key] = resolveColumns_(sheetCache[d.key]);
+        }
+        const sheet = sheetCache[d.key], cols = colsCache[d.key];
         const r = Number(e.row);
+        if (r < FIRST_DATA_ROW || r > sheet.getLastRow()) {
+          results.push({ row: r, ok: false, error: 'row out of range — refresh' }); return;
+        }
         if (e.expectedItem != null) {
           const actual = sheet.getRange(r, cols['Item']).getValue();
           if (String(actual).trim() !== String(e.expectedItem).trim()) {
-            results.push({ row: r, ok: false, error: 'row moved' }); return;
+            results.push({ row: r, ok: false, error: 'row moved — refresh' }); return;
           }
         }
         sheet.getRange(r, cols['Notes']).setValue(e.note == null ? '' : String(e.note));
@@ -413,13 +584,21 @@ function saveNotesBatch(entries) {
           sheet.getRange(r, cols['Reviewed At']).setValue(
             Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm'));
         }
-        results.push({ row: r, ok: true });
+        results.push({ row: r, ok: true, status: statusForNote_(e.note) });
       } catch (err) {
         results.push({ row: e.row, ok: false, error: String(err.message || err) });
       }
     });
     SpreadsheetApp.flush();
-    return results;
+
+    // Progress per datastore touched, so the client can refresh tab counters
+    // without a full reload.
+    const progress = {};
+    Object.keys(sheetCache).forEach(function(key){
+      const d = datastoreByKey_(key);
+      progress[key] = computeProgress_(ss, d);
+    });
+    return { results: results, progress: progress };
   } finally {
     lock.releaseLock();
   }

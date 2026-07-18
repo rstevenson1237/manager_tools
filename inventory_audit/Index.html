@@ -7,21 +7,25 @@
     :root{--brand:#1a73e8;--brand-dark:#1557b0;--green:#d9ead3;--green-b:#38761d;
       --yellow:#fff2cc;--yellow-b:#bf9000;--red:#f4cccc;--red-b:#cc0000;--grey-b:#5f6368;--danger:#d93025;}
     *{box-sizing:border-box;}
+    [v-cloak]{display:none;}
     body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;margin:0;padding:12px;background:#f8f9fa;color:#202124;}
     .header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:12px;}
     h2{margin:0;color:var(--brand);font-size:20px;}
-    .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
-    button{background:var(--brand);color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-weight:600;}
-    button:hover{background:var(--brand-dark);}
+    .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+    button{background:var(--brand);color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;transition:background-color .15s ease;}
+    button:hover:not(:disabled){background:var(--brand-dark);}
     button:disabled{background:#ccc;cursor:not-allowed;}
     button.ghost{background:#e8eaed;color:#3c4043;}
+    button.ghost:hover:not(:disabled){background:#dadce0;}
     button.danger{background:var(--danger);}
-    button.danger:hover{background:#b3271b;}
+    button.danger:hover:not(:disabled){background:#b3271b;}
+    .toggle{display:flex;align-items:center;gap:5px;font-size:13px;color:var(--grey-b);cursor:pointer;user-select:none;}
+    .pending-indicator{font-size:12px;font-weight:700;color:var(--brand);background:#eef3fe;padding:5px 10px;border-radius:10px;white-space:nowrap;}
     /* admin bar */
-    #adminBar{display:none;align-items:center;gap:12px;flex-wrap:wrap;background:#eef3fe;border:1px solid #cfe0ff;
+    #adminBar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#eef3fe;border:1px solid #cfe0ff;
       border-radius:8px;padding:10px 12px;margin-bottom:12px;}
     #adminBar .who{font-size:12px;color:var(--grey-b);margin-left:auto;}
-    #adminBar label.upload{background:var(--brand);color:#fff;padding:8px 14px;border-radius:6px;cursor:pointer;font-weight:600;font-size:14px;}
+    #adminBar label.upload{background:var(--brand);color:#fff;padding:8px 14px;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;}
     #adminBar label.upload:hover{background:var(--brand-dark);}
     #adminBar input[type=file]{display:none;}
     .admin-title{font-weight:700;color:#3c4043;}
@@ -29,361 +33,646 @@
     .tab{background:#e8eaed;color:#3c4043;padding:8px 14px;border-radius:6px 6px 0 0;cursor:pointer;font-weight:600;border:none;}
     .tab.active{background:var(--brand);color:#fff;}
     .tab .count{font-weight:400;opacity:.85;margin-left:6px;font-size:12px;}
-    #status{padding:10px 12px;margin-bottom:12px;border-radius:6px;display:none;font-weight:600;}
-    .s-loading{background:#e8f0fe;color:var(--brand);display:block !important;}
-    .s-success{background:#d4edda;color:#155724;display:block !important;}
-    .s-error{background:#f8d7da;color:#721c24;display:block !important;}
+    #status{padding:10px 12px;margin-bottom:12px;border-radius:6px;font-weight:600;transition:opacity .2s ease;}
+    .s-loading{background:#e8f0fe;color:var(--brand);}
+    .s-success{background:#d4edda;color:#155724;}
+    .s-error{background:#f8d7da;color:#721c24;}
     .progress-wrap{min-width:220px;}
     .progress-bar{height:8px;background:#e0e0e0;border-radius:4px;overflow:hidden;}
     .progress-fill{height:100%;background:var(--green-b);width:0%;transition:width .3s;}
     .progress-label{font-size:12px;color:var(--grey-b);margin-top:2px;}
-    .table-container{width:100%;max-height:600px;overflow-y:auto;border:1px solid #ddd;background:#fff;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,.05);}
+    .table-container{width:100%;max-height:640px;overflow:auto;border:1px solid #ddd;background:#fff;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,.05);}
     table{width:100%;border-collapse:collapse;}
-    th{background:#f1f3f4;padding:10px 12px;text-align:left;position:sticky;top:0;z-index:2;box-shadow:0 1px 0 #ddd;font-size:13px;}
-    td{padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;vertical-align:middle;}
-    tr.section td{background:#eef1f5;font-weight:700;color:#3c4043;text-transform:uppercase;letter-spacing:.03em;font-size:12px;position:sticky;top:41px;z-index:1;}
-    tr.empty td{color:var(--grey-b);font-style:italic;font-size:12px;}
+    th{background:#f1f3f4;padding:10px 12px;text-align:left;position:sticky;top:0;z-index:2;box-shadow:0 1px 0 #ddd;font-size:12px;white-space:nowrap;}
+    td{padding:8px 12px;border-bottom:1px solid #eee;font-size:13px;vertical-align:middle;white-space:nowrap;}
+    tr{transition:background-color .25s ease;}
+    tr.section td{background:#eef1f5;font-weight:700;color:#3c4043;text-transform:uppercase;letter-spacing:.03em;font-size:12px;position:sticky;top:37px;z-index:1;white-space:normal;}
+    tr.empty td{color:var(--grey-b);font-style:italic;font-size:12px;white-space:normal;}
     tr.row-correct{background:var(--green);}
     tr.row-review{background:var(--yellow);}
     tr.row-adjust{background:var(--red);}
     .dup-badge{display:inline-block;margin-left:6px;font-size:10px;font-weight:700;color:#fff;background:var(--grey-b);border-radius:8px;padding:1px 6px;vertical-align:middle;}
-    .flag{font-weight:600;color:var(--red-b);white-space:nowrap;}
-    .qty{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
-    .note-cell{min-width:240px;}
-    input[type=text]{width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:5px;font-size:13px;}
-    input[type=text].dirty{border-color:var(--brand);background:#f0f6ff;}
-    .quick{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap;}
-    .chip{font-size:11px;padding:2px 8px;border-radius:10px;cursor:pointer;border:1px solid #ccc;background:#fff;color:#444;font-weight:600;}
-    .chip.c-correct{border-color:var(--green-b);color:var(--green-b);}
-    .chip.c-review{border-color:var(--yellow-b);color:var(--yellow-b);}
-    .chip.c-adjust{border-color:var(--red-b);color:var(--red-b);}
-    .chip.c-fixed{border-color:var(--green-b);color:var(--green-b);background:#eaf6e6;}
-    .chip:hover{filter:brightness(.95);}
-    .save-btn{background:#28a745;padding:6px 12px;font-size:12px;}
-    .save-btn:hover{background:#218838;}
-    .save-btn.saved{background:#6c757d;}
-    .row-saving{opacity:.6;}
+    .flag{font-weight:600;color:var(--red-b);}
+    .qty{text-align:right;font-variant-numeric:tabular-nums;}
+    .variance-high{color:var(--red-b);font-weight:700;}
+    .variance-mid{color:var(--yellow-b);font-weight:700;}
+    .note-cell{min-width:280px;white-space:normal;}
+    .cat-btns{display:flex;gap:4px;margin-bottom:6px;}
+    .cat-btn{flex:1;font-size:11px;padding:5px 4px;border-radius:6px;border:1px solid #ccc;background:#fff;color:#444;cursor:pointer;font-weight:700;letter-spacing:.02em;}
+    .cat-btn.cat-correct{border-color:var(--green-b);color:var(--green-b);}
+    .cat-btn.cat-review{border-color:var(--yellow-b);color:var(--yellow-b);}
+    .cat-btn.cat-adjust{border-color:var(--red-b);color:var(--red-b);}
+    .cat-btn.active.cat-correct{background:var(--green-b);color:#fff;}
+    .cat-btn.active.cat-review{background:var(--yellow-b);color:#fff;}
+    .cat-btn.active.cat-adjust{background:var(--red-b);color:#fff;}
+    .cat-btn:hover{filter:brightness(.97);}
+    select{width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:5px;font-size:12px;background:#fff;color:#202124;}
+    .sync-cell{font-size:11px;}
+    .badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:3px 7px;border-radius:8px;white-space:nowrap;}
+    .badge-pending{background:#fff2cc;color:var(--yellow-b);}
+    .badge-syncing{background:#e8f0fe;color:var(--brand);}
+    .badge-synced{background:#d4edda;color:#155724;}
+    .badge-error{background:#f8d7da;color:#721c24;cursor:help;}
     .muted{color:var(--grey-b);font-size:12px;}
     /* modal */
-    #overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;align-items:center;justify-content:center;}
-    #modal{background:#fff;border-radius:10px;max-width:460px;width:92%;padding:20px;box-shadow:0 8px 30px rgba(0,0,0,.3);}
-    #modal h3{margin:0 0 10px;color:var(--brand);}
-    #modal .warn{background:#fff3cd;border:1px solid #ffe08a;color:#7a5b00;border-radius:6px;padding:12px;}
-    #modal ul{margin:8px 0 0 18px;padding:0;}
-    #modal .row{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;}
+    .overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;display:flex;align-items:center;justify-content:center;}
+    .modal{background:#fff;border-radius:10px;max-width:460px;width:92%;padding:20px;box-shadow:0 8px 30px rgba(0,0,0,.3);}
+    .modal h3{margin:0 0 10px;color:var(--brand);}
+    .modal .warn{background:#fff3cd;border:1px solid #ffe08a;color:#7a5b00;border-radius:6px;padding:12px;}
+    .modal ul{margin:8px 0 0 18px;padding:0;}
+    .modal .row{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;}
     .spin{display:inline-block;width:14px;height:14px;border:2px solid #cfe0ff;border-top-color:var(--brand);border-radius:50%;animation:s .8s linear infinite;vertical-align:middle;margin-right:6px;}
     @keyframes s{to{transform:rotate(360deg);}}
+    .settings-modal{max-width:600px;max-height:86vh;overflow-y:auto;}
+    .settings-section{margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid #eee;}
+    .settings-section:last-of-type{border-bottom:none;}
+    .settings-section h4{margin:0 0 4px;color:#3c4043;}
+    .settings-error{background:#f8d7da;color:#721c24;padding:8px 10px;border-radius:6px;font-size:13px;margin-bottom:10px;}
+    .chip-list{list-style:none;margin:8px 0;padding:0;display:flex;flex-wrap:wrap;gap:6px;}
+    .chip-list li{background:#f1f3f4;border-radius:12px;padding:4px 6px 4px 10px;font-size:12px;display:flex;align-items:center;gap:6px;}
+    .chip-remove{border:none;background:none;color:var(--danger);font-weight:700;cursor:pointer;font-size:14px;line-height:1;padding:0 2px;}
+    .add-row{display:flex;gap:6px;}
+    .add-row input{flex:1;padding:6px 8px;border:1px solid #ccc;border-radius:5px;font-size:13px;}
+    .col-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px;margin-top:6px;}
+    .col-grid label{font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;}
   </style>
 </head>
 <body>
-  <div class="header">
-    <h2>Items to Review</h2>
-    <div class="controls">
-      <div class="progress-wrap">
-        <div class="progress-bar"><div class="progress-fill" id="progFill"></div></div>
-        <div class="progress-label" id="progLabel">—</div>
+  <div id="app" v-cloak>
+    <div class="header">
+      <h2>Items to Review</h2>
+      <div class="controls">
+        <div class="progress-wrap" v-if="activeTab">
+          <div class="progress-bar"><div class="progress-fill" :style="{width: progressPct + '%'}"></div></div>
+          <div class="progress-label">{{ progressLabel }}</div>
+        </div>
+        <span class="pending-indicator" v-if="pendingCount">{{ pendingCount }} pending sync</span>
+        <label class="toggle"><input type="checkbox" v-model="autoSync"> Auto-sync</label>
+        <button @click="syncPending" :disabled="!pendingCount || syncing">
+          {{ syncing ? 'Syncing…' : (pendingCount ? 'Sync now (' + pendingCount + ')' : 'Sync now') }}
+        </button>
+        <button class="ghost" @click="loadData()" :disabled="loading">Refresh</button>
+        <button class="ghost" v-if="session.isAdmin" @click="openSettings">⚙ Settings</button>
       </div>
-      <button id="saveAllBtn" onclick="saveAllDirty()" disabled>Save all changes</button>
-      <button id="refreshBtn" onclick="loadData()">Refresh</button>
+    </div>
+
+    <div id="adminBar" v-if="session.isAdmin">
+      <span class="admin-title">Admin</span>
+      <label class="upload">Upload monthly counts (CSV)
+        <input type="file" accept=".csv" @change="onCsvFileChosen">
+      </label>
+      <button class="danger" @click="askRemove">Remove all data</button>
+      <span class="who">signed in as {{ session.email || 'unknown' }}</span>
+    </div>
+
+    <div id="status" :class="'s-' + statusType" v-if="statusMsg">{{ statusMsg }}</div>
+
+    <div class="tabs" v-if="tabsRaw.length">
+      <button v-for="t in tabsRaw" :key="t.key" :class="['tab', { active: t.key === activeKey }]" @click="activeKey = t.key">
+        {{ t.label }}<span class="count">{{ t.counts.reviewed }}/{{ t.counts.total }}</span>
+      </button>
+    </div>
+
+    <div class="table-container" v-if="activeTab">
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th v-for="col in visibleColumnDefs" :key="col.key" :class="colClass(col.key)">{{ col.label }}</th>
+            <th>Notes / SOP Action</th>
+            <th>Sync</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template v-for="section in activeTab.sections" :key="section.key">
+            <tr class="section"><td :colspan="totalCols">{{ section.label }}</td></tr>
+            <tr class="empty" v-if="!section.items.length"><td :colspan="totalCols">No items in this category.</td></tr>
+            <tr v-for="it in section.items" :key="section.key + '-' + it.row" :class="rowClass(it)">
+              <td><strong>{{ it.item }}</strong>
+                <span class="dup-badge" v-if="dupCounts[it.row] > 1" :title="'Appears in ' + dupCounts[it.row] + ' categories'">×{{ dupCounts[it.row] }}</span>
+              </td>
+              <td v-for="col in visibleColumnDefs" :key="col.key" :class="[colClass(col.key), varianceClass(col.key, it.variance)]">
+                <span v-if="col.key === 'flag' && it.flag" class="flag">{{ it.flag }}</span>
+                <template v-else>{{ formatCell(it, col.key) }}</template>
+              </td>
+              <td class="note-cell">
+                <div class="cat-btns">
+                  <button v-for="g in CATEGORY_GROUPS" :key="g"
+                    :class="['cat-btn', 'cat-' + g.toLowerCase(), { active: categoryOf(it.row) === g }]"
+                    @click="pickCategory(it, g)">{{ g }}</button>
+                </div>
+                <select :value="noteOf(it.row)" @change="onSelect(it, $event.target.value)">
+                  <option value="" disabled>{{ categoryOf(it.row) ? 'Select action…' : 'Pick a category above, or choose…' }}</option>
+                  <option v-for="c in filteredCategories(it.row)" :key="c" :value="c">{{ c }}</option>
+                </select>
+              </td>
+              <td class="sync-cell">
+                <span v-if="syncStatus[dkey(activeKey, it.row)] === 'pending'" class="badge badge-pending">● pending</span>
+                <span v-else-if="syncStatus[dkey(activeKey, it.row)] === 'syncing'" class="badge badge-syncing"><span class="spin" style="margin-right:0;width:10px;height:10px;"></span></span>
+                <span v-else-if="syncStatus[dkey(activeKey, it.row)] === 'error'" class="badge badge-error" :title="syncErrors[dkey(activeKey, it.row)] || 'Sync failed'">⚠ retry</span>
+                <span v-else-if="syncStatus[dkey(activeKey, it.row)] === 'synced'" class="badge badge-synced">✓ synced</span>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+    <p v-else-if="loading" class="muted">Loading inventory data…</p>
+    <p v-else class="muted">No data yet.</p>
+
+    <p class="muted" v-if="generatedAt">
+      Loaded {{ new Date(generatedAt).toLocaleString() }}. Categories are computed live from the data store.
+      Edits are kept in memory and synced to the sheet automatically (every 20s) or via "Sync now" — a note
+      saves once per item and shows in every category it appears in.
+    </p>
+
+    <!-- CSV upload modal -->
+    <div class="overlay" v-if="csv.stage">
+      <div class="modal">
+        <template v-if="csv.stage === 'checking'">
+          <h3>Checking existing data…</h3>
+          <p><span class="spin"></span>One moment.</p>
+        </template>
+        <template v-else-if="csv.stage === 'confirm'">
+          <h3>Replace last month's data?</h3>
+          <div class="warn">
+            <b>This permanently erases the current data and every note in it:</b>
+            <ul><li v-for="s in csv.summary.sheets.filter(function(s){return s.rows>0;})" :key="s.name">{{ s.label }}: {{ s.rows }} rows</li></ul>
+          </div>
+          <div class="row"><button class="ghost" @click="closeCsvModal">Cancel</button><button class="danger" @click="doUpload">Wipe &amp; import</button></div>
+        </template>
+        <template v-else-if="csv.stage === 'importing'">
+          <h3>Importing…</h3>
+          <p><span class="spin"></span>Wiping and loading the new month.</p>
+        </template>
+        <template v-else-if="csv.stage === 'done'">
+          <h3>Import complete</h3>
+          <p>Loaded {{ csv.result.beverage }} beverage and {{ csv.result.food }} food rows.</p>
+          <div class="row"><button @click="finishCsvUpload">Done</button></div>
+        </template>
+        <template v-else-if="csv.stage === 'error'">
+          <h3>Import failed</h3>
+          <p>{{ csv.error }}</p>
+          <p class="muted">Existing data was not changed.</p>
+          <div class="row"><button class="ghost" @click="closeCsvModal">Close</button></div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Remove data modal -->
+    <div class="overlay" v-if="removeModal.stage">
+      <div class="modal">
+        <template v-if="removeModal.stage === 'confirm'">
+          <h3>Remove all count data?</h3>
+          <div class="warn"><b>This deletes both Count Details sheets and every note.</b> The next upload will recreate them.</div>
+          <div class="row"><button class="ghost" @click="closeRemoveModal">Cancel</button><button class="danger" @click="doRemove">Remove everything</button></div>
+        </template>
+        <template v-else-if="removeModal.stage === 'removing'">
+          <h3>Removing…</h3><p><span class="spin"></span>Deleting count data.</p>
+        </template>
+        <template v-else-if="removeModal.stage === 'done'">
+          <h3>Removed</h3><p>All count data deleted.</p>
+          <div class="row"><button @click="finishRemove">Done</button></div>
+        </template>
+        <template v-else-if="removeModal.stage === 'error'">
+          <h3>Could not remove</h3><p>{{ removeModal.error }}</p>
+          <div class="row"><button class="ghost" @click="closeRemoveModal">Close</button></div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Settings modal (admin only) -->
+    <div class="overlay" v-if="showSettings">
+      <div class="modal settings-modal">
+        <h3>Settings</h3>
+        <p class="settings-error" v-if="settingsError">{{ settingsError }}</p>
+
+        <section class="settings-section">
+          <h4>Admin users</h4>
+          <p class="muted">Accounts that can upload/replace data, remove data, and change these settings.</p>
+          <ul class="chip-list">
+            <li v-for="e in settingsDraft.adminEmails" :key="e">
+              {{ e }}<button class="chip-remove" @click="removeAdminEmail(e)" title="Remove">×</button>
+            </li>
+          </ul>
+          <div class="add-row">
+            <input type="email" v-model="newAdminEmail" placeholder="name@company.com" @keydown.enter.prevent="addAdminEmail">
+            <button class="ghost" @click="addAdminEmail">Add</button>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h4>Visible columns</h4>
+          <p class="muted">Report columns shown in the review table (Item and Notes always show).</p>
+          <div class="col-grid">
+            <label v-for="c in settings.allColumns" :key="c.key">
+              <input type="checkbox" :checked="settingsDraft.visibleColumns.includes(c.key)" @change="toggleColumn(c.key)">
+              {{ c.label }}
+            </label>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h4>Note categories</h4>
+          <p class="muted">Dropdown options managers choose from. Each must start with CORRECT, REVIEW, or ADJUST.</p>
+          <ul class="chip-list">
+            <li v-for="c in settingsDraft.noteCategories" :key="c">
+              {{ c }}<button class="chip-remove" @click="removeCategory(c)" title="Remove">×</button>
+            </li>
+          </ul>
+          <div class="add-row">
+            <input type="text" v-model="newCategory" placeholder="ADJUST - …" @keydown.enter.prevent="addCategory">
+            <button class="ghost" @click="addCategory">Add</button>
+          </div>
+        </section>
+
+        <div class="row">
+          <button class="ghost" @click="closeSettings">Cancel</button>
+          <button @click="saveSettingsDraft">Save settings</button>
+        </div>
+      </div>
     </div>
   </div>
 
-  <div id="adminBar">
-    <span class="admin-title">Admin</span>
-    <label class="upload">Upload monthly counts (CSV)
-      <input type="file" id="csvFile" accept=".csv">
-    </label>
-    <button class="danger" onclick="askRemove()">Remove all data</button>
-    <span class="who" id="whoami"></span>
-  </div>
-
-  <div id="status"></div>
-  <div class="tabs" id="tabs"></div>
-
-  <div class="table-container">
-    <table>
-      <thead>
-        <tr><th>Item</th><th>UofM</th><th style="text-align:right">Cur. Qty</th>
-        <th>Flag</th><th>Notes / SOP Action</th><th></th></tr>
-      </thead>
-      <tbody id="tbody"></tbody>
-    </table>
-  </div>
-  <p class="muted" id="footNote"></p>
-
-  <!-- confirmation / progress modal -->
-  <div id="overlay"><div id="modal"><div id="modalBody"></div></div></div>
-
+  <script src="https://cdn.jsdelivr.net/npm/vue@3.4.31/dist/vue.global.prod.js"></script>
   <script>
-    var DATA=null, activeKey=null;
-    var dirty={};   // "dsKey\u0000row" -> { note, item }
-    var CSV=null;   // staged upload text
-    var STATUS_CLASS={correct:'row-correct',review:'row-review',adjust:'row-adjust'};
+    var CATEGORY_GROUPS = ['CORRECT', 'REVIEW', 'ADJUST'];
+    var NUMERIC_COLS = ['currentQty', 'currentCost', 'currentTotal', 'previousQty', 'prevCost', 'prevTotal', 'adjustment', 'variance'];
+    var CURRENCY_COLS = ['currentCost', 'currentTotal', 'prevCost', 'prevTotal'];
+    var STATUS_CLASS = { correct: 'row-correct', review: 'row-review', adjust: 'row-adjust' };
+    var AUTO_SYNC_MS = 20000;
 
-    window.onload=loadData;
+    var app = Vue.createApp({
+      data: function () {
+        return {
+          CATEGORY_GROUPS: CATEGORY_GROUPS,
+          tabsRaw: [],
+          activeKey: null,
+          session: { email: '', isAdmin: false },
+          settings: { visibleColumns: [], noteCategories: [], allColumns: [], adminEmails: [] },
+          generatedAt: null,
+          loading: true,
+          statusMsg: '', statusType: '',
+          pending: {},        // dkey -> { datastore, row, note, item }
+          origNotes: {},      // dkey -> note as last loaded/synced from the sheet
+          syncStatus: {},     // dkey -> 'pending' | 'syncing' | 'synced' | 'error'
+          syncErrors: {},     // dkey -> error message
+          categoryOverride: {}, // dkey -> 'CORRECT' | 'REVIEW' | 'ADJUST' chosen this session
+          autoSync: true,
+          syncing: false,
+          csvFileText: null,
+          csv: { stage: null, summary: null, error: null, result: null },
+          removeModal: { stage: null, error: null },
+          showSettings: false,
+          settingsDraft: null,
+          newAdminEmail: '',
+          newCategory: '',
+          settingsError: ''
+        };
+      },
+      computed: {
+        activeTab: function () {
+          var self = this;
+          return this.tabsRaw.filter(function (t) { return t.key === self.activeKey; })[0] || null;
+        },
+        visibleColumnDefs: function () {
+          var vis = this.settings.visibleColumns;
+          return this.settings.allColumns.filter(function (c) { return vis.indexOf(c.key) !== -1; });
+        },
+        totalCols: function () { return this.visibleColumnDefs.length + 3; },
+        pendingCount: function () { return Object.keys(this.pending).length; },
+        dupCounts: function () {
+          var c = {};
+          if (!this.activeTab) return c;
+          this.activeTab.sections.forEach(function (s) {
+            s.items.forEach(function (it) { c[it.row] = (c[it.row] || 0) + 1; });
+          });
+          return c;
+        },
+        progressPct: function () {
+          if (!this.activeTab || !this.activeTab.counts.total) return 0;
+          return Math.round(100 * this.activeTab.counts.reviewed / this.activeTab.counts.total);
+        },
+        progressLabel: function () {
+          if (!this.activeTab) return '—';
+          return this.activeTab.counts.reviewed + ' of ' + this.activeTab.counts.total + ' reviewed (' + this.progressPct + '%)';
+        }
+      },
+      mounted: function () {
+        this.loadData();
+        this._autoSyncTimer = setInterval(this.autoSyncTick, AUTO_SYNC_MS);
+        this._beforeUnload = this.onBeforeUnload.bind(this);
+        window.addEventListener('beforeunload', this._beforeUnload);
+      },
+      beforeUnmount: function () {
+        clearInterval(this._autoSyncTimer);
+        window.removeEventListener('beforeunload', this._beforeUnload);
+      },
+      methods: {
+        dkey: function (ds, row) { return ds + ' ' + row; },
 
-    function showStatus(msg,type){
-      var el=document.getElementById('status');
-      el.className='s-'+type; el.innerText=msg;
-      if(type==='success'||type==='error') setTimeout(function(){el.style.display='none';},4000);
-    }
-    function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
-    function fmtQty(q){if(q===''||q==null)return '';var n=Number(q);return isNaN(n)?esc(q):n.toLocaleString(undefined,{maximumFractionDigits:2});}
-    function dkey(ds,row){return ds+'\u0000'+row;}
-    function attrEsc(s){return String(s).replace(/["\\]/g,'\\$&');}
+        showStatus: function (msg, type) {
+          this.statusMsg = msg; this.statusType = type;
+          clearTimeout(this._statusTimer);
+          if (type === 'success' || type === 'error') {
+            this._statusTimer = setTimeout((function (self) { return function () { self.statusMsg = ''; }; })(this), 4000);
+          }
+        },
 
-    /* ---------- modal helpers ---------- */
-    function openModal(html){document.getElementById('modalBody').innerHTML=html;document.getElementById('overlay').style.display='flex';}
-    function closeModal(){document.getElementById('overlay').style.display='none';}
+        colClass: function (key) { return NUMERIC_COLS.indexOf(key) !== -1 ? 'qty' : ''; },
+        varianceClass: function (key, variance) {
+          if (key !== 'variance' || variance === '' || variance === null || variance === -1) return '';
+          if (variance >= 0.5) return 'variance-high';
+          if (variance >= 0.2) return 'variance-mid';
+          return '';
+        },
+        formatCell: function (it, key) {
+          var v = it[key];
+          if (v === '' || v === null || v === undefined) return '—';
+          if (key === 'variance') {
+            if (v === -1) return 'Zero $ cost';
+            return (v * 100).toFixed(1) + '%';
+          }
+          if (CURRENCY_COLS.indexOf(key) !== -1) {
+            var n = Number(v);
+            return isNaN(n) ? '—' : n.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
+          }
+          if (key === 'adjustment') {
+            var an = Number(v);
+            if (isNaN(an)) return '—';
+            return (an > 0 ? '+' : '') + an.toLocaleString(undefined, { maximumFractionDigits: 2 });
+          }
+          if (key === 'currentQty' || key === 'previousQty') {
+            var qn = Number(v);
+            return isNaN(qn) ? String(v) : qn.toLocaleString(undefined, { maximumFractionDigits: 2 });
+          }
+          return v;
+        },
 
-    /* ---------- load ---------- */
-    function loadData(){
-      showStatus('Loading inventory data…','loading');
-      document.getElementById('refreshBtn').disabled=true;
-      google.script.run
-        .withSuccessHandler(function(payload){
-          DATA=payload; dirty={};
-          if(!activeKey && payload.tabs.length) activeKey=payload.tabs[0].key;
-          setupAdmin(payload.session);
-          renderTabs(); renderActive(); updateSaveAll();
-          document.getElementById('footNote').innerText=
-            'Loaded '+new Date(payload.generatedAt).toLocaleString()+
-            '. Categories are computed live from the data store. A note saves once per item and shows in every category it appears in.';
-          showStatus('Data loaded.','success');
-          document.getElementById('refreshBtn').disabled=false;
-        })
-        .withFailureHandler(function(err){
-          showStatus('Error loading data: '+err.message,'error');
-          document.getElementById('refreshBtn').disabled=false;
-        })
-        .getInventoryData();
-    }
+        /* ---------- load ---------- */
+        loadData: function (force) {
+          if (this.pendingCount && !force) {
+            var ok = confirm('You have ' + this.pendingCount + ' unsynced change(s). Refreshing now discards them unless they finish syncing first. Refresh anyway?');
+            if (!ok) return;
+          }
+          this.loading = true;
+          this.showStatus('Loading inventory data…', 'loading');
+          google.script.run
+            .withSuccessHandler((function (self) { return function (payload) {
+              self.tabsRaw = payload.tabs;
+              self.generatedAt = payload.generatedAt;
+              self.session = payload.session;
+              self.settings = payload.settings;
+              if (!self.activeKey && payload.tabs.length) self.activeKey = payload.tabs[0].key;
+              self.pending = {}; self.syncStatus = {}; self.syncErrors = {}; self.categoryOverride = {};
+              self.origNotes = {};
+              payload.tabs.forEach(function (t) {
+                t.sections.forEach(function (s) {
+                  s.items.forEach(function (it) { self.origNotes[self.dkey(t.key, it.row)] = it.note || ''; });
+                });
+              });
+              self.loading = false;
+              self.showStatus('Data loaded.', 'success');
+            }; })(this))
+            .withFailureHandler((function (self) { return function (err) {
+              self.loading = false;
+              self.showStatus('Error loading data: ' + err.message, 'error');
+            }; })(this))
+            .getInventoryData();
+        },
 
-    /* ---------- admin panel ---------- */
-    function setupAdmin(session){
-      var bar=document.getElementById('adminBar');
-      if(session && session.isAdmin){
-        bar.style.display='flex';
-        document.getElementById('whoami').innerText='signed in as '+(session.email||'unknown');
-      } else {
-        bar.style.display='none';
+        /* ---------- review / notes ---------- */
+        findItem: function (row) {
+          if (!this.activeTab) return null;
+          for (var i = 0; i < this.activeTab.sections.length; i++) {
+            var found = this.activeTab.sections[i].items.filter(function (it) { return it.row === row; })[0];
+            if (found) return found;
+          }
+          return null;
+        },
+        noteOf: function (row) {
+          var k = this.dkey(this.activeKey, row);
+          if (this.pending[k]) return this.pending[k].note;
+          var it = this.findItem(row);
+          return it ? (it.note || '') : '';
+        },
+        statusOf: function (note) {
+          var n = (note || '').trim().toUpperCase();
+          if (n.indexOf('CORRECT') === 0) return 'correct';
+          if (n.indexOf('REVIEW') === 0) return 'review';
+          if (n.indexOf('ADJUST') === 0) return 'adjust';
+          return note ? 'other' : '';
+        },
+        rowClass: function (it) {
+          var cls = STATUS_CLASS[this.statusOf(this.noteOf(it.row))];
+          return cls || '';
+        },
+        categoryOf: function (row) {
+          var k = this.dkey(this.activeKey, row);
+          if (this.categoryOverride[k]) return this.categoryOverride[k];
+          var s = this.statusOf(this.noteOf(row));
+          if (s === 'correct') return 'CORRECT';
+          if (s === 'review') return 'REVIEW';
+          if (s === 'adjust') return 'ADJUST';
+          return null;
+        },
+        filteredCategories: function (row) {
+          var cat = this.categoryOf(row);
+          var list = cat
+            ? this.settings.noteCategories.filter(function (c) { return c.indexOf(cat) === 0; })
+            : this.settings.noteCategories.slice();
+          // Preserve legacy/free-text notes (e.g. saved before the dropdown existed, or
+          // a category since removed by an admin) as a selectable option instead of
+          // silently blanking the <select> when the exact string isn't in the list.
+          var current = this.noteOf(row);
+          if (current && list.indexOf(current) === -1) list = [current].concat(list);
+          return list;
+        },
+        pickCategory: function (it, group) {
+          var k = this.dkey(this.activeKey, it.row);
+          this.categoryOverride[k] = group;
+          var bare = this.settings.noteCategories.filter(function (c) { return c === group; })[0]
+            || this.settings.noteCategories.filter(function (c) { return c.indexOf(group) === 0; })[0]
+            || group;
+          this.applyEdit(it, bare);
+        },
+        onSelect: function (it, value) { this.applyEdit(it, value); },
+        applyEdit: function (it, value) {
+          var dsKey = this.activeKey;
+          var k = this.dkey(dsKey, it.row);
+          var t = this.activeTab;
+          t.sections.forEach(function (s) {
+            s.items.forEach(function (row2) { if (row2.row === it.row) row2.note = value; });
+          });
+          var baseline = this.origNotes[k] !== undefined ? this.origNotes[k] : '';
+          if (value === baseline) {
+            delete this.pending[k];
+            delete this.syncStatus[k];
+          } else {
+            this.pending[k] = { datastore: dsKey, row: it.row, note: value, item: it.item };
+            this.syncStatus[k] = 'pending';
+          }
+        },
+
+        /* ---------- sync (in-memory edits -> sheet) ---------- */
+        autoSyncTick: function () { if (this.autoSync) this.syncPending(); },
+        syncPending: function () {
+          var entries = [];
+          for (var k in this.pending) if (this.pending.hasOwnProperty(k)) entries.push(this.pending[k]);
+          if (!entries.length || this.syncing) return;
+          this.syncing = true;
+          var self = this;
+          var keys = entries.map(function (e) { return self.dkey(e.datastore, e.row); });
+          keys.forEach(function (k) { self.syncStatus[k] = 'syncing'; });
+          google.script.run
+            .withSuccessHandler(function (res) { self.onSyncResult(entries, res); self.syncing = false; })
+            .withFailureHandler(function (err) {
+              keys.forEach(function (k) { self.syncStatus[k] = 'error'; self.syncErrors[k] = err.message; });
+              self.showStatus('Sync failed: ' + err.message, 'error');
+              self.syncing = false;
+            })
+            .saveNotesBatch(entries.map(function (e) {
+              return { datastore: e.datastore, row: e.row, note: e.note, expectedItem: e.item };
+            }));
+        },
+        onSyncResult: function (entries, res) {
+          var self = this;
+          var results = (res && res.results) || [];
+          var okCount = 0, errCount = 0;
+          entries.forEach(function (e, i) {
+            var k = self.dkey(e.datastore, e.row);
+            var r = results[i];
+            if (r && r.ok) {
+              okCount++;
+              self.origNotes[k] = e.note;
+              delete self.pending[k];
+              self.syncStatus[k] = 'synced';
+              setTimeout(function () { if (self.syncStatus[k] === 'synced') delete self.syncStatus[k]; }, 2500);
+            } else {
+              errCount++;
+              self.syncStatus[k] = 'error';
+              self.syncErrors[k] = (r && r.error) || 'Unknown error';
+            }
+          });
+          if (res && res.progress) {
+            Object.keys(res.progress).forEach(function (dsKey) {
+              var t = self.tabsRaw.filter(function (x) { return x.key === dsKey; })[0];
+              if (t) t.counts = res.progress[dsKey];
+            });
+          }
+          if (errCount) this.showStatus(okCount + ' synced, ' + errCount + ' failed — will retry.', 'error');
+          else this.showStatus('Synced ' + okCount + ' change(s).', 'success');
+        },
+        onBeforeUnload: function (e) {
+          if (this.pendingCount) {
+            e.preventDefault();
+            e.returnValue = 'You have unsynced changes.';
+            return e.returnValue;
+          }
+        },
+
+        /* ---------- CSV upload / remove (admin) ---------- */
+        onCsvFileChosen: function (e) {
+          var f = e.target.files[0]; if (!f) return;
+          var reader = new FileReader();
+          var self = this;
+          reader.onload = function (ev) {
+            self.csvFileText = ev.target.result;
+            e.target.value = '';
+            self.csv = { stage: 'checking', summary: null, error: null, result: null };
+            google.script.run
+              .withSuccessHandler(function (summary) {
+                self.csv.summary = summary;
+                if (summary.hasData) { self.csv.stage = 'confirm'; }
+                else { self.doUpload(); }
+              })
+              .withFailureHandler(function (err) { self.csv.stage = 'error'; self.csv.error = err.message; })
+              .getExistingDataSummary();
+          };
+          reader.readAsText(f);
+        },
+        doUpload: function () {
+          this.csv.stage = 'importing';
+          var self = this;
+          google.script.run
+            .withSuccessHandler(function (res) { self.csv.stage = 'done'; self.csv.result = res; })
+            .withFailureHandler(function (err) { self.csv.stage = 'error'; self.csv.error = err.message; })
+            .processCSVData(this.csvFileText);
+        },
+        closeCsvModal: function () { this.csv = { stage: null, summary: null, error: null, result: null }; },
+        finishCsvUpload: function () { this.closeCsvModal(); this.loadData(true); },
+
+        askRemove: function () { this.removeModal = { stage: 'confirm', error: null }; },
+        doRemove: function () {
+          this.removeModal.stage = 'removing';
+          var self = this;
+          google.script.run
+            .withSuccessHandler(function () { self.removeModal.stage = 'done'; })
+            .withFailureHandler(function (err) { self.removeModal.stage = 'error'; self.removeModal.error = err.message; })
+            .removeAllCountData();
+        },
+        closeRemoveModal: function () { this.removeModal = { stage: null, error: null }; },
+        finishRemove: function () { this.closeRemoveModal(); this.loadData(true); },
+
+        /* ---------- settings (admin) ---------- */
+        openSettings: function () {
+          this.settingsDraft = {
+            adminEmails: this.settings.adminEmails.slice(),
+            visibleColumns: this.settings.visibleColumns.slice(),
+            noteCategories: this.settings.noteCategories.slice()
+          };
+          this.newAdminEmail = ''; this.newCategory = ''; this.settingsError = '';
+          this.showSettings = true;
+        },
+        closeSettings: function () { this.showSettings = false; this.settingsDraft = null; },
+        addAdminEmail: function () {
+          var e = this.newAdminEmail.trim();
+          if (!e) return;
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { this.settingsError = 'Enter a valid email address.'; return; }
+          var exists = this.settingsDraft.adminEmails.some(function (x) { return x.toLowerCase() === e.toLowerCase(); });
+          if (!exists) this.settingsDraft.adminEmails.push(e);
+          this.newAdminEmail = ''; this.settingsError = '';
+        },
+        removeAdminEmail: function (email) {
+          if (this.settingsDraft.adminEmails.length <= 1) { this.settingsError = 'At least one admin email is required.'; return; }
+          if (this.session.email && email.toLowerCase() === this.session.email.toLowerCase()) {
+            if (!confirm('This removes your own admin access. Continue?')) return;
+          }
+          this.settingsDraft.adminEmails = this.settingsDraft.adminEmails.filter(function (e) { return e !== email; });
+        },
+        toggleColumn: function (key) {
+          var i = this.settingsDraft.visibleColumns.indexOf(key);
+          if (i === -1) this.settingsDraft.visibleColumns.push(key);
+          else this.settingsDraft.visibleColumns.splice(i, 1);
+        },
+        addCategory: function () {
+          var c = this.newCategory.trim().toUpperCase();
+          if (!c) return;
+          if (!/^(CORRECT|REVIEW|ADJUST)/.test(c)) { this.settingsError = 'Category must start with CORRECT, REVIEW, or ADJUST.'; return; }
+          if (this.settingsDraft.noteCategories.indexOf(c) === -1) this.settingsDraft.noteCategories.push(c);
+          this.newCategory = ''; this.settingsError = '';
+        },
+        removeCategory: function (c) {
+          if (this.settingsDraft.noteCategories.length <= 1) { this.settingsError = 'At least one note category is required.'; return; }
+          this.settingsDraft.noteCategories = this.settingsDraft.noteCategories.filter(function (x) { return x !== c; });
+        },
+        saveSettingsDraft: function () {
+          this.settingsError = '';
+          var self = this;
+          google.script.run
+            .withSuccessHandler(function (s) {
+              self.settings = s;
+              self.showSettings = false;
+              self.settingsDraft = null;
+              self.showStatus('Settings saved.', 'success');
+            })
+            .withFailureHandler(function (err) { self.settingsError = err.message; })
+            .saveSettings(this.settingsDraft);
+        }
       }
-    }
-
-    document.getElementById('csvFile').addEventListener('change', function(e){
-      var f=e.target.files[0]; if(!f) return;
-      var reader=new FileReader();
-      reader.onload=function(ev){
-        CSV=ev.target.result;
-        e.target.value=''; // allow re-selecting same file later
-        openModal('<h3>Checking existing data…</h3><p><span class="spin"></span>One moment.</p>');
-        google.script.run
-          .withSuccessHandler(showUploadConfirm)
-          .withFailureHandler(function(err){openModal('<h3>Cannot upload</h3><p>'+esc(err.message)+'</p><div class="row"><button class="ghost" onclick="closeModal()">Close</button></div>');})
-          .getExistingDataSummary();
-      };
-      reader.readAsText(f);
     });
 
-    function showUploadConfirm(summary){
-      if(summary.hasData){
-        var items=summary.sheets.filter(function(s){return s.rows>0;})
-          .map(function(s){return '<li>'+esc(s.label)+': '+s.rows+' rows</li>';}).join('');
-        openModal(
-          '<h3>Replace last month\u2019s data?</h3>'+
-          '<div class="warn"><b>This permanently erases the current data and every note in it:</b>'+
-          '<ul>'+items+'</ul></div>'+
-          '<div class="row"><button class="ghost" onclick="closeModal()">Cancel</button>'+
-          '<button class="danger" onclick="doUpload()">Wipe &amp; import</button></div>');
-      } else {
-        doUpload();
-      }
-    }
-
-    function doUpload(){
-      openModal('<h3>Importing…</h3><p><span class="spin"></span>Wiping and loading the new month.</p>');
-      google.script.run
-        .withSuccessHandler(function(res){
-          openModal('<h3>Import complete</h3><p>Loaded '+res.beverage+' beverage and '+res.food+
-            ' food rows.</p><div class="row"><button onclick="closeModal();loadData();">Done</button></div>');
-        })
-        .withFailureHandler(function(err){
-          openModal('<h3>Import failed</h3><p>'+esc(err.message)+'</p><p class="muted">Existing data was not changed.</p>'+
-            '<div class="row"><button class="ghost" onclick="closeModal()">Close</button></div>');
-        })
-        .processCSVData(CSV);
-    }
-
-    function askRemove(){
-      openModal(
-        '<h3>Remove all count data?</h3>'+
-        '<div class="warn"><b>This deletes both Count Details sheets and every note.</b> '+
-        'The next upload will recreate them.</div>'+
-        '<div class="row"><button class="ghost" onclick="closeModal()">Cancel</button>'+
-        '<button class="danger" onclick="doRemove()">Remove everything</button></div>');
-    }
-    function doRemove(){
-      openModal('<h3>Removing…</h3><p><span class="spin"></span>Deleting count data.</p>');
-      google.script.run
-        .withSuccessHandler(function(){openModal('<h3>Removed</h3><p>All count data deleted.</p><div class="row"><button onclick="closeModal();loadData();">Done</button></div>');})
-        .withFailureHandler(function(err){openModal('<h3>Could not remove</h3><p>'+esc(err.message)+'</p><div class="row"><button class="ghost" onclick="closeModal()">Close</button></div>');})
-        .removeAllCountData();
-    }
-
-    /* ---------- review UI ---------- */
-    function tab(){return DATA.tabs.filter(function(t){return t.key===activeKey;})[0];}
-
-    function renderTabs(){
-      var wrap=document.getElementById('tabs'); wrap.innerHTML='';
-      DATA.tabs.forEach(function(t){
-        var b=document.createElement('button');
-        b.className='tab'+(t.key===activeKey?' active':'');
-        b.innerHTML=esc(t.label)+'<span class="count">'+t.counts.reviewed+'/'+t.counts.total+'</span>';
-        b.onclick=function(){activeKey=t.key;renderTabs();renderActive();updateSaveAll();};
-        wrap.appendChild(b);
-      });
-    }
-
-    function rowCounts(t){
-      var c={}; t.sections.forEach(function(s){s.items.forEach(function(it){c[it.row]=(c[it.row]||0)+1;});});
-      return c;
-    }
-
-    function renderActive(){
-      var t=tab(); if(!t) return; var counts=rowCounts(t);
-      var tbody=document.getElementById('tbody'); tbody.innerHTML='';
-
-      t.sections.forEach(function(section){
-        var sr=document.createElement('tr'); sr.className='section';
-        sr.innerHTML='<td colspan="6">'+esc(section.label)+'</td>'; tbody.appendChild(sr);
-        if(!section.items.length){
-          var er=document.createElement('tr'); er.className='empty';
-          er.innerHTML='<td colspan="6">No items in this category.</td>'; tbody.appendChild(er); return;
-        }
-        section.items.forEach(function(it){
-          var tr=document.createElement('tr');
-          tr.setAttribute('data-row',it.row);
-          var k=dkey(t.key,it.row);
-          var shown=dirty[k]!==undefined?dirty[k].note:(it.note||'');
-          var cls=STATUS_CLASS[statusOf(shown)]; if(cls) tr.className=cls;
-          var dup=counts[it.row]>1?('<span class="dup-badge" title="Appears in '+counts[it.row]+' categories">×'+counts[it.row]+'</span>'):'';
-          var flag=it.flag?'<span class="flag">'+esc(it.flag)+'</span>':'';
-          tr.innerHTML=
-            '<td><strong>'+esc(it.item)+'</strong>'+dup+'</td>'+
-            '<td>'+esc(it.uom)+'</td>'+
-            '<td class="qty">'+fmtQty(it.currentQty)+'</td>'+
-            '<td>'+flag+'</td>'+
-            '<td class="note-cell"></td><td></td>';
-          var noteCell=tr.children[4];
-          var input=document.createElement('input');
-          input.type='text'; input.value=shown;
-          input.placeholder='e.g. CORRECT - Issue has been Fixed';
-          input.oninput=function(){onEdit(t.key,it,input.value);};
-          input.onkeydown=function(e){if(e.key==='Enter')saveRow(t.key,it.row);};
-          noteCell.appendChild(input);
-          var quick=document.createElement('div'); quick.className='quick';
-          [['CORRECT','c-correct','CORRECT '],['REVIEW','c-review','REVIEW '],
-           ['ADJUST','c-adjust','ADJUST '],['✓ Fixed','c-fixed','CORRECT - Issue has been Fixed']].forEach(function(p){
-            var chip=document.createElement('span'); chip.className='chip '+p[1]; chip.innerText=p[0];
-            chip.onclick=function(){onEdit(t.key,it,p[2]);};
-            quick.appendChild(chip);
-          });
-          noteCell.appendChild(quick);
-          var btn=document.createElement('button'); btn.className='save-btn'; btn.innerText='Save';
-          btn.onclick=function(){saveRow(t.key,it.row);};
-          tr.children[5].appendChild(btn);
-          tr.__ctx={it:it,input:input,btn:btn};
-          tbody.appendChild(tr);
-        });
-      });
-    }
-
-    function statusOf(note){
-      var n=(note||'').trim().toUpperCase();
-      if(n.indexOf('CORRECT')===0)return 'correct';
-      if(n.indexOf('REVIEW')===0)return 'review';
-      if(n.indexOf('ADJUST')===0)return 'adjust';
-      return note?'other':'';
-    }
-    function baselineNote(dsKey,row){
-      var t=DATA.tabs.filter(function(x){return x.key===dsKey;})[0]; var found='';
-      t.sections.some(function(s){return s.items.some(function(it){if(it.row===row){found=it.note||'';return true;}});});
-      return found;
-    }
-    function onEdit(dsKey,it,value){
-      var k=dkey(dsKey,it.row);
-      if(value===baselineNote(dsKey,it.row)) delete dirty[k];
-      else dirty[k]={note:value,item:it.item};
-      syncRow(dsKey,it.row,value); updateSaveAll();
-    }
-    function syncRow(dsKey,row,value){
-      if(dsKey!==activeKey)return;
-      var rows=document.querySelectorAll('tr[data-row="'+attrEsc(row)+'"]');
-      var cls=STATUS_CLASS[statusOf(value)];
-      var isDirty=dirty.hasOwnProperty(dkey(dsKey,row));
-      rows.forEach(function(tr){
-        if(tr.__ctx&&tr.__ctx.input.value!==value) tr.__ctx.input.value=value;
-        if(tr.__ctx) tr.__ctx.input.classList.toggle('dirty',isDirty);
-        tr.classList.remove('row-correct','row-review','row-adjust');
-        if(cls) tr.classList.add(cls);
-      });
-    }
-    function updateSaveAll(){
-      var n=Object.keys(dirty).length;
-      var btn=document.getElementById('saveAllBtn');
-      btn.disabled=n===0; btn.innerText=n?('Save all changes ('+n+')'):'Save all changes';
-      var t=tab();
-      if(t){
-        var pct=t.counts.total?Math.round(100*t.counts.reviewed/t.counts.total):0;
-        document.getElementById('progFill').style.width=pct+'%';
-        document.getElementById('progLabel').innerText=t.counts.reviewed+' of '+t.counts.total+' reviewed ('+pct+'%)';
-      }
-    }
-    function saveRow(dsKey,row){
-      var k=dkey(dsKey,row);
-      var note=dirty.hasOwnProperty(k)?dirty[k].note:baselineNote(dsKey,row);
-      var item=(dirty[k]&&dirty[k].item)||itemFor(dsKey,row);
-      var rows=document.querySelectorAll('tr[data-row="'+attrEsc(row)+'"]');
-      rows.forEach(function(tr){tr.classList.add('row-saving');if(tr.__ctx)tr.__ctx.btn.disabled=true;});
-      google.script.run
-        .withSuccessHandler(function(res){onSaved(dsKey,row,note,res);})
-        .withFailureHandler(function(err){
-          rows.forEach(function(tr){tr.classList.remove('row-saving');if(tr.__ctx)tr.__ctx.btn.disabled=false;});
-          showStatus('Failed to save: '+err.message,'error');
-        })
-        .saveNote({datastore:dsKey,row:row,note:note,expectedItem:item});
-    }
-    function itemFor(dsKey,row){
-      var t=DATA.tabs.filter(function(x){return x.key===dsKey;})[0]; var f='';
-      t.sections.some(function(s){return s.items.some(function(it){if(it.row===row){f=it.item;return true;}});});
-      return f;
-    }
-    function onSaved(dsKey,row,note,res){
-      var t=DATA.tabs.filter(function(x){return x.key===dsKey;})[0];
-      t.sections.forEach(function(s){s.items.forEach(function(it){if(it.row===row)it.note=note;});});
-      delete dirty[dkey(dsKey,row)];
-      var rows=document.querySelectorAll('tr[data-row="'+attrEsc(row)+'"]');
-      rows.forEach(function(tr){
-        tr.classList.remove('row-saving');
-        if(tr.__ctx){tr.__ctx.input.classList.remove('dirty');tr.__ctx.btn.disabled=false;
-          tr.__ctx.btn.classList.add('saved');tr.__ctx.btn.innerText='Saved';
-          (function(b){setTimeout(function(){b.classList.remove('saved');b.innerText='Save';},1500);})(tr.__ctx.btn);}
-      });
-      if(res&&typeof res.reviewed==='number'){t.counts.reviewed=res.reviewed;t.counts.total=res.total;renderTabs();updateSaveAll();}
-      showStatus('Saved.','success');
-    }
-    function saveAllDirty(){
-      var entries=Object.keys(dirty).map(function(k){
-        var p=k.split('\u0000'); return {datastore:p[0],row:Number(p[1]),note:dirty[k].note,expectedItem:dirty[k].item};
-      });
-      if(!entries.length)return;
-      showStatus('Saving '+entries.length+' change(s)…','loading');
-      document.getElementById('saveAllBtn').disabled=true;
-      google.script.run
-        .withSuccessHandler(function(){showStatus('All changes saved.','success');loadData();})
-        .withFailureHandler(function(err){showStatus('Batch save error: '+err.message,'error');document.getElementById('saveAllBtn').disabled=false;})
-        .saveNotesBatch(entries);
-    }
+    app.mount('#app');
   </script>
 </body>
 </html>
