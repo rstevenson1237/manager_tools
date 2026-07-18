@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <style>
+    :root{--brand:#1a73e8;--brand-dark:#1557b0;--green:#d9ead3;--green-b:#38761d;
+      --yellow:#fff2cc;--yellow-b:#bf9000;--red:#f4cccc;--red-b:#cc0000;--grey-b:#5f6368;--danger:#d93025;}
+    *{box-sizing:border-box;}
+    body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;margin:0;padding:12px;background:#f8f9fa;color:#202124;}
+    .header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:12px;}
+    h2{margin:0;color:var(--brand);font-size:20px;}
+    .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+    button{background:var(--brand);color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-weight:600;}
+    button:hover{background:var(--brand-dark);}
+    button:disabled{background:#ccc;cursor:not-allowed;}
+    button.ghost{background:#e8eaed;color:#3c4043;}
+    button.danger{background:var(--danger);}
+    button.danger:hover{background:#b3271b;}
+    /* admin bar */
+    #adminBar{display:none;align-items:center;gap:12px;flex-wrap:wrap;background:#eef3fe;border:1px solid #cfe0ff;
+      border-radius:8px;padding:10px 12px;margin-bottom:12px;}
+    #adminBar .who{font-size:12px;color:var(--grey-b);margin-left:auto;}
+    #adminBar label.upload{background:var(--brand);color:#fff;padding:8px 14px;border-radius:6px;cursor:pointer;font-weight:600;font-size:14px;}
+    #adminBar label.upload:hover{background:var(--brand-dark);}
+    #adminBar input[type=file]{display:none;}
+    .admin-title{font-weight:700;color:#3c4043;}
+    .tabs{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;}
+    .tab{background:#e8eaed;color:#3c4043;padding:8px 14px;border-radius:6px 6px 0 0;cursor:pointer;font-weight:600;border:none;}
+    .tab.active{background:var(--brand);color:#fff;}
+    .tab .count{font-weight:400;opacity:.85;margin-left:6px;font-size:12px;}
+    #status{padding:10px 12px;margin-bottom:12px;border-radius:6px;display:none;font-weight:600;}
+    .s-loading{background:#e8f0fe;color:var(--brand);display:block !important;}
+    .s-success{background:#d4edda;color:#155724;display:block !important;}
+    .s-error{background:#f8d7da;color:#721c24;display:block !important;}
+    .progress-wrap{min-width:220px;}
+    .progress-bar{height:8px;background:#e0e0e0;border-radius:4px;overflow:hidden;}
+    .progress-fill{height:100%;background:var(--green-b);width:0%;transition:width .3s;}
+    .progress-label{font-size:12px;color:var(--grey-b);margin-top:2px;}
+    .table-container{width:100%;max-height:600px;overflow-y:auto;border:1px solid #ddd;background:#fff;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,.05);}
+    table{width:100%;border-collapse:collapse;}
+    th{background:#f1f3f4;padding:10px 12px;text-align:left;position:sticky;top:0;z-index:2;box-shadow:0 1px 0 #ddd;font-size:13px;}
+    td{padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;vertical-align:middle;}
+    tr.section td{background:#eef1f5;font-weight:700;color:#3c4043;text-transform:uppercase;letter-spacing:.03em;font-size:12px;position:sticky;top:41px;z-index:1;}
+    tr.empty td{color:var(--grey-b);font-style:italic;font-size:12px;}
+    tr.row-correct{background:var(--green);}
+    tr.row-review{background:var(--yellow);}
+    tr.row-adjust{background:var(--red);}
+    .dup-badge{display:inline-block;margin-left:6px;font-size:10px;font-weight:700;color:#fff;background:var(--grey-b);border-radius:8px;padding:1px 6px;vertical-align:middle;}
+    .flag{font-weight:600;color:var(--red-b);white-space:nowrap;}
+    .qty{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+    .note-cell{min-width:240px;}
+    input[type=text]{width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:5px;font-size:13px;}
+    input[type=text].dirty{border-color:var(--brand);background:#f0f6ff;}
+    .quick{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap;}
+    .chip{font-size:11px;padding:2px 8px;border-radius:10px;cursor:pointer;border:1px solid #ccc;background:#fff;color:#444;font-weight:600;}
+    .chip.c-correct{border-color:var(--green-b);color:var(--green-b);}
+    .chip.c-review{border-color:var(--yellow-b);color:var(--yellow-b);}
+    .chip.c-adjust{border-color:var(--red-b);color:var(--red-b);}
+    .chip.c-fixed{border-color:var(--green-b);color:var(--green-b);background:#eaf6e6;}
+    .chip:hover{filter:brightness(.95);}
+    .save-btn{background:#28a745;padding:6px 12px;font-size:12px;}
+    .save-btn:hover{background:#218838;}
+    .save-btn.saved{background:#6c757d;}
+    .row-saving{opacity:.6;}
+    .muted{color:var(--grey-b);font-size:12px;}
+    /* modal */
+    #overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;align-items:center;justify-content:center;}
+    #modal{background:#fff;border-radius:10px;max-width:460px;width:92%;padding:20px;box-shadow:0 8px 30px rgba(0,0,0,.3);}
+    #modal h3{margin:0 0 10px;color:var(--brand);}
+    #modal .warn{background:#fff3cd;border:1px solid #ffe08a;color:#7a5b00;border-radius:6px;padding:12px;}
+    #modal ul{margin:8px 0 0 18px;padding:0;}
+    #modal .row{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;}
+    .spin{display:inline-block;width:14px;height:14px;border:2px solid #cfe0ff;border-top-color:var(--brand);border-radius:50%;animation:s .8s linear infinite;vertical-align:middle;margin-right:6px;}
+    @keyframes s{to{transform:rotate(360deg);}}
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h2>Items to Review</h2>
+    <div class="controls">
+      <div class="progress-wrap">
+        <div class="progress-bar"><div class="progress-fill" id="progFill"></div></div>
+        <div class="progress-label" id="progLabel">—</div>
+      </div>
+      <button id="saveAllBtn" onclick="saveAllDirty()" disabled>Save all changes</button>
+      <button id="refreshBtn" onclick="loadData()">Refresh</button>
+    </div>
+  </div>
+
+  <div id="adminBar">
+    <span class="admin-title">Admin</span>
+    <label class="upload">Upload monthly counts (CSV)
+      <input type="file" id="csvFile" accept=".csv">
+    </label>
+    <button class="danger" onclick="askRemove()">Remove all data</button>
+    <span class="who" id="whoami"></span>
+  </div>
+
+  <div id="status"></div>
+  <div class="tabs" id="tabs"></div>
+
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr><th>Item</th><th>UofM</th><th style="text-align:right">Cur. Qty</th>
+        <th>Flag</th><th>Notes / SOP Action</th><th></th></tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+  <p class="muted" id="footNote"></p>
+
+  <!-- confirmation / progress modal -->
+  <div id="overlay"><div id="modal"><div id="modalBody"></div></div></div>
+
+  <script>
+    var DATA=null, activeKey=null;
+    var dirty={};   // "dsKey\u0000row" -> { note, item }
+    var CSV=null;   // staged upload text
+    var STATUS_CLASS={correct:'row-correct',review:'row-review',adjust:'row-adjust'};
+
+    window.onload=loadData;
+
+    function showStatus(msg,type){
+      var el=document.getElementById('status');
+      el.className='s-'+type; el.innerText=msg;
+      if(type==='success'||type==='error') setTimeout(function(){el.style.display='none';},4000);
+    }
+    function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+    function fmtQty(q){if(q===''||q==null)return '';var n=Number(q);return isNaN(n)?esc(q):n.toLocaleString(undefined,{maximumFractionDigits:2});}
+    function dkey(ds,row){return ds+'\u0000'+row;}
+    function attrEsc(s){return String(s).replace(/["\\]/g,'\\$&');}
+
+    /* ---------- modal helpers ---------- */
+    function openModal(html){document.getElementById('modalBody').innerHTML=html;document.getElementById('overlay').style.display='flex';}
+    function closeModal(){document.getElementById('overlay').style.display='none';}
+
+    /* ---------- load ---------- */
+    function loadData(){
+      showStatus('Loading inventory data…','loading');
+      document.getElementById('refreshBtn').disabled=true;
+      google.script.run
+        .withSuccessHandler(function(payload){
+          DATA=payload; dirty={};
+          if(!activeKey && payload.tabs.length) activeKey=payload.tabs[0].key;
+          setupAdmin(payload.session);
+          renderTabs(); renderActive(); updateSaveAll();
+          document.getElementById('footNote').innerText=
+            'Loaded '+new Date(payload.generatedAt).toLocaleString()+
+            '. Categories are computed live from the data store. A note saves once per item and shows in every category it appears in.';
+          showStatus('Data loaded.','success');
+          document.getElementById('refreshBtn').disabled=false;
+        })
+        .withFailureHandler(function(err){
+          showStatus('Error loading data: '+err.message,'error');
+          document.getElementById('refreshBtn').disabled=false;
+        })
+        .getInventoryData();
+    }
+
+    /* ---------- admin panel ---------- */
+    function setupAdmin(session){
+      var bar=document.getElementById('adminBar');
+      if(session && session.isAdmin){
+        bar.style.display='flex';
+        document.getElementById('whoami').innerText='signed in as '+(session.email||'unknown');
+      } else {
+        bar.style.display='none';
+      }
+    }
+
+    document.getElementById('csvFile').addEventListener('change', function(e){
+      var f=e.target.files[0]; if(!f) return;
+      var reader=new FileReader();
+      reader.onload=function(ev){
+        CSV=ev.target.result;
+        e.target.value=''; // allow re-selecting same file later
+        openModal('<h3>Checking existing data…</h3><p><span class="spin"></span>One moment.</p>');
+        google.script.run
+          .withSuccessHandler(showUploadConfirm)
+          .withFailureHandler(function(err){openModal('<h3>Cannot upload</h3><p>'+esc(err.message)+'</p><div class="row"><button class="ghost" onclick="closeModal()">Close</button></div>');})
+          .getExistingDataSummary();
+      };
+      reader.readAsText(f);
+    });
+
+    function showUploadConfirm(summary){
+      if(summary.hasData){
+        var items=summary.sheets.filter(function(s){return s.rows>0;})
+          .map(function(s){return '<li>'+esc(s.label)+': '+s.rows+' rows</li>';}).join('');
+        openModal(
+          '<h3>Replace last month\u2019s data?</h3>'+
+          '<div class="warn"><b>This permanently erases the current data and every note in it:</b>'+
+          '<ul>'+items+'</ul></div>'+
+          '<div class="row"><button class="ghost" onclick="closeModal()">Cancel</button>'+
+          '<button class="danger" onclick="doUpload()">Wipe &amp; import</button></div>');
+      } else {
+        doUpload();
+      }
+    }
+
+    function doUpload(){
+      openModal('<h3>Importing…</h3><p><span class="spin"></span>Wiping and loading the new month.</p>');
+      google.script.run
+        .withSuccessHandler(function(res){
+          openModal('<h3>Import complete</h3><p>Loaded '+res.beverage+' beverage and '+res.food+
+            ' food rows.</p><div class="row"><button onclick="closeModal();loadData();">Done</button></div>');
+        })
+        .withFailureHandler(function(err){
+          openModal('<h3>Import failed</h3><p>'+esc(err.message)+'</p><p class="muted">Existing data was not changed.</p>'+
+            '<div class="row"><button class="ghost" onclick="closeModal()">Close</button></div>');
+        })
+        .processCSVData(CSV);
+    }
+
+    function askRemove(){
+      openModal(
+        '<h3>Remove all count data?</h3>'+
+        '<div class="warn"><b>This deletes both Count Details sheets and every note.</b> '+
+        'The next upload will recreate them.</div>'+
+        '<div class="row"><button class="ghost" onclick="closeModal()">Cancel</button>'+
+        '<button class="danger" onclick="doRemove()">Remove everything</button></div>');
+    }
+    function doRemove(){
+      openModal('<h3>Removing…</h3><p><span class="spin"></span>Deleting count data.</p>');
+      google.script.run
+        .withSuccessHandler(function(){openModal('<h3>Removed</h3><p>All count data deleted.</p><div class="row"><button onclick="closeModal();loadData();">Done</button></div>');})
+        .withFailureHandler(function(err){openModal('<h3>Could not remove</h3><p>'+esc(err.message)+'</p><div class="row"><button class="ghost" onclick="closeModal()">Close</button></div>');})
+        .removeAllCountData();
+    }
+
+    /* ---------- review UI ---------- */
+    function tab(){return DATA.tabs.filter(function(t){return t.key===activeKey;})[0];}
+
+    function renderTabs(){
+      var wrap=document.getElementById('tabs'); wrap.innerHTML='';
+      DATA.tabs.forEach(function(t){
+        var b=document.createElement('button');
+        b.className='tab'+(t.key===activeKey?' active':'');
+        b.innerHTML=esc(t.label)+'<span class="count">'+t.counts.reviewed+'/'+t.counts.total+'</span>';
+        b.onclick=function(){activeKey=t.key;renderTabs();renderActive();updateSaveAll();};
+        wrap.appendChild(b);
+      });
+    }
+
+    function rowCounts(t){
+      var c={}; t.sections.forEach(function(s){s.items.forEach(function(it){c[it.row]=(c[it.row]||0)+1;});});
+      return c;
+    }
+
+    function renderActive(){
+      var t=tab(); if(!t) return; var counts=rowCounts(t);
+      var tbody=document.getElementById('tbody'); tbody.innerHTML='';
+
+      t.sections.forEach(function(section){
+        var sr=document.createElement('tr'); sr.className='section';
+        sr.innerHTML='<td colspan="6">'+esc(section.label)+'</td>'; tbody.appendChild(sr);
+        if(!section.items.length){
+          var er=document.createElement('tr'); er.className='empty';
+          er.innerHTML='<td colspan="6">No items in this category.</td>'; tbody.appendChild(er); return;
+        }
+        section.items.forEach(function(it){
+          var tr=document.createElement('tr');
+          tr.setAttribute('data-row',it.row);
+          var k=dkey(t.key,it.row);
+          var shown=dirty[k]!==undefined?dirty[k].note:(it.note||'');
+          var cls=STATUS_CLASS[statusOf(shown)]; if(cls) tr.className=cls;
+          var dup=counts[it.row]>1?('<span class="dup-badge" title="Appears in '+counts[it.row]+' categories">×'+counts[it.row]+'</span>'):'';
+          var flag=it.flag?'<span class="flag">'+esc(it.flag)+'</span>':'';
+          tr.innerHTML=
+            '<td><strong>'+esc(it.item)+'</strong>'+dup+'</td>'+
+            '<td>'+esc(it.uom)+'</td>'+
+            '<td class="qty">'+fmtQty(it.currentQty)+'</td>'+
+            '<td>'+flag+'</td>'+
+            '<td class="note-cell"></td><td></td>';
+          var noteCell=tr.children[4];
+          var input=document.createElement('input');
+          input.type='text'; input.value=shown;
+          input.placeholder='e.g. CORRECT - Issue has been Fixed';
+          input.oninput=function(){onEdit(t.key,it,input.value);};
+          input.onkeydown=function(e){if(e.key==='Enter')saveRow(t.key,it.row);};
+          noteCell.appendChild(input);
+          var quick=document.createElement('div'); quick.className='quick';
+          [['CORRECT','c-correct','CORRECT '],['REVIEW','c-review','REVIEW '],
+           ['ADJUST','c-adjust','ADJUST '],['✓ Fixed','c-fixed','CORRECT - Issue has been Fixed']].forEach(function(p){
+            var chip=document.createElement('span'); chip.className='chip '+p[1]; chip.innerText=p[0];
+            chip.onclick=function(){onEdit(t.key,it,p[2]);};
+            quick.appendChild(chip);
+          });
+          noteCell.appendChild(quick);
+          var btn=document.createElement('button'); btn.className='save-btn'; btn.innerText='Save';
+          btn.onclick=function(){saveRow(t.key,it.row);};
+          tr.children[5].appendChild(btn);
+          tr.__ctx={it:it,input:input,btn:btn};
+          tbody.appendChild(tr);
+        });
+      });
+    }
+
+    function statusOf(note){
+      var n=(note||'').trim().toUpperCase();
+      if(n.indexOf('CORRECT')===0)return 'correct';
+      if(n.indexOf('REVIEW')===0)return 'review';
+      if(n.indexOf('ADJUST')===0)return 'adjust';
+      return note?'other':'';
+    }
+    function baselineNote(dsKey,row){
+      var t=DATA.tabs.filter(function(x){return x.key===dsKey;})[0]; var found='';
+      t.sections.some(function(s){return s.items.some(function(it){if(it.row===row){found=it.note||'';return true;}});});
+      return found;
+    }
+    function onEdit(dsKey,it,value){
+      var k=dkey(dsKey,it.row);
+      if(value===baselineNote(dsKey,it.row)) delete dirty[k];
+      else dirty[k]={note:value,item:it.item};
+      syncRow(dsKey,it.row,value); updateSaveAll();
+    }
+    function syncRow(dsKey,row,value){
+      if(dsKey!==activeKey)return;
+      var rows=document.querySelectorAll('tr[data-row="'+attrEsc(row)+'"]');
+      var cls=STATUS_CLASS[statusOf(value)];
+      var isDirty=dirty.hasOwnProperty(dkey(dsKey,row));
+      rows.forEach(function(tr){
+        if(tr.__ctx&&tr.__ctx.input.value!==value) tr.__ctx.input.value=value;
+        if(tr.__ctx) tr.__ctx.input.classList.toggle('dirty',isDirty);
+        tr.classList.remove('row-correct','row-review','row-adjust');
+        if(cls) tr.classList.add(cls);
+      });
+    }
+    function updateSaveAll(){
+      var n=Object.keys(dirty).length;
+      var btn=document.getElementById('saveAllBtn');
+      btn.disabled=n===0; btn.innerText=n?('Save all changes ('+n+')'):'Save all changes';
+      var t=tab();
+      if(t){
+        var pct=t.counts.total?Math.round(100*t.counts.reviewed/t.counts.total):0;
+        document.getElementById('progFill').style.width=pct+'%';
+        document.getElementById('progLabel').innerText=t.counts.reviewed+' of '+t.counts.total+' reviewed ('+pct+'%)';
+      }
+    }
+    function saveRow(dsKey,row){
+      var k=dkey(dsKey,row);
+      var note=dirty.hasOwnProperty(k)?dirty[k].note:baselineNote(dsKey,row);
+      var item=(dirty[k]&&dirty[k].item)||itemFor(dsKey,row);
+      var rows=document.querySelectorAll('tr[data-row="'+attrEsc(row)+'"]');
+      rows.forEach(function(tr){tr.classList.add('row-saving');if(tr.__ctx)tr.__ctx.btn.disabled=true;});
+      google.script.run
+        .withSuccessHandler(function(res){onSaved(dsKey,row,note,res);})
+        .withFailureHandler(function(err){
+          rows.forEach(function(tr){tr.classList.remove('row-saving');if(tr.__ctx)tr.__ctx.btn.disabled=false;});
+          showStatus('Failed to save: '+err.message,'error');
+        })
+        .saveNote({datastore:dsKey,row:row,note:note,expectedItem:item});
+    }
+    function itemFor(dsKey,row){
+      var t=DATA.tabs.filter(function(x){return x.key===dsKey;})[0]; var f='';
+      t.sections.some(function(s){return s.items.some(function(it){if(it.row===row){f=it.item;return true;}});});
+      return f;
+    }
+    function onSaved(dsKey,row,note,res){
+      var t=DATA.tabs.filter(function(x){return x.key===dsKey;})[0];
+      t.sections.forEach(function(s){s.items.forEach(function(it){if(it.row===row)it.note=note;});});
+      delete dirty[dkey(dsKey,row)];
+      var rows=document.querySelectorAll('tr[data-row="'+attrEsc(row)+'"]');
+      rows.forEach(function(tr){
+        tr.classList.remove('row-saving');
+        if(tr.__ctx){tr.__ctx.input.classList.remove('dirty');tr.__ctx.btn.disabled=false;
+          tr.__ctx.btn.classList.add('saved');tr.__ctx.btn.innerText='Saved';
+          (function(b){setTimeout(function(){b.classList.remove('saved');b.innerText='Save';},1500);})(tr.__ctx.btn);}
+      });
+      if(res&&typeof res.reviewed==='number'){t.counts.reviewed=res.reviewed;t.counts.total=res.total;renderTabs();updateSaveAll();}
+      showStatus('Saved.','success');
+    }
+    function saveAllDirty(){
+      var entries=Object.keys(dirty).map(function(k){
+        var p=k.split('\u0000'); return {datastore:p[0],row:Number(p[1]),note:dirty[k].note,expectedItem:dirty[k].item};
+      });
+      if(!entries.length)return;
+      showStatus('Saving '+entries.length+' change(s)…','loading');
+      document.getElementById('saveAllBtn').disabled=true;
+      google.script.run
+        .withSuccessHandler(function(){showStatus('All changes saved.','success');loadData();})
+        .withFailureHandler(function(err){showStatus('Batch save error: '+err.message,'error');document.getElementById('saveAllBtn').disabled=false;})
+        .saveNotesBatch(entries);
+    }
+  </script>
+</body>
+</html>
