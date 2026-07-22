@@ -8,8 +8,8 @@
       --yellow:#fff2cc;--yellow-b:#bf9000;--red:#f4cccc;--red-b:#cc0000;--grey-b:#5f6368;--danger:#d93025;}
     *{box-sizing:border-box;}
     [v-cloak]{display:none;}
-    body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;margin:0;padding:12px;background:#f8f9fa;color:#202124;}
-    .header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:12px;}
+    body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;margin:0;padding:8px;background:#f8f9fa;color:#202124;}
+    .header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:8px;}
     h2{margin:0;color:var(--brand);font-size:20px;}
     .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
     button{background:var(--brand);color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;transition:background-color .15s ease;}
@@ -21,19 +21,20 @@
     button.danger:hover:not(:disabled){background:#b3271b;}
     .toggle{display:flex;align-items:center;gap:5px;font-size:13px;color:var(--grey-b);cursor:pointer;user-select:none;}
     .pending-indicator{font-size:12px;font-weight:700;color:var(--brand);background:#eef3fe;padding:5px 10px;border-radius:10px;white-space:nowrap;}
+    .property-select{width:auto;padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;background:#fff;color:#202124;font-weight:600;}
     /* admin bar */
     #adminBar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#eef3fe;border:1px solid #cfe0ff;
-      border-radius:8px;padding:10px 12px;margin-bottom:12px;}
+      border-radius:8px;padding:10px 12px;margin-bottom:10px;}
     #adminBar .who{font-size:12px;color:var(--grey-b);margin-left:auto;}
     #adminBar label.upload{background:var(--brand);color:#fff;padding:8px 14px;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;}
     #adminBar label.upload:hover{background:var(--brand-dark);}
     #adminBar input[type=file]{display:none;}
     .admin-title{font-weight:700;color:#3c4043;}
-    .tabs{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;}
+    .tabs{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;}
     .tab{background:#e8eaed;color:#3c4043;padding:8px 14px;border-radius:6px 6px 0 0;cursor:pointer;font-weight:600;border:none;}
     .tab.active{background:var(--brand);color:#fff;}
     .tab .count{font-weight:400;opacity:.85;margin-left:6px;font-size:12px;}
-    #status{padding:10px 12px;margin-bottom:12px;border-radius:6px;font-weight:600;transition:opacity .2s ease;}
+    #status{padding:10px 12px;margin-bottom:10px;border-radius:6px;font-weight:600;transition:opacity .2s ease;}
     .s-loading{background:#e8f0fe;color:var(--brand);}
     .s-success{background:#d4edda;color:#155724;}
     .s-error{background:#f8d7da;color:#721c24;}
@@ -41,12 +42,15 @@
     .progress-bar{height:8px;background:#e0e0e0;border-radius:4px;overflow:hidden;}
     .progress-fill{height:100%;background:var(--green-b);width:0%;transition:width .3s;}
     .progress-label{font-size:12px;color:var(--grey-b);margin-top:2px;}
-    .table-container{width:100%;max-height:640px;overflow:auto;border:1px solid #ddd;background:#fff;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,.05);}
+    .table-container{width:100%;max-height:680px;overflow:auto;border:1px solid #ddd;background:#fff;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,.05);}
     table{width:100%;border-collapse:collapse;}
-    th{background:#f1f3f4;padding:10px 12px;text-align:left;position:sticky;top:0;z-index:2;box-shadow:0 1px 0 #ddd;font-size:12px;white-space:nowrap;}
-    td{padding:8px 12px;border-bottom:1px solid #eee;font-size:13px;vertical-align:middle;white-space:nowrap;}
+    th{background:#f1f3f4;padding:4px 8px;text-align:left;position:sticky;top:0;z-index:2;box-shadow:0 1px 0 #ddd;font-size:12px;white-space:nowrap;position:relative;}
+    th[draggable=true]{cursor:grab;}
+    .col-resize{position:absolute;right:0;top:0;bottom:0;width:6px;cursor:col-resize;user-select:none;}
+    .col-resize:hover{background:rgba(0,0,0,.15);}
+    td{padding:4px 8px;border-bottom:1px solid #eee;font-size:13px;vertical-align:middle;white-space:nowrap;}
     tr{transition:background-color .25s ease;}
-    tr.section td{background:#eef1f5;font-weight:700;color:#3c4043;text-transform:uppercase;letter-spacing:.03em;font-size:12px;position:sticky;top:37px;z-index:1;white-space:normal;}
+    tr.section td{background:#eef1f5;font-weight:700;color:#3c4043;text-transform:uppercase;letter-spacing:.03em;font-size:12px;position:sticky;top:29px;z-index:1;white-space:normal;}
     tr.empty td{color:var(--grey-b);font-style:italic;font-size:12px;white-space:normal;}
     tr.row-correct{background:var(--green);}
     tr.row-review{background:var(--yellow);}
@@ -66,7 +70,7 @@
     .cat-btn.active.cat-review{background:var(--yellow-b);color:#fff;}
     .cat-btn.active.cat-adjust{background:var(--red-b);color:#fff;}
     .cat-btn:hover{filter:brightness(.97);}
-    select{width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:5px;font-size:12px;background:#fff;color:#202124;}
+    .note-cell select{width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:5px;font-size:12px;background:#fff;color:#202124;}
     .sync-cell{font-size:11px;}
     .badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:3px 7px;border-radius:8px;white-space:nowrap;}
     .badge-pending{background:#fff2cc;color:var(--yellow-b);}
@@ -74,6 +78,7 @@
     .badge-synced{background:#d4edda;color:#155724;}
     .badge-error{background:#f8d7da;color:#721c24;cursor:help;}
     .muted{color:var(--grey-b);font-size:12px;}
+    .empty-state{padding:60px 20px;text-align:center;color:var(--grey-b);}
     /* modal */
     .overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;display:flex;align-items:center;justify-content:center;}
     .modal{background:#fff;border-radius:10px;max-width:460px;width:92%;padding:20px;box-shadow:0 8px 30px rgba(0,0,0,.3);}
@@ -99,199 +104,253 @@
 </head>
 <body>
   <div id="app" v-cloak>
-    <div class="header">
-      <h2>Items to Review</h2>
-      <div class="controls">
-        <div class="progress-wrap" v-if="activeTab">
-          <div class="progress-bar"><div class="progress-fill" :style="{width: progressPct + '%'}"></div></div>
-          <div class="progress-label">{{ progressLabel }}</div>
+    <div v-if="bootLoading" class="empty-state"><span class="spin"></span>Loading…</div>
+
+    <div v-else-if="!bootstrap.properties.length" class="empty-state">
+      No properties are configured for your account.<br>Contact an admin.
+    </div>
+
+    <template v-else>
+      <div class="header">
+        <h2>{{ activeProperty ? activeProperty.name + ' — Items to Review' : 'Items to Review' }}</h2>
+        <div class="controls">
+          <select v-if="bootstrap.properties.length > 1" class="property-select"
+            :value="activeProperty && activeProperty.id" @change="onPropertyChange($event.target.value)">
+            <option v-for="p in bootstrap.properties" :key="p.id" :value="p.id">{{ p.name }}</option>
+          </select>
+          <div class="progress-wrap" v-if="activeTab">
+            <div class="progress-bar"><div class="progress-fill" :style="{width: progressPct + '%'}"></div></div>
+            <div class="progress-label">{{ progressLabel }}</div>
+          </div>
+          <span class="pending-indicator" v-if="pendingCount">{{ pendingCount }} pending sync</span>
+          <label class="toggle"><input type="checkbox" v-model="autoSync"> Auto-sync</label>
+          <button @click="syncPending" :disabled="!pendingCount || syncing">
+            {{ syncing ? 'Syncing…' : (pendingCount ? 'Sync now (' + pendingCount + ')' : 'Sync now') }}
+          </button>
+          <button class="ghost" @click="loadData()" :disabled="loading">Refresh</button>
+          <button class="ghost" v-if="session.isAdmin" @click="openSettings">⚙ Settings</button>
         </div>
-        <span class="pending-indicator" v-if="pendingCount">{{ pendingCount }} pending sync</span>
-        <label class="toggle"><input type="checkbox" v-model="autoSync"> Auto-sync</label>
-        <button @click="syncPending" :disabled="!pendingCount || syncing">
-          {{ syncing ? 'Syncing…' : (pendingCount ? 'Sync now (' + pendingCount + ')' : 'Sync now') }}
+      </div>
+
+      <div id="adminBar" v-if="session.isAdmin">
+        <span class="admin-title">Admin</span>
+        <label class="upload">Upload monthly counts (CSV)
+          <input type="file" accept=".csv" @change="onCsvFileChosen">
+        </label>
+        <button class="danger" @click="askRemove">Remove all data</button>
+        <span class="who">signed in as {{ session.email || 'unknown' }}<template v-if="bootstrap.isGlobalAdmin"> · global admin</template></span>
+      </div>
+
+      <div id="status" :class="'s-' + statusType" v-if="statusMsg">{{ statusMsg }}</div>
+
+      <div class="tabs" v-if="tabsRaw.length">
+        <button v-for="t in tabsRaw" :key="t.key" :class="['tab', { active: t.key === activeKey }]" @click="activeKey = t.key">
+          {{ t.label }}<span class="count">{{ t.counts.reviewed }}/{{ t.counts.total }}</span>
         </button>
-        <button class="ghost" @click="loadData()" :disabled="loading">Refresh</button>
-        <button class="ghost" v-if="session.isAdmin" @click="openSettings">⚙ Settings</button>
       </div>
-    </div>
 
-    <div id="adminBar" v-if="session.isAdmin">
-      <span class="admin-title">Admin</span>
-      <label class="upload">Upload monthly counts (CSV)
-        <input type="file" accept=".csv" @change="onCsvFileChosen">
-      </label>
-      <button class="danger" @click="askRemove">Remove all data</button>
-      <span class="who">signed in as {{ session.email || 'unknown' }}</span>
-    </div>
-
-    <div id="status" :class="'s-' + statusType" v-if="statusMsg">{{ statusMsg }}</div>
-
-    <div class="tabs" v-if="tabsRaw.length">
-      <button v-for="t in tabsRaw" :key="t.key" :class="['tab', { active: t.key === activeKey }]" @click="activeKey = t.key">
-        {{ t.label }}<span class="count">{{ t.counts.reviewed }}/{{ t.counts.total }}</span>
-      </button>
-    </div>
-
-    <div class="table-container" v-if="activeTab">
-      <table>
-        <thead>
-          <tr>
-            <th>Item</th>
-            <th v-for="col in visibleColumnDefs" :key="col.key" :class="colClass(col.key)">{{ col.label }}</th>
-            <th>Notes / SOP Action</th>
-            <th>Sync</th>
-          </tr>
-        </thead>
-        <tbody>
-          <template v-for="section in activeTab.sections" :key="section.key">
-            <tr class="section"><td :colspan="totalCols">{{ section.label }}</td></tr>
-            <tr class="empty" v-if="!section.items.length"><td :colspan="totalCols">No items in this category.</td></tr>
-            <tr v-for="it in section.items" :key="section.key + '-' + it.row" :class="rowClass(it)">
-              <td><strong>{{ it.item }}</strong>
-                <span class="dup-badge" v-if="dupCounts[it.row] > 1" :title="'Appears in ' + dupCounts[it.row] + ' categories'">×{{ dupCounts[it.row] }}</span>
-              </td>
-              <td v-for="col in visibleColumnDefs" :key="col.key" :class="[colClass(col.key), varianceClass(col.key, it.variance)]">
-                <span v-if="col.key === 'flag' && it.flag" class="flag">{{ it.flag }}</span>
-                <template v-else>{{ formatCell(it, col.key) }}</template>
-              </td>
-              <td class="note-cell">
-                <div class="cat-btns">
-                  <button v-for="g in CATEGORY_GROUPS" :key="g"
-                    :class="['cat-btn', 'cat-' + g.toLowerCase(), { active: categoryOf(it.row) === g }]"
-                    @click="pickCategory(it, g)">{{ g }}</button>
-                </div>
-                <select :value="noteOf(it.row)" @change="onSelect(it, $event.target.value)">
-                  <option value="" disabled>{{ categoryOf(it.row) ? 'Select action…' : 'Pick a category above, or choose…' }}</option>
-                  <option v-for="c in filteredCategories(it.row)" :key="c" :value="c">{{ c }}</option>
-                </select>
-              </td>
-              <td class="sync-cell">
-                <span v-if="syncStatus[dkey(activeKey, it.row)] === 'pending'" class="badge badge-pending">● pending</span>
-                <span v-else-if="syncStatus[dkey(activeKey, it.row)] === 'syncing'" class="badge badge-syncing"><span class="spin" style="margin-right:0;width:10px;height:10px;"></span></span>
-                <span v-else-if="syncStatus[dkey(activeKey, it.row)] === 'error'" class="badge badge-error" :title="syncErrors[dkey(activeKey, it.row)] || 'Sync failed'">⚠ retry</span>
-                <span v-else-if="syncStatus[dkey(activeKey, it.row)] === 'synced'" class="badge badge-synced">✓ synced</span>
-              </td>
+      <div class="table-container" v-if="activeTab">
+        <table>
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th v-for="col in visibleColumnDefs" :key="col.key" :class="colClass(col.key)" :style="colStyle(col.key)"
+                draggable="true" @dragstart="onColDragStart(col.key, $event)" @dragover.prevent @drop="onColDrop(col.key, $event)">
+                {{ col.label }}<span class="col-resize" draggable="false" @mousedown="startResize(col.key, $event)"></span>
+              </th>
+              <th>Notes / SOP Action</th>
+              <th>Sync</th>
             </tr>
+          </thead>
+          <tbody>
+            <template v-for="section in activeTab.sections" :key="section.key">
+              <tr class="section"><td :colspan="totalCols">{{ section.label }}</td></tr>
+              <tr class="empty" v-if="!section.items.length"><td :colspan="totalCols">No items in this category.</td></tr>
+              <tr v-for="it in section.items" :key="section.key + '-' + it.row" :class="rowClass(it)">
+                <td><strong>{{ it.item }}</strong>
+                  <span class="dup-badge" v-if="dupCounts[it.row] > 1" :title="'Appears in ' + dupCounts[it.row] + ' categories'">×{{ dupCounts[it.row] }}</span>
+                </td>
+                <td v-for="col in visibleColumnDefs" :key="col.key" :class="[colClass(col.key), varianceClass(col.key, it.variance)]" :style="colStyle(col.key)">
+                  <span v-if="col.key === 'flag' && it.flag" class="flag">{{ it.flag }}</span>
+                  <template v-else>{{ formatCell(it, col.key) }}</template>
+                </td>
+                <td class="note-cell">
+                  <div class="cat-btns">
+                    <button v-for="g in CATEGORY_GROUPS" :key="g"
+                      :class="['cat-btn', 'cat-' + g.toLowerCase(), { active: categoryOf(it.row) === g }]"
+                      @click="pickCategory(it, g)">{{ g }}</button>
+                  </div>
+                  <select :value="noteOf(it.row)" @change="onSelect(it, $event.target.value)">
+                    <option value="" disabled>{{ categoryOf(it.row) ? 'Select action…' : 'Pick a category above, or choose…' }}</option>
+                    <option v-for="c in filteredCategories(it.row)" :key="c" :value="c">{{ c }}</option>
+                  </select>
+                </td>
+                <td class="sync-cell">
+                  <span v-if="syncStatus[dkey(activeKey, it.row)] === 'pending'" class="badge badge-pending">● pending</span>
+                  <span v-else-if="syncStatus[dkey(activeKey, it.row)] === 'syncing'" class="badge badge-syncing"><span class="spin" style="margin-right:0;width:10px;height:10px;"></span></span>
+                  <span v-else-if="syncStatus[dkey(activeKey, it.row)] === 'error'" class="badge badge-error" :title="syncErrors[dkey(activeKey, it.row)] || 'Sync failed'">⚠ retry</span>
+                  <span v-else-if="syncStatus[dkey(activeKey, it.row)] === 'synced'" class="badge badge-synced">✓ synced</span>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+      <p v-else-if="loading" class="muted">Loading inventory data…</p>
+      <p v-else class="muted">No data yet.</p>
+
+      <p class="muted" v-if="generatedAt">
+        Loaded {{ new Date(generatedAt).toLocaleString() }}. Categories are computed live from the data store.
+        Edits are kept in memory and synced to the sheet automatically (every 20s) or via "Sync now" — a note
+        saves once per item and shows in every category it appears in. Drag a column header to reorder it, or
+        its right edge to resize — layout resets on reload.
+      </p>
+
+      <!-- CSV upload modal -->
+      <div class="overlay" v-if="csv.stage">
+        <div class="modal">
+          <template v-if="csv.stage === 'checking'">
+            <h3>Checking existing data…</h3>
+            <p><span class="spin"></span>One moment.</p>
           </template>
-        </tbody>
-      </table>
-    </div>
-    <p v-else-if="loading" class="muted">Loading inventory data…</p>
-    <p v-else class="muted">No data yet.</p>
-
-    <p class="muted" v-if="generatedAt">
-      Loaded {{ new Date(generatedAt).toLocaleString() }}. Categories are computed live from the data store.
-      Edits are kept in memory and synced to the sheet automatically (every 20s) or via "Sync now" — a note
-      saves once per item and shows in every category it appears in.
-    </p>
-
-    <!-- CSV upload modal -->
-    <div class="overlay" v-if="csv.stage">
-      <div class="modal">
-        <template v-if="csv.stage === 'checking'">
-          <h3>Checking existing data…</h3>
-          <p><span class="spin"></span>One moment.</p>
-        </template>
-        <template v-else-if="csv.stage === 'confirm'">
-          <h3>Replace last month's data?</h3>
-          <div class="warn">
-            <b>This permanently erases the current data and every note in it:</b>
-            <ul><li v-for="s in csv.summary.sheets.filter(function(s){return s.rows>0;})" :key="s.name">{{ s.label }}: {{ s.rows }} rows</li></ul>
-          </div>
-          <div class="row"><button class="ghost" @click="closeCsvModal">Cancel</button><button class="danger" @click="doUpload">Wipe &amp; import</button></div>
-        </template>
-        <template v-else-if="csv.stage === 'importing'">
-          <h3>Importing…</h3>
-          <p><span class="spin"></span>Wiping and loading the new month.</p>
-        </template>
-        <template v-else-if="csv.stage === 'done'">
-          <h3>Import complete</h3>
-          <p>Loaded {{ csv.result.beverage }} beverage and {{ csv.result.food }} food rows.</p>
-          <div class="row"><button @click="finishCsvUpload">Done</button></div>
-        </template>
-        <template v-else-if="csv.stage === 'error'">
-          <h3>Import failed</h3>
-          <p>{{ csv.error }}</p>
-          <p class="muted">Existing data was not changed.</p>
-          <div class="row"><button class="ghost" @click="closeCsvModal">Close</button></div>
-        </template>
-      </div>
-    </div>
-
-    <!-- Remove data modal -->
-    <div class="overlay" v-if="removeModal.stage">
-      <div class="modal">
-        <template v-if="removeModal.stage === 'confirm'">
-          <h3>Remove all count data?</h3>
-          <div class="warn"><b>This deletes both Count Details sheets and every note.</b> The next upload will recreate them.</div>
-          <div class="row"><button class="ghost" @click="closeRemoveModal">Cancel</button><button class="danger" @click="doRemove">Remove everything</button></div>
-        </template>
-        <template v-else-if="removeModal.stage === 'removing'">
-          <h3>Removing…</h3><p><span class="spin"></span>Deleting count data.</p>
-        </template>
-        <template v-else-if="removeModal.stage === 'done'">
-          <h3>Removed</h3><p>All count data deleted.</p>
-          <div class="row"><button @click="finishRemove">Done</button></div>
-        </template>
-        <template v-else-if="removeModal.stage === 'error'">
-          <h3>Could not remove</h3><p>{{ removeModal.error }}</p>
-          <div class="row"><button class="ghost" @click="closeRemoveModal">Close</button></div>
-        </template>
-      </div>
-    </div>
-
-    <!-- Settings modal (admin only) -->
-    <div class="overlay" v-if="showSettings">
-      <div class="modal settings-modal">
-        <h3>Settings</h3>
-        <p class="settings-error" v-if="settingsError">{{ settingsError }}</p>
-
-        <section class="settings-section">
-          <h4>Admin users</h4>
-          <p class="muted">Accounts that can upload/replace data, remove data, and change these settings.</p>
-          <ul class="chip-list">
-            <li v-for="e in settingsDraft.adminEmails" :key="e">
-              {{ e }}<button class="chip-remove" @click="removeAdminEmail(e)" title="Remove">×</button>
-            </li>
-          </ul>
-          <div class="add-row">
-            <input type="email" v-model="newAdminEmail" placeholder="name@company.com" @keydown.enter.prevent="addAdminEmail">
-            <button class="ghost" @click="addAdminEmail">Add</button>
-          </div>
-        </section>
-
-        <section class="settings-section">
-          <h4>Visible columns</h4>
-          <p class="muted">Report columns shown in the review table (Item and Notes always show).</p>
-          <div class="col-grid">
-            <label v-for="c in settings.allColumns" :key="c.key">
-              <input type="checkbox" :checked="settingsDraft.visibleColumns.includes(c.key)" @change="toggleColumn(c.key)">
-              {{ c.label }}
-            </label>
-          </div>
-        </section>
-
-        <section class="settings-section">
-          <h4>Note categories</h4>
-          <p class="muted">Dropdown options managers choose from. Each must start with CORRECT, REVIEW, or ADJUST.</p>
-          <ul class="chip-list">
-            <li v-for="c in settingsDraft.noteCategories" :key="c">
-              {{ c }}<button class="chip-remove" @click="removeCategory(c)" title="Remove">×</button>
-            </li>
-          </ul>
-          <div class="add-row">
-            <input type="text" v-model="newCategory" placeholder="ADJUST - …" @keydown.enter.prevent="addCategory">
-            <button class="ghost" @click="addCategory">Add</button>
-          </div>
-        </section>
-
-        <div class="row">
-          <button class="ghost" @click="closeSettings">Cancel</button>
-          <button @click="saveSettingsDraft">Save settings</button>
+          <template v-else-if="csv.stage === 'confirm'">
+            <h3>Replace last month's data?</h3>
+            <div class="warn">
+              <b>This permanently erases the current data and every note in it:</b>
+              <ul><li v-for="s in csv.summary.sheets.filter(function(s){return s.rows>0;})" :key="s.name">{{ s.label }}: {{ s.rows }} rows</li></ul>
+            </div>
+            <div class="row"><button class="ghost" @click="closeCsvModal">Cancel</button><button class="danger" @click="doUpload">Wipe &amp; import</button></div>
+          </template>
+          <template v-else-if="csv.stage === 'importing'">
+            <h3>Importing…</h3>
+            <p><span class="spin"></span>Wiping and loading the new month.</p>
+          </template>
+          <template v-else-if="csv.stage === 'done'">
+            <h3>Import complete</h3>
+            <p>Loaded {{ csv.result.beverage }} beverage and {{ csv.result.food }} food rows.</p>
+            <div class="row"><button @click="finishCsvUpload">Done</button></div>
+          </template>
+          <template v-else-if="csv.stage === 'error'">
+            <h3>Import failed</h3>
+            <p>{{ csv.error }}</p>
+            <p class="muted">Existing data was not changed.</p>
+            <div class="row"><button class="ghost" @click="closeCsvModal">Close</button></div>
+          </template>
         </div>
       </div>
-    </div>
+
+      <!-- Remove data modal -->
+      <div class="overlay" v-if="removeModal.stage">
+        <div class="modal">
+          <template v-if="removeModal.stage === 'confirm'">
+            <h3>Remove all count data?</h3>
+            <div class="warn"><b>This deletes both Count Details sheets and every note.</b> The next upload will recreate them.</div>
+            <div class="row"><button class="ghost" @click="closeRemoveModal">Cancel</button><button class="danger" @click="doRemove">Remove everything</button></div>
+          </template>
+          <template v-else-if="removeModal.stage === 'removing'">
+            <h3>Removing…</h3><p><span class="spin"></span>Deleting count data.</p>
+          </template>
+          <template v-else-if="removeModal.stage === 'done'">
+            <h3>Removed</h3><p>All count data deleted.</p>
+            <div class="row"><button @click="finishRemove">Done</button></div>
+          </template>
+          <template v-else-if="removeModal.stage === 'error'">
+            <h3>Could not remove</h3><p>{{ removeModal.error }}</p>
+            <div class="row"><button class="ghost" @click="closeRemoveModal">Close</button></div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Settings modal (property admin, and global admin) -->
+      <div class="overlay" v-if="showSettings">
+        <div class="modal settings-modal">
+          <h3>Settings — {{ activeProperty && activeProperty.name }}</h3>
+          <p class="settings-error" v-if="settingsError">{{ settingsError }}</p>
+
+          <section class="settings-section">
+            <h4>Property admins</h4>
+            <p class="muted">Accounts that can upload/replace data, remove data, and change these settings for this property only. Global admins always have access to every property regardless of this list.</p>
+            <ul class="chip-list">
+              <li v-for="e in settingsDraft.propertyAdmins" :key="e">
+                {{ e }}<button class="chip-remove" @click="removePropertyAdminEmail(e)" title="Remove">×</button>
+              </li>
+            </ul>
+            <div class="add-row">
+              <input type="email" v-model="newPropertyAdminEmail" placeholder="name@company.com" @keydown.enter.prevent="addPropertyAdminEmail">
+              <button class="ghost" @click="addPropertyAdminEmail">Add</button>
+            </div>
+          </section>
+
+          <section class="settings-section">
+            <h4>Property users</h4>
+            <p class="muted">Accounts with view-only access to this property.</p>
+            <ul class="chip-list">
+              <li v-for="e in settingsDraft.propertyUsers" :key="e">
+                {{ e }}<button class="chip-remove" @click="removePropertyUserEmail(e)" title="Remove">×</button>
+              </li>
+            </ul>
+            <div class="add-row">
+              <input type="email" v-model="newPropertyUserEmail" placeholder="name@company.com" @keydown.enter.prevent="addPropertyUserEmail">
+              <button class="ghost" @click="addPropertyUserEmail">Add</button>
+            </div>
+          </section>
+
+          <section class="settings-section">
+            <h4>Visible columns</h4>
+            <p class="muted">Report columns shown in the review table (Item and Notes always show).</p>
+            <div class="col-grid">
+              <label v-for="c in settings.allColumns" :key="c.key">
+                <input type="checkbox" :checked="settingsDraft.visibleColumns.includes(c.key)" @change="toggleColumn(c.key)">
+                {{ c.label }}
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-section">
+            <h4>Note categories</h4>
+            <p class="muted">Dropdown options managers choose from. Each must start with CORRECT, REVIEW, or ADJUST.</p>
+            <ul class="chip-list">
+              <li v-for="c in settingsDraft.noteCategories" :key="c">
+                {{ c }}<button class="chip-remove" @click="removeCategory(c)" title="Remove">×</button>
+              </li>
+            </ul>
+            <div class="add-row">
+              <input type="text" v-model="newCategory" placeholder="ADJUST - …" @keydown.enter.prevent="addCategory">
+              <button class="ghost" @click="addCategory">Add</button>
+            </div>
+          </section>
+
+          <section class="settings-section">
+            <h4>Reset</h4>
+            <p class="muted">Restore this property's admins, users, columns, and categories to the hardcoded defaults.</p>
+            <button class="danger" @click="resetSettingsToDefault">Reset to defaults</button>
+          </section>
+
+          <section class="settings-section" v-if="bootstrap.isGlobalAdmin">
+            <h4>Global admins</h4>
+            <p class="muted">Accounts with admin access to every property, always. Only global admins can edit this list.</p>
+            <p class="settings-error" v-if="globalAdminsError">{{ globalAdminsError }}</p>
+            <template v-if="globalAdminsDraft">
+              <ul class="chip-list">
+                <li v-for="e in globalAdminsDraft" :key="e">
+                  {{ e }}<button class="chip-remove" @click="removeGlobalAdminEmail(e)" title="Remove">×</button>
+                </li>
+              </ul>
+              <div class="add-row">
+                <input type="email" v-model="newGlobalAdminEmail" placeholder="name@company.com" @keydown.enter.prevent="addGlobalAdminEmail">
+                <button class="ghost" @click="addGlobalAdminEmail">Add</button>
+              </div>
+              <div class="row"><button class="ghost" @click="saveGlobalAdminsDraft">Save global admins</button></div>
+            </template>
+          </section>
+
+          <div class="row">
+            <button class="ghost" @click="closeSettings">Cancel</button>
+            <button @click="saveSettingsDraft">Save settings</button>
+          </div>
+        </div>
+      </div>
+    </template>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/vue@3.4.31/dist/vue.global.prod.js"></script>
@@ -306,10 +365,13 @@
       data: function () {
         return {
           CATEGORY_GROUPS: CATEGORY_GROUPS,
+          bootLoading: true,
+          bootstrap: { email: '', isGlobalAdmin: false, properties: [] },
+          activeProperty: null,
           tabsRaw: [],
           activeKey: null,
           session: { email: '', isAdmin: false },
-          settings: { visibleColumns: [], noteCategories: [], allColumns: [], adminEmails: [] },
+          settings: { visibleColumns: [], noteCategories: [], allColumns: [], propertyAdmins: [], propertyUsers: [] },
           generatedAt: null,
           loading: true,
           statusMsg: '', statusType: '',
@@ -325,9 +387,18 @@
           removeModal: { stage: null, error: null },
           showSettings: false,
           settingsDraft: null,
-          newAdminEmail: '',
+          newPropertyAdminEmail: '',
+          newPropertyUserEmail: '',
           newCategory: '',
-          settingsError: ''
+          settingsError: '',
+          globalAdmins: [],
+          globalAdminsDraft: null,
+          newGlobalAdminEmail: '',
+          globalAdminsError: '',
+          // view ergonomics — session only, reset on page reload
+          columnOrder: [],
+          columnWidths: {},
+          dragKey: null
         };
       },
       computed: {
@@ -337,7 +408,11 @@
         },
         visibleColumnDefs: function () {
           var vis = this.settings.visibleColumns;
-          return this.settings.allColumns.filter(function (c) { return vis.indexOf(c.key) !== -1; });
+          var all = this.settings.allColumns;
+          var byKey = {};
+          all.forEach(function (c) { byKey[c.key] = c; });
+          var order = this.columnOrder.length ? this.columnOrder : all.map(function (c) { return c.key; });
+          return order.filter(function (k) { return vis.indexOf(k) !== -1 && byKey[k]; }).map(function (k) { return byKey[k]; });
         },
         totalCols: function () { return this.visibleColumnDefs.length + 3; },
         pendingCount: function () { return Object.keys(this.pending).length; },
@@ -359,7 +434,7 @@
         }
       },
       mounted: function () {
-        this.loadData();
+        this.loadBootstrap();
         this._autoSyncTimer = setInterval(this.autoSyncTick, AUTO_SYNC_MS);
         this._beforeUnload = this.onBeforeUnload.bind(this);
         window.addEventListener('beforeunload', this._beforeUnload);
@@ -369,7 +444,7 @@
         window.removeEventListener('beforeunload', this._beforeUnload);
       },
       methods: {
-        dkey: function (ds, row) { return ds + ' ' + row; },
+        dkey: function (ds, row) { return ds + ' ' + row; },
 
         showStatus: function (msg, type) {
           this.statusMsg = msg; this.statusType = type;
@@ -380,6 +455,10 @@
         },
 
         colClass: function (key) { return NUMERIC_COLS.indexOf(key) !== -1 ? 'qty' : ''; },
+        colStyle: function (key) {
+          var w = this.columnWidths[key];
+          return w ? { width: w + 'px', maxWidth: w + 'px' } : {};
+        },
         varianceClass: function (key, variance) {
           if (key !== 'variance' || variance === '' || variance === null || variance === -1) return '';
           if (variance >= 0.5) return 'variance-high';
@@ -409,20 +488,99 @@
           return v;
         },
 
+        /* ---------- column reorder / resize (session-only) ---------- */
+        ensureColumnOrder: function () {
+          var have = {};
+          this.columnOrder.forEach(function (k) { have[k] = true; });
+          var self = this;
+          this.settings.allColumns.forEach(function (c) { if (!have[c.key]) self.columnOrder.push(c.key); });
+        },
+        onColDragStart: function (key, e) {
+          this.dragKey = key;
+          e.dataTransfer.effectAllowed = 'move';
+        },
+        onColDrop: function (targetKey, e) {
+          e.preventDefault();
+          if (!this.dragKey || this.dragKey === targetKey) return;
+          var order = this.columnOrder.slice();
+          var from = order.indexOf(this.dragKey);
+          var to = order.indexOf(targetKey);
+          if (from === -1 || to === -1) return;
+          order.splice(from, 1);
+          order.splice(to, 0, this.dragKey);
+          this.columnOrder = order;
+          this.dragKey = null;
+        },
+        startResize: function (key, e) {
+          e.preventDefault();
+          e.stopPropagation();
+          var startX = e.clientX;
+          var startWidth = this.columnWidths[key] || e.target.parentElement.offsetWidth;
+          var self = this;
+          function onMove(ev) {
+            var w = Math.max(60, startWidth + (ev.clientX - startX));
+            self.columnWidths = Object.assign({}, self.columnWidths);
+            self.columnWidths[key] = w;
+          }
+          function onUp() {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+          }
+          window.addEventListener('mousemove', onMove);
+          window.addEventListener('mouseup', onUp);
+        },
+
+        /* ---------- bootstrap / property selection ---------- */
+        loadBootstrap: function () {
+          this.bootLoading = true;
+          var self = this;
+          google.script.run
+            .withSuccessHandler(function (b) {
+              self.bootstrap = b;
+              self.bootLoading = false;
+              if (!b.properties.length) return;
+              if (b.properties.length === 1) { self.selectProperty(b.properties[0]); return; }
+              google.script.url.getLocation(function (loc) {
+                var wanted = loc && loc.parameter && loc.parameter.property;
+                var match = wanted && b.properties.filter(function (p) { return p.id === wanted; })[0];
+                self.selectProperty(match || b.properties[0]);
+              });
+            })
+            .withFailureHandler(function (err) {
+              self.bootLoading = false;
+              self.showStatus('Error loading properties: ' + err.message, 'error');
+            })
+            .getBootstrap();
+        },
+        onPropertyChange: function (id) {
+          var p = this.bootstrap.properties.filter(function (x) { return x.id === id; })[0];
+          if (p) this.selectProperty(p);
+        },
+        selectProperty: function (p) {
+          this.activeProperty = p;
+          this.activeKey = null;
+          this.columnOrder = [];
+          this.columnWidths = {};
+          this.loadData(true);
+        },
+
         /* ---------- load ---------- */
         loadData: function (force) {
+          if (!this.activeProperty) return;
           if (this.pendingCount && !force) {
             var ok = confirm('You have ' + this.pendingCount + ' unsynced change(s). Refreshing now discards them unless they finish syncing first. Refresh anyway?');
             if (!ok) return;
           }
           this.loading = true;
           this.showStatus('Loading inventory data…', 'loading');
+          var self = this;
           google.script.run
-            .withSuccessHandler((function (self) { return function (payload) {
+            .withSuccessHandler(function (payload) {
               self.tabsRaw = payload.tabs;
               self.generatedAt = payload.generatedAt;
               self.session = payload.session;
               self.settings = payload.settings;
+              self.ensureColumnOrder();
               if (!self.activeKey && payload.tabs.length) self.activeKey = payload.tabs[0].key;
               self.pending = {}; self.syncStatus = {}; self.syncErrors = {}; self.categoryOverride = {};
               self.origNotes = {};
@@ -433,12 +591,12 @@
               });
               self.loading = false;
               self.showStatus('Data loaded.', 'success');
-            }; })(this))
-            .withFailureHandler((function (self) { return function (err) {
+            })
+            .withFailureHandler(function (err) {
               self.loading = false;
               self.showStatus('Error loading data: ' + err.message, 'error');
-            }; })(this))
-            .getInventoryData();
+            })
+            .getInventoryData(this.activeProperty.id);
         },
 
         /* ---------- review / notes ---------- */
@@ -519,7 +677,7 @@
         syncPending: function () {
           var entries = [];
           for (var k in this.pending) if (this.pending.hasOwnProperty(k)) entries.push(this.pending[k]);
-          if (!entries.length || this.syncing) return;
+          if (!entries.length || this.syncing || !this.activeProperty) return;
           this.syncing = true;
           var self = this;
           var keys = entries.map(function (e) { return self.dkey(e.datastore, e.row); });
@@ -531,7 +689,7 @@
               self.showStatus('Sync failed: ' + err.message, 'error');
               self.syncing = false;
             })
-            .saveNotesBatch(entries.map(function (e) {
+            .saveNotesBatch(this.activeProperty.id, entries.map(function (e) {
               return { datastore: e.datastore, row: e.row, note: e.note, expectedItem: e.item };
             }));
         },
@@ -587,7 +745,7 @@
                 else { self.doUpload(); }
               })
               .withFailureHandler(function (err) { self.csv.stage = 'error'; self.csv.error = err.message; })
-              .getExistingDataSummary();
+              .getExistingDataSummary(self.activeProperty.id);
           };
           reader.readAsText(f);
         },
@@ -597,7 +755,7 @@
           google.script.run
             .withSuccessHandler(function (res) { self.csv.stage = 'done'; self.csv.result = res; })
             .withFailureHandler(function (err) { self.csv.stage = 'error'; self.csv.error = err.message; })
-            .processCSVData(this.csvFileText);
+            .processCSVData(this.activeProperty.id, this.csvFileText);
         },
         closeCsvModal: function () { this.csv = { stage: null, summary: null, error: null, result: null }; },
         finishCsvUpload: function () { this.closeCsvModal(); this.loadData(true); },
@@ -609,36 +767,49 @@
           google.script.run
             .withSuccessHandler(function () { self.removeModal.stage = 'done'; })
             .withFailureHandler(function (err) { self.removeModal.stage = 'error'; self.removeModal.error = err.message; })
-            .removeAllCountData();
+            .removeAllCountData(this.activeProperty.id);
         },
         closeRemoveModal: function () { this.removeModal = { stage: null, error: null }; },
         finishRemove: function () { this.closeRemoveModal(); this.loadData(true); },
 
-        /* ---------- settings (admin) ---------- */
+        /* ---------- settings (property admin) ---------- */
         openSettings: function () {
           this.settingsDraft = {
-            adminEmails: this.settings.adminEmails.slice(),
+            propertyAdmins: this.settings.propertyAdmins.slice(),
+            propertyUsers: this.settings.propertyUsers.slice(),
             visibleColumns: this.settings.visibleColumns.slice(),
             noteCategories: this.settings.noteCategories.slice()
           };
-          this.newAdminEmail = ''; this.newCategory = ''; this.settingsError = '';
+          this.newPropertyAdminEmail = ''; this.newPropertyUserEmail = ''; this.newCategory = ''; this.settingsError = '';
+          this.globalAdmins = []; this.globalAdminsDraft = null; this.newGlobalAdminEmail = ''; this.globalAdminsError = '';
           this.showSettings = true;
+          if (this.bootstrap.isGlobalAdmin) this.loadGlobalAdmins();
         },
         closeSettings: function () { this.showSettings = false; this.settingsDraft = null; },
-        addAdminEmail: function () {
-          var e = this.newAdminEmail.trim();
+        addPropertyAdminEmail: function () {
+          var e = this.newPropertyAdminEmail.trim();
           if (!e) return;
           if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { this.settingsError = 'Enter a valid email address.'; return; }
-          var exists = this.settingsDraft.adminEmails.some(function (x) { return x.toLowerCase() === e.toLowerCase(); });
-          if (!exists) this.settingsDraft.adminEmails.push(e);
-          this.newAdminEmail = ''; this.settingsError = '';
+          var exists = this.settingsDraft.propertyAdmins.some(function (x) { return x.toLowerCase() === e.toLowerCase(); });
+          if (!exists) this.settingsDraft.propertyAdmins.push(e);
+          this.newPropertyAdminEmail = ''; this.settingsError = '';
         },
-        removeAdminEmail: function (email) {
-          if (this.settingsDraft.adminEmails.length <= 1) { this.settingsError = 'At least one admin email is required.'; return; }
-          if (this.session.email && email.toLowerCase() === this.session.email.toLowerCase()) {
-            if (!confirm('This removes your own admin access. Continue?')) return;
+        removePropertyAdminEmail: function (email) {
+          if (!this.bootstrap.isGlobalAdmin && this.session.email && email.toLowerCase() === this.session.email.toLowerCase()) {
+            if (!confirm('This removes your own admin access to this property. Continue?')) return;
           }
-          this.settingsDraft.adminEmails = this.settingsDraft.adminEmails.filter(function (e) { return e !== email; });
+          this.settingsDraft.propertyAdmins = this.settingsDraft.propertyAdmins.filter(function (e) { return e !== email; });
+        },
+        addPropertyUserEmail: function () {
+          var e = this.newPropertyUserEmail.trim();
+          if (!e) return;
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { this.settingsError = 'Enter a valid email address.'; return; }
+          var exists = this.settingsDraft.propertyUsers.some(function (x) { return x.toLowerCase() === e.toLowerCase(); });
+          if (!exists) this.settingsDraft.propertyUsers.push(e);
+          this.newPropertyUserEmail = ''; this.settingsError = '';
+        },
+        removePropertyUserEmail: function (email) {
+          this.settingsDraft.propertyUsers = this.settingsDraft.propertyUsers.filter(function (e) { return e !== email; });
         },
         toggleColumn: function (key) {
           var i = this.settingsDraft.visibleColumns.indexOf(key);
@@ -662,12 +833,65 @@
           google.script.run
             .withSuccessHandler(function (s) {
               self.settings = s;
+              self.ensureColumnOrder();
               self.showSettings = false;
               self.settingsDraft = null;
               self.showStatus('Settings saved.', 'success');
             })
             .withFailureHandler(function (err) { self.settingsError = err.message; })
-            .saveSettings(this.settingsDraft);
+            .saveSettings(this.activeProperty.id, this.settingsDraft);
+        },
+        resetSettingsToDefault: function () {
+          if (!confirm('Reset this property\'s settings to the hardcoded defaults? This clears custom admins, users, columns, and categories.')) return;
+          this.settingsError = '';
+          var self = this;
+          google.script.run
+            .withSuccessHandler(function (s) {
+              self.settings = s;
+              self.ensureColumnOrder();
+              self.settingsDraft = {
+                propertyAdmins: s.propertyAdmins.slice(), propertyUsers: s.propertyUsers.slice(),
+                visibleColumns: s.visibleColumns.slice(), noteCategories: s.noteCategories.slice()
+              };
+              self.showStatus('Settings reset to defaults.', 'success');
+            })
+            .withFailureHandler(function (err) { self.settingsError = err.message; })
+            .resetSettings(this.activeProperty.id);
+        },
+
+        /* ---------- global admins (global admin only) ---------- */
+        loadGlobalAdmins: function () {
+          var self = this;
+          google.script.run
+            .withSuccessHandler(function (list) { self.globalAdmins = list; self.globalAdminsDraft = list.slice(); })
+            .withFailureHandler(function (err) { self.globalAdminsError = err.message; })
+            .getGlobalAdmins();
+        },
+        addGlobalAdminEmail: function () {
+          var e = this.newGlobalAdminEmail.trim();
+          if (!e) return;
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { this.globalAdminsError = 'Enter a valid email address.'; return; }
+          var exists = this.globalAdminsDraft.some(function (x) { return x.toLowerCase() === e.toLowerCase(); });
+          if (!exists) this.globalAdminsDraft.push(e);
+          this.newGlobalAdminEmail = ''; this.globalAdminsError = '';
+        },
+        removeGlobalAdminEmail: function (email) {
+          if (this.globalAdminsDraft.length <= 1) { this.globalAdminsError = 'At least one global admin is required.'; return; }
+          if (this.session.email && email.toLowerCase() === this.session.email.toLowerCase()) {
+            if (!confirm('This removes your own global admin access. Continue?')) return;
+          }
+          this.globalAdminsDraft = this.globalAdminsDraft.filter(function (e) { return e !== email; });
+        },
+        saveGlobalAdminsDraft: function () {
+          this.globalAdminsError = '';
+          var self = this;
+          google.script.run
+            .withSuccessHandler(function (list) {
+              self.globalAdmins = list; self.globalAdminsDraft = list.slice();
+              self.showStatus('Global admins saved.', 'success');
+            })
+            .withFailureHandler(function (err) { self.globalAdminsError = err.message; })
+            .saveGlobalAdmins(this.globalAdminsDraft);
         }
       }
     });
