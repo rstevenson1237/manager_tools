@@ -2,11 +2,18 @@
  * Code.gs — Inventory Audit Web App (backend)
  *
  * ARCHITECTURE
- *   The spreadsheet is a pure DATA STORE. The two Count Details sheets are the
- *   only tables; each is one row per unique item. There are NO "Items to Review"
+ *   This is a STANDALONE script (not bound to any single Sheet). One workbook
+ *   = one property. A central registry (Script Properties, on this project)
+ *   lists every property and where its workbook lives; the script opens each
+ *   property's workbook by ID on demand.
+ *
+ *   Each property workbook is a pure DATA STORE with three sheets: two Count
+ *   Details tables (Beverage / Food — one row per unique item) plus a hidden
+ *   `_Config` sheet holding that property's admins, users, and display
+ *   settings as plain, human-readable rows. There are NO "Items to Review"
  *   tabs and NO spreadsheet formulas driving the app — all review logic
  *   (categorisation, colour status, progress) is computed here in code and
- *   surfaced through the Google Sites web app. Managers never touch the sheet.
+ *   surfaced through the web app. Managers never touch the sheet.
  *
  *   Category rules below are the exact logic the old SORTN/FILTER formulas
  *   encoded, re-implemented server-side:
@@ -25,6 +32,15 @@
  *   are instant and client-side; they are written back to the sheet in batches
  *   (saveNotesBatch), either on demand ("Sync now") or on a periodic auto-sync
  *   timer, instead of one network round trip per keystroke/row.
+ *
+ * ACCESS MODEL (three tiers)
+ *   1. Global admin  — Script Properties list on this project. Admin on every
+ *      property, always. Managed via getGlobalAdmins/saveGlobalAdmins.
+ *   2. Property admin — per property, stored in that property's `_Config`
+ *      sheet. Can upload/replace/remove data and edit settings for that one
+ *      property only.
+ *   3. Property user  — per property, also in `_Config`. View-only access to
+ *      that one property.
  ******************************************************************************/
 
 /** ------------------------------------------------------------------ CONFIG */
@@ -56,7 +72,7 @@ const ALL_COLUMN_DEFS = [
 ];
 
 const CONFIG = {
-  // The data-store tables and how they surface as tabs.
+  // The data-store tables and how they surface as tabs, within every property.
   DATASTORES: [
     { key: 'beverage', label: 'Beverage', sheet: 'Beverage Count Details' },
     { key: 'food',     label: 'Food',     sheet: 'Food Count Details'     }
@@ -86,18 +102,86 @@ const CONFIG = {
   ]
 };
 
-/** --------------------------------------------------------- SETTINGS STORE
- * Admin-editable settings (admin emails, visible columns, note categories) are
- * persisted in the spreadsheet's Document Properties — shared by everyone who
- * opens the web app, but not visible in the sheet UI itself. This lets admins
- * change them from inside the app (Settings panel) with no code redeploy.
+/** --------------------------------------------------------- GLOBAL STORE
+ * The global admin list and the property registry live in this standalone
+ * project's Script Properties — the only storage available to a script not
+ * bound to a single Sheet, and the natural home for data that spans every
+ * property rather than belonging to one of them.
  */
-const SETTINGS_KEY = 'INVENTORY_AUDIT_SETTINGS_V1';
+const GLOBAL_ADMIN_KEY = 'GLOBAL_ADMIN_EMAILS';
+const DEFAULT_GLOBAL_ADMINS = ['rstevenson1237@gmail.com'];
+const REGISTRY_KEY = 'PROPERTY_REGISTRY_V1';
 
-const DEFAULT_SETTINGS = {
-  // Seed admin(s). Editable afterwards from the Settings panel. Kept non-empty
-  // here so the person installing the app is never locked out on first run.
-  adminEmails: ['rstevenson1237@gmail.com'],
+function scriptProps_() {
+  return PropertiesService.getScriptProperties();
+}
+
+function loadGlobalAdmins_() {
+  let raw = null;
+  try { raw = scriptProps_().getProperty(GLOBAL_ADMIN_KEY); } catch (e) { raw = null; }
+  if (!raw) return DEFAULT_GLOBAL_ADMINS.slice();
+  try {
+    const parsed = JSON.parse(raw);
+    return (Array.isArray(parsed) && parsed.length) ? parsed.map(String) : DEFAULT_GLOBAL_ADMINS.slice();
+  } catch (e) {
+    return DEFAULT_GLOBAL_ADMINS.slice();
+  }
+}
+
+function saveGlobalAdmins_(emails) {
+  scriptProps_().setProperty(GLOBAL_ADMIN_KEY, JSON.stringify(emails));
+}
+
+function loadRegistry_() {
+  let raw = null;
+  try { raw = scriptProps_().getProperty(REGISTRY_KEY); } catch (e) { raw = null; }
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveRegistry_(list) {
+  scriptProps_().setProperty(REGISTRY_KEY, JSON.stringify(list));
+}
+
+function propertyById_(id) {
+  const p = loadRegistry_().filter(function(x){ return x.id === id; })[0];
+  if (!p) throw new Error('Unknown property: "' + id + '".');
+  return p;
+}
+
+function newPropertyId_(name) {
+  const base = String(name).trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-+|-+$)/g, '') || 'property';
+  const existing = loadRegistry_().map(function(p){ return p.id; });
+  let id = base, i = 2;
+  while (existing.indexOf(id) !== -1) { id = base + '-' + i; i++; }
+  return id;
+}
+
+/** --------------------------------------------------------- PROPERTY CONFIG
+ * Per-property admins/users/settings live in a hidden `_Config` sheet inside
+ * that property's own workbook, as plain "Setting | Value" rows (list values
+ * comma-separated) rather than an opaque properties blob. End users only ever
+ * reach the app through the web-app URL, never the sheet itself, so this is
+ * exactly as safe from accidental edits as the Count Details tabs — and it
+ * means the workbook owner can hand-fix a corrupted setting directly in
+ * Sheets without touching code or the Apps Script editor.
+ */
+const CONFIG_SHEET_NAME = '_Config';
+const CONFIG_ROWS = [
+  { key: 'propertyAdmins', label: 'Property Admins' },
+  { key: 'propertyUsers',  label: 'Property Users'  },
+  { key: 'visibleColumns', label: 'Visible Columns' },
+  { key: 'noteCategories', label: 'Note Categories'  }
+];
+
+const DEFAULT_PROPERTY_SETTINGS = {
+  propertyAdmins: [],
+  propertyUsers: [],
   visibleColumns: ALL_COLUMN_DEFS.map(function(c){ return c.key; }),
   noteCategories: [
     'CORRECT',
@@ -114,83 +198,66 @@ const DEFAULT_SETTINGS = {
   ]
 };
 
-function cloneDefaultSettings_() {
-  return JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+function cloneDefaultPropertySettings_() {
+  return JSON.parse(JSON.stringify(DEFAULT_PROPERTY_SETTINGS));
 }
 
-/** Read settings from Document Properties, filling in defaults if unset/corrupt. */
-function loadSettings_() {
-  let raw = null;
-  try { raw = PropertiesService.getDocumentProperties().getProperty(SETTINGS_KEY); }
-  catch (e) { raw = null; }
-  if (!raw) return cloneDefaultSettings_();
-  try {
-    const parsed = JSON.parse(raw);
-    const d = cloneDefaultSettings_();
-    return {
-      adminEmails: (Array.isArray(parsed.adminEmails) && parsed.adminEmails.length)
-        ? parsed.adminEmails.map(String) : d.adminEmails,
-      visibleColumns: Array.isArray(parsed.visibleColumns)
-        ? parsed.visibleColumns.filter(function(k){ return ALL_COLUMN_DEFS.some(function(c){ return c.key === k; }); })
-        : d.visibleColumns,
-      noteCategories: (Array.isArray(parsed.noteCategories) && parsed.noteCategories.length)
-        ? parsed.noteCategories.map(String) : d.noteCategories
-    };
-  } catch (e) {
-    return cloneDefaultSettings_();
-  }
-}
-
-function persistSettings_(settings) {
-  PropertiesService.getDocumentProperties().setProperty(SETTINGS_KEY, JSON.stringify(settings));
-}
-
-/** Client-callable: current settings + column catalogue + this user's session. */
-function getSettings() {
-  const s = loadSettings_();
-  return {
-    adminEmails: s.adminEmails,
-    visibleColumns: s.visibleColumns,
-    noteCategories: s.noteCategories,
-    allColumns: ALL_COLUMN_DEFS,
-    isAdmin: isAdmin_(),
-    email: currentUserEmail_()
-  };
-}
-
-/**
- * Admin-only. Replace settings wholesale. Validated: at least one admin email,
- * at least one note category, every note category must start with a status
- * prefix (CORRECT/REVIEW/ADJUST) so row colouring and the two-stage dropdown
- * keep working, and visible columns must be known keys.
- */
-function saveSettings(payload) {
-  requireAdmin_();
-  if (!payload || typeof payload !== 'object') throw new Error('saveSettings: invalid payload.');
-
-  const adminEmails = Array.isArray(payload.adminEmails)
-    ? payload.adminEmails.map(function(e){ return String(e).trim(); }).filter(Boolean) : [];
-  if (!adminEmails.length) throw new Error('At least one admin email is required.');
-
-  const validKeys = ALL_COLUMN_DEFS.map(function(c){ return c.key; });
-  const visibleColumns = Array.isArray(payload.visibleColumns)
-    ? payload.visibleColumns.filter(function(k){ return validKeys.indexOf(k) !== -1; }) : [];
-
-  const noteCategories = Array.isArray(payload.noteCategories)
-    ? payload.noteCategories.map(function(c){ return String(c).trim().toUpperCase(); }).filter(Boolean) : [];
-  if (!noteCategories.length) throw new Error('At least one note category is required.');
-  noteCategories.forEach(function(c){
-    const ok = CONFIG.STATUS_RULES.some(function(rule){ return c.indexOf(rule.prefix) === 0; });
-    if (!ok) throw new Error('"' + c + '" must start with CORRECT, REVIEW, or ADJUST.');
+/** Get-or-create the `_Config` sheet, seeded with default rows, hidden. */
+function ensureConfigSheet_(ss) {
+  let sheet = ss.getSheetByName(CONFIG_SHEET_NAME);
+  if (sheet) return sheet;
+  sheet = ss.insertSheet(CONFIG_SHEET_NAME);
+  sheet.getRange(1, 1, 1, 2).setValues([['Setting', 'Value']]);
+  sheet.getRange(1, 1, 1, 2).setFontWeight('bold');
+  sheet.setFrozenRows(1);
+  const rows = CONFIG_ROWS.map(function(r){
+    const d = DEFAULT_PROPERTY_SETTINGS[r.key];
+    return [r.label, Array.isArray(d) ? d.join(', ') : ''];
   });
+  sheet.getRange(2, 1, rows.length, 2).setValues(rows);
+  sheet.hideSheet();
+  return sheet;
+}
 
-  const settings = {
-    adminEmails: adminEmails,
-    visibleColumns: visibleColumns,
-    noteCategories: noteCategories
-  };
-  persistSettings_(settings);
-  return getSettings();
+function parseListCell_(raw, key) {
+  if (raw == null || String(raw).trim() === '') return DEFAULT_PROPERTY_SETTINGS[key].slice();
+  const list = String(raw).split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+  if (key === 'visibleColumns') {
+    const valid = ALL_COLUMN_DEFS.map(function(c){ return c.key; });
+    const filtered = list.filter(function(k){ return valid.indexOf(k) !== -1; });
+    return filtered.length ? filtered : DEFAULT_PROPERTY_SETTINGS.visibleColumns.slice();
+  }
+  if (key === 'noteCategories') {
+    const upper = list.map(function(c){ return c.toUpperCase(); });
+    return upper.length ? upper : DEFAULT_PROPERTY_SETTINGS.noteCategories.slice();
+  }
+  return list; // propertyAdmins / propertyUsers — empty is valid, not a fallback case
+}
+
+/** Read this property's settings from its `_Config` sheet. */
+function readConfigSheet_(ss) {
+  const sheet = ensureConfigSheet_(ss);
+  const lastRow = sheet.getLastRow();
+  const vals = sheet.getRange(2, 1, Math.max(lastRow - 1, 0), 2).getValues();
+  const byLabel = {};
+  vals.forEach(function(r){
+    const label = String(r[0] || '').trim();
+    if (label) byLabel[label] = r[1];
+  });
+  const settings = {};
+  CONFIG_ROWS.forEach(function(r){
+    settings[r.key] = parseListCell_(byLabel[r.label], r.key);
+  });
+  return settings;
+}
+
+function writeConfigSheet_(ss, settings) {
+  const sheet = ensureConfigSheet_(ss);
+  const rows = CONFIG_ROWS.map(function(r){
+    const val = settings[r.key] || [];
+    return [r.label, val.join(', ')];
+  });
+  sheet.getRange(2, 1, rows.length, 2).setValues(rows);
 }
 
 /** ---------------------------------------------------------- SHEET SHAPING */
@@ -206,11 +273,10 @@ function formatHeaderRow_(sheet) {
 
 /**
  * Delete a data-store sheet if present and recreate it pristine with headers.
- * Sequenced so the spreadsheet is never momentarily sheet-less: the replacement
+ * Sequenced so the workbook is never momentarily sheet-less: the replacement
  * is inserted before the old one is removed.
  */
-function recreateDatastoreSheet_(name) {
-  const ss = getSpreadsheet_();
+function recreateDatastoreSheet_(ss, name) {
   const old = ss.getSheetByName(name);
   let sheet;
   if (old) {
@@ -232,37 +298,100 @@ function doGet() {
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
-/** --------------------------------------------------------------- HELPERS */
-function getSpreadsheet_() {
-  return SpreadsheetApp.getActiveSpreadsheet();
-  // Standalone alternative: return SpreadsheetApp.openById('YOUR_SPREADSHEET_ID');
-}
-
 /** ------------------------------------------------------------ ADMIN / AUTH */
 function currentUserEmail_() {
   try { return Session.getActiveUser().getEmail() || ''; } catch (e) { return ''; }
 }
 
-function isAdmin_() {
+function isGlobalAdmin_() {
   const email = currentUserEmail_().toLowerCase();
   if (!email) return false;
-  const settings = loadSettings_();
-  return settings.adminEmails.map(function(e){ return String(e).toLowerCase(); }).indexOf(email) !== -1;
+  return loadGlobalAdmins_().map(function(e){ return String(e).toLowerCase(); }).indexOf(email) !== -1;
 }
 
-/** Throw unless the accessing user is an admin. Guards every destructive call. */
-function requireAdmin_() {
-  if (isAdmin_()) return;
+function getSpreadsheetForProperty_(id) {
+  return SpreadsheetApp.openById(propertyById_(id).spreadsheetId);
+}
+
+/** This user's role ('admin' | 'user' | null) on a property, per-property
+ * lists only — does NOT consider global admin (callers combine both). */
+function roleForProperty_(id) {
+  const email = currentUserEmail_().toLowerCase();
+  if (!email) return null;
+  let ss;
+  try { ss = getSpreadsheetForProperty_(id); } catch (e) { return null; }
+  const settings = readConfigSheet_(ss);
+  const admins = settings.propertyAdmins.map(function(e){ return String(e).toLowerCase(); });
+  if (admins.indexOf(email) !== -1) return 'admin';
+  const users = settings.propertyUsers.map(function(e){ return String(e).toLowerCase(); });
+  if (users.indexOf(email) !== -1) return 'user';
+  return null;
+}
+
+/** This user's effective role on a property, folding in global admin. */
+function effectiveRole_(id) {
+  return isGlobalAdmin_() ? 'admin' : roleForProperty_(id);
+}
+
+/** Throw unless the accessing user has any access to this property. Returns
+ * the resolved role ('admin' | 'user') so callers needn't re-check. */
+function requireAccess_(id) {
+  const role = effectiveRole_(id);
+  if (!role) {
+    const who = currentUserEmail_();
+    throw new Error(who
+      ? ('You do not have access to this property. You are signed in as ' + who + '.')
+      : ('Access denied — your account could not be identified.'));
+  }
+  return role;
+}
+
+/** Throw unless the accessing user is an admin (global or for this property).
+ * Guards every destructive/config call. */
+function requireAdmin_(id) {
+  const role = requireAccess_(id);
+  if (role !== 'admin') {
+    const who = currentUserEmail_();
+    throw new Error('Administrator access required for this property. You are signed in as ' +
+      who + ', which is not an admin for it.');
+  }
+}
+
+function requireGlobalAdmin_() {
+  if (isGlobalAdmin_()) return;
   const who = currentUserEmail_();
   throw new Error(who
-    ? ('Administrator access required. You are signed in as ' + who +
-       ', which is not on the admin list.')
-    : ('Administrator access required, but your account could not be identified.'));
+    ? ('Global administrator access required. You are signed in as ' + who + '.')
+    : ('Global administrator access required, but your account could not be identified.'));
 }
 
-/** Client-callable: lets the web app decide whether to show the admin panel. */
-function getSessionInfo() {
-  return { email: currentUserEmail_(), isAdmin: isAdmin_() };
+/** Client-callable: the properties this user can access, with their role on
+ * each, plus whether they're a global admin. Drives the property picker. */
+function getBootstrap() {
+  const email = currentUserEmail_();
+  const globalAdmin = isGlobalAdmin_();
+  const registry = loadRegistry_();
+  const properties = registry.map(function(p){
+    const role = globalAdmin ? 'admin' : roleForProperty_(p.id);
+    return role ? { id: p.id, name: p.name, role: role } : null;
+  }).filter(Boolean);
+  return { email: email, isGlobalAdmin: globalAdmin, properties: properties };
+}
+
+/** Admin-only (global). Current global admin list. */
+function getGlobalAdmins() {
+  requireGlobalAdmin_();
+  return loadGlobalAdmins_();
+}
+
+/** Admin-only (global). Replace the global admin list wholesale. */
+function saveGlobalAdmins(emails) {
+  requireGlobalAdmin_();
+  const list = Array.isArray(emails)
+    ? emails.map(function(e){ return String(e).trim(); }).filter(Boolean) : [];
+  if (!list.length) throw new Error('At least one global admin is required.');
+  saveGlobalAdmins_(list);
+  return list;
 }
 
 function datastoreByKey_(key) {
@@ -288,7 +417,7 @@ function resolveColumns_(sheet) {
   ['Item','Current Qty','Current $ Cost','Prev $ Cost','Adjustment'].forEach(function(req){
     if (!cols[req]) {
       throw new Error('Sheet "' + sheet.getName() + '" is missing the "' + req +
-        '" column. Run setupDatastore first.');
+        '" column. Run addProperty/addExistingProperty first.');
     }
   });
   return cols;
@@ -431,21 +560,24 @@ function decorate_(r) {
  *   { key, label, sheet, sections:[{ label, items:[...] }], counts:{ total, reviewed } }
  * counts are DISTINCT items across all categories (an item spanning several
  * categories is one unit of work). Also includes the current settings (visible
- * columns, note categories) and session, so the client needs one round trip to
- * render everything.
+ * columns, note categories, property admins/users) and session, so the client
+ * needs one round trip to render everything.
  */
-function getInventoryData() {
-  const ss = getSpreadsheet_();
-  const settings = loadSettings_();
+function getInventoryData(propertyId) {
+  if (!propertyId) throw new Error('getInventoryData: missing propertyId.');
+  const role = requireAccess_(propertyId);
+  const ss = getSpreadsheetForProperty_(propertyId);
+  const settings = readConfigSheet_(ss);
   const result = {
     tabs: [],
     generatedAt: new Date().toISOString(),
-    session: { email: currentUserEmail_(), isAdmin: isAdmin_() },
+    session: { email: currentUserEmail_(), isAdmin: role === 'admin' },
     settings: {
       visibleColumns: settings.visibleColumns,
       noteCategories: settings.noteCategories,
       allColumns: ALL_COLUMN_DEFS,
-      adminEmails: settings.adminEmails
+      propertyAdmins: settings.propertyAdmins,
+      propertyUsers: settings.propertyUsers
     }
   };
 
@@ -492,15 +624,18 @@ function getInventoryData() {
 /** ----------------------------------------------------------------- WRITE */
 /**
  * Save a note to a data-store row.
+ * @param {string} propertyId
  * @param {Object} payload { datastore, row, note, expectedItem }
  * @return {Object} { success, row, status, reviewed, total }
  */
-function saveNote(payload) {
+function saveNote(propertyId, payload) {
+  if (!propertyId) throw new Error('saveNote: missing propertyId.');
   const dsKey = payload && payload.datastore;
   const row = payload && Number(payload.row);
   const note = payload && payload.note != null ? String(payload.note) : '';
   const expectedItem = payload && payload.expectedItem;
   if (!dsKey || !row) throw new Error('saveNote: missing datastore or row.');
+  requireAccess_(propertyId);
 
   const d = datastoreByKey_(dsKey);
   const lock = LockService.getScriptLock();
@@ -508,7 +643,7 @@ function saveNote(payload) {
   catch (e) { throw new Error('The data store is busy — another update is in progress. Try again.'); }
 
   try {
-    const ss = getSpreadsheet_();
+    const ss = getSpreadsheetForProperty_(propertyId);
     const sheet = ss.getSheetByName(d.sheet);
     if (!sheet) throw new Error('Data-store sheet "' + d.sheet + '" not found.');
     const cols = resolveColumns_(sheet);
@@ -549,13 +684,15 @@ function saveNote(payload) {
  * pending (and marked as an error) instead of being silently dropped, which is
  * what caused notes to appear to "not save" under the old per-row Save flow.
  */
-function saveNotesBatch(entries) {
+function saveNotesBatch(propertyId, entries) {
+  if (!propertyId) throw new Error('saveNotesBatch: missing propertyId.');
   if (!Array.isArray(entries)) throw new Error('saveNotesBatch expects an array.');
+  requireAccess_(propertyId);
   const lock = LockService.getScriptLock();
   try { lock.waitLock(30000); }
   catch (e) { throw new Error('The data store is busy — another sync is in progress. Try again shortly.'); }
   try {
-    const ss = getSpreadsheet_();
+    const ss = getSpreadsheetForProperty_(propertyId);
     const sheetCache = {}, colsCache = {};
     const results = [];
     entries.forEach(function(e){
@@ -619,24 +756,134 @@ function computeProgress_(ss, d) {
   return { total: Object.keys(seen).length, reviewed: Object.keys(reviewedSeen).length };
 }
 
-/** ---------------------------------------------------------------- SETUP */
+/** --------------------------------------------------------------- SETTINGS */
+/** Admin-only (this property). Current settings + column catalogue. */
+function getSettings(propertyId) {
+  requireAdmin_(propertyId);
+  const ss = getSpreadsheetForProperty_(propertyId);
+  const s = readConfigSheet_(ss);
+  return {
+    propertyAdmins: s.propertyAdmins,
+    propertyUsers: s.propertyUsers,
+    visibleColumns: s.visibleColumns,
+    noteCategories: s.noteCategories,
+    allColumns: ALL_COLUMN_DEFS
+  };
+}
+
 /**
- * OPTIONAL. Pre-creates empty data-store sheets with headers so the web app has
- * a structure to show before the first monthly upload. Non-destructive: if a
- * sheet already exists it is left untouched. The monthly upload creates and
- * formats the sheets on its own, so this is only for previewing the structure.
+ * Admin-only (this property). Replace this property's settings wholesale.
+ * Validated: at least one note category, every note category must start with
+ * a status prefix (CORRECT/REVIEW/ADJUST) so row colouring and the two-stage
+ * dropdown keep working, and visible columns must be known keys. Property
+ * admins/users have no minimum — global admins remain a fallback, so a
+ * property is never orphaned by clearing these lists.
  */
-function setupDatastore() {
-  const ss = getSpreadsheet_();
-  const log = [];
-  CONFIG.DATASTORES.forEach(function(d){
-    if (ss.getSheetByName(d.sheet)) { log.push('"' + d.sheet + '" already exists — left as is.'); return; }
-    const sheet = ss.insertSheet(d.sheet);
-    formatHeaderRow_(sheet);
-    log.push('Created "' + d.sheet + '" with headers.');
+function saveSettings(propertyId, payload) {
+  requireAdmin_(propertyId);
+  if (!payload || typeof payload !== 'object') throw new Error('saveSettings: invalid payload.');
+
+  const propertyAdmins = Array.isArray(payload.propertyAdmins)
+    ? payload.propertyAdmins.map(function(e){ return String(e).trim(); }).filter(Boolean) : [];
+  const propertyUsers = Array.isArray(payload.propertyUsers)
+    ? payload.propertyUsers.map(function(e){ return String(e).trim(); }).filter(Boolean) : [];
+
+  const validKeys = ALL_COLUMN_DEFS.map(function(c){ return c.key; });
+  const visibleColumns = Array.isArray(payload.visibleColumns)
+    ? payload.visibleColumns.filter(function(k){ return validKeys.indexOf(k) !== -1; }) : [];
+
+  const noteCategories = Array.isArray(payload.noteCategories)
+    ? payload.noteCategories.map(function(c){ return String(c).trim().toUpperCase(); }).filter(Boolean) : [];
+  if (!noteCategories.length) throw new Error('At least one note category is required.');
+  noteCategories.forEach(function(c){
+    const ok = CONFIG.STATUS_RULES.some(function(rule){ return c.indexOf(rule.prefix) === 0; });
+    if (!ok) throw new Error('"' + c + '" must start with CORRECT, REVIEW, or ADJUST.');
   });
-  const msg = 'Setup complete.\n' + log.join('\n') +
-    '\n\nUse the Admin panel in the web app to upload a month of counts.';
+
+  const settings = { propertyAdmins: propertyAdmins, propertyUsers: propertyUsers,
+    visibleColumns: visibleColumns, noteCategories: noteCategories };
+  const ss = getSpreadsheetForProperty_(propertyId);
+  writeConfigSheet_(ss, settings);
+  return getSettings(propertyId);
+}
+
+/** Admin-only (this property). Restore this property's settings to the
+ * hardcoded defaults — the "corruption recovery" reset. */
+function resetSettings(propertyId) {
+  requireAdmin_(propertyId);
+  const ss = getSpreadsheetForProperty_(propertyId);
+  writeConfigSheet_(ss, cloneDefaultPropertySettings_());
+  return getSettings(propertyId);
+}
+
+/** ---------------------------------------------------- PROPERTY MANAGEMENT
+ * Ordinary top-level functions with no UI — run them from the Apps Script
+ * editor's Run menu to add, adopt, or remove a property.
+ */
+
+/** Build (or complete) a property's workbook: both Count Details tabs plus
+ * the `_Config` sheet. Non-destructive — existing sheets are left alone. */
+function buildPropertyWorkbook_(ss) {
+  CONFIG.DATASTORES.forEach(function(d){
+    if (!ss.getSheetByName(d.sheet)) formatHeaderRow_(ss.insertSheet(d.sheet));
+  });
+  ensureConfigSheet_(ss);
+  const stray = ss.getSheetByName('Sheet1');
+  if (stray && ss.getSheets().length > 1) ss.deleteSheet(stray);
+}
+
+/** Create a brand-new workbook for a property, fully initialized, and
+ * register it. Run from Editor → Run → addProperty (edit the name first). */
+function addProperty(name) {
+  name = String(name || '').trim();
+  if (!name) throw new Error('addProperty: name is required.');
+  const ss = SpreadsheetApp.create(name);
+  buildPropertyWorkbook_(ss);
+  const id = newPropertyId_(name);
+  const registry = loadRegistry_();
+  registry.push({ id: id, name: name, spreadsheetId: ss.getId() });
+  saveRegistry_(registry);
+  const result = { id: id, name: name, spreadsheetId: ss.getId(), url: ss.getUrl() };
+  Logger.log('Property added: ' + JSON.stringify(result));
+  return result;
+}
+
+/** Adopt an existing spreadsheet as a property (initializing any missing
+ * sheets) and register it. Run from Editor → Run → addExistingProperty. */
+function addExistingProperty(name, spreadsheetId) {
+  name = String(name || '').trim();
+  spreadsheetId = String(spreadsheetId || '').trim();
+  if (!name) throw new Error('addExistingProperty: name is required.');
+  if (!spreadsheetId) throw new Error('addExistingProperty: spreadsheetId is required.');
+  const ss = SpreadsheetApp.openById(spreadsheetId);
+  buildPropertyWorkbook_(ss);
+  const id = newPropertyId_(name);
+  const registry = loadRegistry_();
+  registry.push({ id: id, name: name, spreadsheetId: spreadsheetId });
+  saveRegistry_(registry);
+  const result = { id: id, name: name, spreadsheetId: spreadsheetId, url: ss.getUrl() };
+  Logger.log('Property registered: ' + JSON.stringify(result));
+  return result;
+}
+
+/** Unregister a property. Does NOT delete or trash the workbook — it's left
+ * fully intact and can be re-adopted later with addExistingProperty. Run
+ * from Editor → Run → removeProperty (edit the id first; see listProperties). */
+function removeProperty(id) {
+  const registry = loadRegistry_();
+  const next = registry.filter(function(p){ return p.id !== id; });
+  if (next.length === registry.length) throw new Error('Unknown property: "' + id + '".');
+  saveRegistry_(next);
+  const msg = 'Removed "' + id + '" from the registry. The workbook itself was not ' +
+    'deleted or trashed — only unregistered. Re-add it later with addExistingProperty if needed.';
   Logger.log(msg);
-  return msg;
+  return { removed: id, note: msg };
+}
+
+/** List every registered property. Run from Editor → Run → listProperties
+ * (view results via View → Logs, or the Executions panel). */
+function listProperties() {
+  const list = loadRegistry_();
+  Logger.log(JSON.stringify(list, null, 2));
+  return list;
 }

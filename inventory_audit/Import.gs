@@ -3,8 +3,9 @@
  *
  * There is no spreadsheet menu and no container dialog: these functions are
  * called by Index.html via google.script.run, so admins never open the sheet.
- * Every destructive call is guarded by requireAdmin_() (defined in Code.gs) so
- * a non-admin viewer cannot wipe data even by invoking the function directly.
+ * Every destructive call is guarded by requireAdmin_(propertyId) (defined in
+ * Code.gs) so a non-admin viewer — and an admin of a *different* property —
+ * cannot wipe data even by invoking the function directly.
  *
  * MONTHLY MODEL: each upload is a clean slate — last month's data and notes are
  * replaced, not merged. The CSV is validated BEFORE anything is deleted, so a
@@ -18,10 +19,11 @@ const IMPORT_SOURCE_HEADERS = [
   'Cost Acct', 'Inventory Acct', 'Flag'
 ];
 
-/** Admin-only. How many data rows each Count Details sheet currently holds. */
-function getExistingDataSummary() {
-  requireAdmin_();
-  const ss = getSpreadsheet_();
+/** Admin-only (this property). How many data rows each Count Details sheet
+ * currently holds. */
+function getExistingDataSummary(propertyId) {
+  requireAdmin_(propertyId);
+  const ss = getSpreadsheetForProperty_(propertyId);
   const sheets = CONFIG.DATASTORES.map(function(d){
     const s = ss.getSheetByName(d.sheet);
     const rows = (s && s.getLastRow() >= FIRST_DATA_ROW) ? (s.getLastRow() - FIRST_DATA_ROW + 1) : 0;
@@ -31,12 +33,13 @@ function getExistingDataSummary() {
 }
 
 /**
- * Admin-only. Parse + validate the CSV, then wipe and rebuild both sheets with
- * the new data. Validation happens first — a malformed CSV deletes nothing.
+ * Admin-only (this property). Parse + validate the CSV, then wipe and rebuild
+ * both sheets with the new data. Validation happens first — a malformed CSV
+ * deletes nothing.
  * @return {Object} { beverage, food } row counts written.
  */
-function processCSVData(csvContent) {
-  requireAdmin_();
+function processCSVData(propertyId, csvContent) {
+  requireAdmin_(propertyId);
 
   // --- validate first (non-destructive) ---
   const rows = Utilities.parseCsv(csvContent);
@@ -62,8 +65,9 @@ function processCSVData(csvContent) {
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    const bevSheet  = recreateDatastoreSheet_('Beverage Count Details');
-    const foodSheet = recreateDatastoreSheet_('Food Count Details');
+    const ss = getSpreadsheetForProperty_(propertyId);
+    const bevSheet  = recreateDatastoreSheet_(ss, 'Beverage Count Details');
+    const foodSheet = recreateDatastoreSheet_(ss, 'Food Count Details');
     if (bev.length)  bevSheet.getRange(FIRST_DATA_ROW, 1, bev.length, IMPORT_SOURCE_HEADERS.length).setValues(bev);
     if (food.length) foodSheet.getRange(FIRST_DATA_ROW, 1, food.length, IMPORT_SOURCE_HEADERS.length).setValues(food);
     SpreadsheetApp.flush();
@@ -73,10 +77,10 @@ function processCSVData(csvContent) {
   }
 }
 
-/** Admin-only. Remove both Count Details sheets entirely. */
-function removeAllCountData() {
-  requireAdmin_();
-  const ss = getSpreadsheet_();
+/** Admin-only (this property). Remove both Count Details sheets entirely. */
+function removeAllCountData(propertyId) {
+  requireAdmin_(propertyId);
+  const ss = getSpreadsheetForProperty_(propertyId);
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
@@ -84,7 +88,6 @@ function removeAllCountData() {
     CONFIG.DATASTORES.forEach(function(d){
       const s = ss.getSheetByName(d.sheet);
       if (!s) return;
-      if (ss.getSheets().length === 1) ss.insertSheet('Sheet1'); // never leave zero sheets
       ss.deleteSheet(s);
       removed++;
     });
