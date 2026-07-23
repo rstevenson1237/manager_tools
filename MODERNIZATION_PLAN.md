@@ -7,7 +7,7 @@ Status legend: 🔲 Not started · 🟡 In progress · ✅ Done · ⏭️ Skippe
 | [Phase 1](#phase-1-toasts-palette-sticky-header-var-modal-a11y-promise-wrapper) | Promise-ify `google.script.run` (#1) + toasts (#4) + palette (#6) + sticky-header CSS var (#7) + modal a11y (#8) | ✅ Done |
 | [Phase 2](#phase-2-iconography) | Inline SVG iconography (#5) | ✅ Done |
 | [Phase 3](#phase-3-es5--es6) | ES5 → ES6+ cleanup (#2a) | ✅ Done |
-| [Phase 4](#phase-4-composition-api-evaluation) | Composition API rewrite (#2b) | 🔲 Not started — trigger condition being reconfirmed |
+| [Phase 4](#phase-4-composition-api-evaluation) | Composition API rewrite (#2b) | 🔲 Not started — original trigger premise found invalid, awaiting user decision |
 | Phase 5+ | *(not yet defined — see "Growing this plan")* | — |
 
 ---
@@ -325,24 +325,49 @@ commit(s), not bundled with any feature work.
 
 ## Phase 4: Composition API evaluation
 
-**Status:** 🔲 Not started
+**Status:** ⏸️ Paused — original trigger premise found invalid, see below.
 
-**Entry gate:** Phases 1–3 ✅. Additionally — **this phase requires an explicit go/no-go
-decision, not just checklist completion**, because unlike the prior phases it has no direct
+**What happened (2026-07-23):** when this phase came up, the user asked how "shared code"
+would actually work given the real workflow: `inventory_audit` and `payroll_audit` are two
+**separate, independently-deployed Apps Script projects**, and both are maintained by
+**manually copying file contents into the Apps Script editor** — no `clasp`, no build step,
+no cross-project sync tooling.
+
+Under that constraint, Apps Script offers exactly two ways to share code across projects:
+1. **Apps Script Libraries** — one project can publish itself as a library another project
+   imports. This only exposes **server-side `.gs` functions**. It does not work for
+   `HtmlService`-served frontend code, so it can't share the Vue composables this phase was
+   about.
+2. **Manual copy-paste of identical source**, kept in sync by hand — which is already
+   exactly how the `gas()` wrapper, toast CSS/logic, palette tokens, and modal-Escape
+   handler are shared between the two files today, under the plain Options API.
+
+**Conclusion:** migrating to the Composition API would not change either of those facts —
+it would not create a single copy of a composable that both apps reference; you'd still
+hand-paste the same composable source into both `Index.html` files and keep them in sync by
+convention, exactly as today. The original trigger condition ("this enables real sharing
+that wasn't possible before") does not hold under this deployment model. The only remaining
+benefit would be **in-file organization** (grouping each file's own logic by feature) —a
+real but much smaller win than what justified the phase, and it doesn't offset the
+regression risk to the sync/pending state machine and inventory's drag/resize handlers.
+
+**Decision:** paused, not cancelled. Revisit only if the deployment model changes — e.g. the
+workflow adopts `clasp`/a build step, or a real Apps Script Library is introduced to share
+the server-side `Code.gs` logic (a separate, narrower idea from what this phase originally
+proposed, and one that wouldn't need a frontend rewrite at all). If picking this back up,
+first re-establish a concrete trigger condition — don't restart the Composition API rewrite
+on the original premise, since it's been shown not to hold.
+
+~~**Entry gate:** Phases 1–3 ✅. Additionally — this phase requires an explicit go/no-go
+decision, not just checklist completion, because unlike the prior phases it has no direct
 user-facing payoff on its own. Do not start the rewrite without re-confirming with the user
-that the trigger condition below is actually met.
-
-**Trigger condition (re-confirm before starting):** the value of the Composition API here
-is **enabling shared code between `inventory_audit` and `payroll_audit`** — pulling common
-logic (the `gas()` wrapper usage patterns, toast/status handling, settings/admin modal
-logic, CSV-upload state machine) into reusable composables instead of duplicated
-per-app methods. If, when this phase comes up, there is no active plan to actually extract
-shared logic, **defer this phase again** rather than doing a rewrite for its own sake — the
-risk (regressing the sync/pending state machine and inventory's drag/resize handlers) isn't
-justified by tidiness alone.
+that the trigger condition below is actually met.~~ *(superseded — trigger condition
+invalidated, see above)*
 
 ### Task checklist (do not start until trigger condition reconfirmed)
-- [ ] Re-confirm trigger condition with the user; log the decision here either way
+- [x] Re-confirmed trigger condition with the user 2026-07-23 — **invalidated**, see the
+      pause rationale above. The remaining checklist items below are left unstarted; they
+      describe what a future revisit would need to do if a real trigger condition emerges.
 - [ ] Inventory the logic that's actually duplicated between the two apps today (don't
       assume — diff the two `Index.html` files' `methods` blocks)
 - [ ] Design composable boundaries (e.g. `useGasCall()`, `useToasts()`,
@@ -364,7 +389,15 @@ justified by tidiness alone.
 - [ ] Status table updated to ✅
 
 ### Session log
-- *(empty)*
+- **2026-07-23**: User asked how cross-project code sharing would actually work given the
+  manual copy-paste-into-Apps-Script-editor workflow (no build step, no clasp, two separate
+  GAS projects). Investigated: Apps Script Libraries only cover server-side `.gs` functions,
+  not `HtmlService` frontend code, so they can't share the Vue composables this phase was
+  about; the only real cross-file sharing mechanism available is the manual-copy-paste
+  discipline already in use for `gas()`/toasts/palette under the current Options API. The
+  Composition API rewrite would not change that. Original trigger condition invalidated;
+  phase paused (not cancelled) rather than proceeding on a premise that doesn't hold. User
+  confirmed: pause Phase 4, move to closing out and merging the completed phases.
 
 ---
 
