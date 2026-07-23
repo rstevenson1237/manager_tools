@@ -40,7 +40,8 @@
     .tab .count{font-weight:400;opacity:.85;margin-left:6px;font-size:12px;}
     .toast-stack{position:fixed;top:16px;right:16px;z-index:60;display:flex;flex-direction:column;gap:8px;max-width:320px;}
     .toast{padding:10px 36px 10px 12px;border-radius:6px;font-weight:600;font-size:13px;box-shadow:0 2px 10px rgba(0,0,0,.18);position:relative;animation:toast-in .15s ease;}
-    .toast-close{position:absolute;top:6px;right:6px;background:none;border:none;padding:2px 6px;font-size:14px;line-height:1;cursor:pointer;color:inherit;opacity:.6;}
+    .icon{display:inline-block;vertical-align:-2px;flex-shrink:0;}
+    .toast-close{position:absolute;top:6px;right:6px;background:none;border:none;padding:2px 6px;line-height:1;cursor:pointer;color:inherit;opacity:.6;display:inline-flex;align-items:center;}
     .toast-close:hover{opacity:1;}
     @keyframes toast-in{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:translateY(0);}}
     .s-loading{background:#e8f0fe;color:var(--brand);}
@@ -86,7 +87,7 @@
     .settings-error{background:#f8d7da;color:#721c24;padding:8px 10px;border-radius:6px;font-size:13px;margin-bottom:10px;}
     .chip-list{list-style:none;margin:8px 0;padding:0;display:flex;flex-wrap:wrap;gap:6px;}
     .chip-list li{background:#f1f3f4;border-radius:12px;padding:4px 6px 4px 10px;font-size:12px;display:flex;align-items:center;gap:6px;}
-    .chip-remove{border:none;background:none;color:var(--danger);font-weight:700;cursor:pointer;font-size:14px;line-height:1;padding:0 2px;}
+    .chip-remove{border:none;background:none;color:var(--danger);cursor:pointer;line-height:1;padding:0 2px;display:inline-flex;align-items:center;}
     .add-row{display:flex;gap:6px;}
     .add-row input{flex:1;padding:6px 8px;border:1px solid #ccc;border-radius:5px;font-size:13px;}
   </style>
@@ -96,7 +97,7 @@
     <div class="toast-stack">
       <div v-for="t in toasts" :key="t.id" :class="['toast', 's-' + t.type]">
         {{ t.msg }}
-        <button class="toast-close" @click="dismissToast(t.id)" aria-label="Dismiss">×</button>
+        <button class="toast-close" @click="dismissToast(t.id)" aria-label="Dismiss"><svg class="icon" width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
       </div>
     </div>
 
@@ -115,7 +116,7 @@
             <option v-for="p in bootstrap.properties" :key="p.id" :value="p.id">{{ p.name }}</option>
           </select>
           <button class="ghost" @click="loadData()" :disabled="loading">Refresh</button>
-          <button class="ghost" v-if="session.isAdmin" @click="openSettings">⚙ Settings</button>
+          <button class="ghost" v-if="session.isAdmin" @click="openSettings"><svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M8.6 1.5h2.8l.4 2.1c.5.15.95.36 1.38.62l1.8-1.2 2 2-1.2 1.8c.26.43.47.88.62 1.38l2.1.4v2.8l-2.1.4c-.15.5-.36.95-.62 1.38l1.2 1.8-2 2-1.8-1.2c-.43.26-.88.47-1.38.62l-.4 2.1H8.6l-.4-2.1a6.6 6.6 0 01-1.38-.62l-1.8 1.2-2-2 1.2-1.8a6.6 6.6 0 01-.62-1.38l-2.1-.4V8.6l2.1-.4c.15-.5.36-.95.62-1.38l-1.2-1.8 2-2 1.8 1.2c.43-.26.88-.47 1.38-.62l.4-2.1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><circle cx="10" cy="10" r="2.6" stroke="currentColor" stroke-width="1.3"/></svg> Settings</button>
         </div>
       </div>
 
@@ -421,7 +422,7 @@
             <p class="muted">Accounts that can upload/replace data, edit manual-entry figures, and change these settings for this property only. Global admins always have access to every property regardless of this list.</p>
             <ul class="chip-list">
               <li v-for="e in settingsDraft.propertyAdmins" :key="e">
-                {{ e }}<button class="chip-remove" @click="removePropertyAdminEmail(e)" title="Remove">×</button>
+                {{ e }}<button class="chip-remove" @click="removePropertyAdminEmail(e)" title="Remove"><svg class="icon" width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
               </li>
             </ul>
             <div class="add-row">
@@ -435,7 +436,7 @@
             <p class="muted">Accounts with view-only access to this property.</p>
             <ul class="chip-list">
               <li v-for="e in settingsDraft.propertyUsers" :key="e">
-                {{ e }}<button class="chip-remove" @click="removePropertyUserEmail(e)" title="Remove">×</button>
+                {{ e }}<button class="chip-remove" @click="removePropertyUserEmail(e)" title="Remove"><svg class="icon" width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
               </li>
             </ul>
             <div class="add-row">
@@ -457,7 +458,7 @@
             <template v-if="globalAdminsDraft">
               <ul class="chip-list">
                 <li v-for="e in globalAdminsDraft" :key="e">
-                  {{ e }}<button class="chip-remove" @click="removeGlobalAdminEmail(e)" title="Remove">×</button>
+                  {{ e }}<button class="chip-remove" @click="removeGlobalAdminEmail(e)" title="Remove"><svg class="icon" width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
                 </li>
               </ul>
               <div class="add-row">
@@ -479,13 +480,13 @@
 
   <script src="https://cdn.jsdelivr.net/npm/vue@3.4.31/dist/vue.global.prod.js"></script>
   <script>
-    var VIEWS = [
+    const VIEWS = [
       { key: 'daily', label: 'Day-by-Day Audit' },
       { key: 'totals', label: 'Totals Audit' },
       { key: 'errors', label: 'Error Reporting' },
       { key: 'withholding', label: 'Employee Withholding' }
     ];
-    var DAILY_ROW_DEFS = [
+    const DAILY_ROW_DEFS = [
       { key: 'creditTips', label: 'Credit - Tips' },
       { key: 'creditGrat', label: 'Credit - Grat' },
       { key: 'cashTips', label: 'Cash - Tips' },
@@ -498,31 +499,28 @@
       { key: 'refunds', label: 'Refunds' },
       { key: 'toastTotal', label: 'Toast - Total' }
     ];
-    var PDP_FIELDS = [
+    const PDP_FIELDS = [
       { key: 'addlTips', label: 'Addl Tips' },
       { key: 'cashSvc', label: 'Cash SVC' },
       { key: 'ccFee', label: 'CC Fee' },
       { key: 'ccSvc', label: 'CC SVC' },
       { key: 'declared', label: 'Declared' }
     ];
-    var STATUS_CLASS_MAP = [
-      { test: function (s) { return s === 'Match'; }, cls: 'row-match' },
-      { test: function (s) { return s.indexOf('Missing') === 0; }, cls: 'row-missing' },
-      { test: function (s) { return s.indexOf('Hours Mismatch') === 0; }, cls: 'row-mismatch' },
-      { test: function (s) { return s.indexOf('Wrong Company Code') === 0; }, cls: 'row-wrongcode' }
+    const STATUS_CLASS_MAP = [
+      { test: (s) => s === 'Match', cls: 'row-match' },
+      { test: (s) => s.indexOf('Missing') === 0, cls: 'row-missing' },
+      { test: (s) => s.indexOf('Hours Mismatch') === 0, cls: 'row-mismatch' },
+      { test: (s) => s.indexOf('Wrong Company Code') === 0, cls: 'row-wrongcode' }
     ];
 
     // Promise wrapper around google.script.run so call sites can use async/await
     // instead of chained .withSuccessHandler()/.withFailureHandler() callbacks.
-    var gas = function (funcName) {
-      var args = Array.prototype.slice.call(arguments, 1);
-      return new Promise(function (resolve, reject) {
-        var runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
-        runner[funcName].apply(runner, args);
-      });
-    };
+    const gas = (funcName, ...args) => new Promise((resolve, reject) => {
+      const runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+      runner[funcName](...args);
+    });
 
-    var app = Vue.createApp({
+    const app = Vue.createApp({
       data: function () {
         return {
           VIEWS: VIEWS,
@@ -557,16 +555,15 @@
       computed: {
         periodLabel: function () {
           if (!this.data || !this.data.daily.days.length) return '—';
-          var days = this.data.daily.days;
+          const days = this.data.daily.days;
           return this.formatDateShort(days[0]) + ' – ' + this.formatDateShort(days[days.length - 1]);
         },
         pdpGrandTotal: function () {
-          var self = this;
           if (!this.data) return 0;
-          return this.data.daily.days.reduce(function (s, d) { return s + self.pdpDayTotal(d); }, 0);
+          return this.data.daily.days.reduce((s, d) => s + this.pdpDayTotal(d), 0);
         },
         salesSummaryTotal: function () {
-          return this.salesSummaryDraft.reduce(function (s, r) { return s + (Number(r.value) || 0); }, 0);
+          return this.salesSummaryDraft.reduce((s, r) => s + (Number(r.value) || 0), 0);
         }
       },
       mounted: function () {
@@ -590,50 +587,48 @@
         },
 
         showStatus: function (msg, type) {
-          var self = this;
           if (type === 'loading') {
             // a new operation starting supersedes whatever was showing before,
             // same as the old single-banner behavior
             this.toasts = [];
           } else {
-            this.toasts = this.toasts.filter(function (t) { return t.type !== 'loading'; });
+            this.toasts = this.toasts.filter((t) => t.type !== 'loading');
           }
-          var id = ++this._toastSeq;
+          const id = ++this._toastSeq;
           this.toasts.push({ id: id, msg: msg, type: type });
           if (type === 'success') {
-            setTimeout(function () { self.dismissToast(id); }, 3000);
+            setTimeout(() => { this.dismissToast(id); }, 3000);
           }
           // 'error' toasts persist until manually dismissed; 'loading' is dismissed
           // implicitly when the follow-up success/error toast arrives.
         },
         dismissToast: function (id) {
-          this.toasts = this.toasts.filter(function (t) { return t.id !== id; });
+          this.toasts = this.toasts.filter((t) => t.id !== id);
         },
 
         formatDateShort: function (isoDate) {
-          var d = new Date(isoDate + 'T00:00:00');
+          const d = new Date(isoDate + 'T00:00:00');
           return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
         },
         formatCurrency: function (v) {
-          var n = Number(v);
+          const n = Number(v);
           if (v === null || v === undefined || isNaN(n)) return '—';
           return n.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
         },
         rowClassForStatus: function (status) {
-          var found = STATUS_CLASS_MAP.filter(function (m) { return m.test(status); })[0];
+          const found = STATUS_CLASS_MAP.filter((m) => m.test(status))[0];
           return found ? found.cls : '';
         },
 
         pdpDayTotal: function (dateStr) {
-          var e = this.pdpManualDraft[dateStr];
+          const e = this.pdpManualDraft[dateStr];
           if (!e) return 0;
           return (Number(e.addlTips) || 0) + (Number(e.cashSvc) || 0) + (Number(e.ccSvc) || 0);
         },
         pdpDayTotalSum: function (fieldKey) {
-          var self = this;
           if (!this.data) return 0;
-          return this.data.daily.days.reduce(function (s, d) {
-            var e = self.pdpManualDraft[d];
+          return this.data.daily.days.reduce((s, d) => {
+            const e = this.pdpManualDraft[d];
             return s + (e ? (Number(e[fieldKey]) || 0) : 0);
           }, 0);
         },
@@ -642,16 +637,15 @@
         loadBootstrap: async function () {
           this.bootLoading = true;
           try {
-            var b = await gas('getBootstrap');
+            const b = await gas('getBootstrap');
             this.bootstrap = b;
             this.bootLoading = false;
             if (!b.properties.length) return;
             if (b.properties.length === 1) { this.selectProperty(b.properties[0]); return; }
-            var self = this;
-            google.script.url.getLocation(function (loc) {
-              var wanted = loc && loc.parameter && loc.parameter.property;
-              var match = wanted && b.properties.filter(function (p) { return p.id === wanted; })[0];
-              self.selectProperty(match || b.properties[0]);
+            google.script.url.getLocation((loc) => {
+              const wanted = loc && loc.parameter && loc.parameter.property;
+              const match = wanted && b.properties.filter((p) => p.id === wanted)[0];
+              this.selectProperty(match || b.properties[0]);
             });
           } catch (err) {
             this.bootLoading = false;
@@ -659,7 +653,7 @@
           }
         },
         onPropertyChange: function (id) {
-          var p = this.bootstrap.properties.filter(function (x) { return x.id === id; })[0];
+          const p = this.bootstrap.properties.filter((x) => x.id === id)[0];
           if (p) this.selectProperty(p);
         },
         selectProperty: function (p) {
@@ -673,19 +667,17 @@
           this.loading = true;
           this.showStatus('Loading payroll data…', 'loading');
           try {
-            var payload = await gas('getPayrollData', this.activeProperty.id);
+            const payload = await gas('getPayrollData', this.activeProperty.id);
             this.data = payload;
             this.session = payload.session;
             this.companyCodeDraft = payload.settings.companyCode || '';
-            this.salesSummaryDraft = (payload.settings.salesSummary || []).map(function (r) {
-              return { label: r.label, value: r.value };
-            });
-            this.pooledDraft = (payload.settings.pooledWithholding || []).map(function (p) {
-              return { label: p.label, jobClass: p.jobClass, poolServersText: (p.poolServers || []).join(', ') };
-            });
-            var draft = {};
-            payload.daily.days.forEach(function (d) {
-              var e = payload.pdpManual.byDay.filter(function (x) { return x.date === d; })[0] || {};
+            this.salesSummaryDraft = (payload.settings.salesSummary || []).map((r) => ({ label: r.label, value: r.value }));
+            this.pooledDraft = (payload.settings.pooledWithholding || []).map((p) => (
+              { label: p.label, jobClass: p.jobClass, poolServersText: (p.poolServers || []).join(', ') }
+            ));
+            const draft = {};
+            payload.daily.days.forEach((d) => {
+              const e = payload.pdpManual.byDay.filter((x) => x.date === d)[0] || {};
               draft[d] = { addlTips: e.addlTips || 0, cashSvc: e.cashSvc || 0, ccFee: e.ccFee || 0,
                 ccSvc: e.ccSvc || 0, declared: e.declared || 0 };
             });
@@ -701,7 +693,7 @@
         /* ---------- manual-entry saves (admin) ---------- */
         saveCompanyCode: async function () {
           try {
-            var code = await gas('saveCompanyCode', this.activeProperty.id, this.companyCodeDraft);
+            const code = await gas('saveCompanyCode', this.activeProperty.id, this.companyCodeDraft);
             this.data.settings.companyCode = code;
             this.showStatus('Company code saved.', 'success');
             this.loadData();
@@ -728,10 +720,10 @@
           }
         },
         savePooledConfig: async function () {
-          var payload = this.pooledDraft.map(function (p) {
-            return { label: p.label, jobClass: p.jobClass,
-              poolServers: (p.poolServersText || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean) };
-          });
+          const payload = this.pooledDraft.map((p) => ({
+            label: p.label, jobClass: p.jobClass,
+            poolServers: (p.poolServersText || '').split(',').map((s) => s.trim()).filter(Boolean)
+          }));
           try {
             await gas('savePooledConfig', this.activeProperty.id, payload);
             this.showStatus('Pooled withholding saved.', 'success');
@@ -750,30 +742,29 @@
           }[kind];
         },
         onCsvFileChosen: function (e, kind) {
-          var f = e.target.files[0]; if (!f) return;
-          var reader = new FileReader();
-          var self = this;
-          var meta = this.csvMeta(kind);
-          reader.onload = async function (ev) {
+          const f = e.target.files[0]; if (!f) return;
+          const reader = new FileReader();
+          const meta = this.csvMeta(kind);
+          reader.onload = async (ev) => {
             e.target.value = '';
-            self.csv = { stage: 'checking', kind: kind, label: meta.label, existingRows: 0, fileText: ev.target.result, error: null, result: null };
+            this.csv = { stage: 'checking', kind: kind, label: meta.label, existingRows: 0, fileText: ev.target.result, error: null, result: null };
             try {
-              var summary = await gas('getExistingDataSummary', self.activeProperty.id);
-              var sheetInfo = summary.sheets.filter(function (s) { return s.key === kind; })[0];
-              self.csv.existingRows = sheetInfo ? sheetInfo.rows : 0;
-              if (self.csv.existingRows > 0) { self.csv.stage = 'confirm'; }
-              else { self.doUpload(); }
+              const summary = await gas('getExistingDataSummary', this.activeProperty.id);
+              const sheetInfo = summary.sheets.filter((s) => s.key === kind)[0];
+              this.csv.existingRows = sheetInfo ? sheetInfo.rows : 0;
+              if (this.csv.existingRows > 0) { this.csv.stage = 'confirm'; }
+              else { this.doUpload(); }
             } catch (err) {
-              self.csv.stage = 'error'; self.csv.error = err.message;
+              this.csv.stage = 'error'; this.csv.error = err.message;
             }
           };
           reader.readAsText(f);
         },
         doUpload: async function () {
           this.csv.stage = 'importing';
-          var meta = this.csvMeta(this.csv.kind);
+          const meta = this.csvMeta(this.csv.kind);
           try {
-            var res = await gas(meta.fn, this.activeProperty.id, this.csv.fileText);
+            const res = await gas(meta.fn, this.activeProperty.id, this.csv.fileText);
             this.csv.stage = 'done'; this.csv.result = res;
           } catch (err) {
             this.csv.stage = 'error'; this.csv.error = err.message;
@@ -805,17 +796,16 @@
           this.globalAdmins = []; this.globalAdminsDraft = null; this.newGlobalAdminEmail = ''; this.globalAdminsError = '';
           this.showSettings = true;
           if (this.bootstrap.isGlobalAdmin) this.loadGlobalAdmins();
-          var self = this;
-          this.$nextTick(function () {
-            if (self.$refs.firstSettingsInput) self.$refs.firstSettingsInput.focus();
+          this.$nextTick(() => {
+            if (this.$refs.firstSettingsInput) this.$refs.firstSettingsInput.focus();
           });
         },
         closeSettings: function () { this.showSettings = false; this.settingsDraft = null; },
         addPropertyAdminEmail: function () {
-          var e = this.newPropertyAdminEmail.trim();
+          const e = this.newPropertyAdminEmail.trim();
           if (!e) return;
           if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { this.settingsError = 'Enter a valid email address.'; return; }
-          var exists = this.settingsDraft.propertyAdmins.some(function (x) { return x.toLowerCase() === e.toLowerCase(); });
+          const exists = this.settingsDraft.propertyAdmins.some((x) => x.toLowerCase() === e.toLowerCase());
           if (!exists) this.settingsDraft.propertyAdmins.push(e);
           this.newPropertyAdminEmail = ''; this.settingsError = '';
         },
@@ -823,23 +813,23 @@
           if (!this.bootstrap.isGlobalAdmin && this.session.email && email.toLowerCase() === this.session.email.toLowerCase()) {
             if (!confirm('This removes your own admin access to this property. Continue?')) return;
           }
-          this.settingsDraft.propertyAdmins = this.settingsDraft.propertyAdmins.filter(function (e) { return e !== email; });
+          this.settingsDraft.propertyAdmins = this.settingsDraft.propertyAdmins.filter((e) => e !== email);
         },
         addPropertyUserEmail: function () {
-          var e = this.newPropertyUserEmail.trim();
+          const e = this.newPropertyUserEmail.trim();
           if (!e) return;
           if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { this.settingsError = 'Enter a valid email address.'; return; }
-          var exists = this.settingsDraft.propertyUsers.some(function (x) { return x.toLowerCase() === e.toLowerCase(); });
+          const exists = this.settingsDraft.propertyUsers.some((x) => x.toLowerCase() === e.toLowerCase());
           if (!exists) this.settingsDraft.propertyUsers.push(e);
           this.newPropertyUserEmail = ''; this.settingsError = '';
         },
         removePropertyUserEmail: function (email) {
-          this.settingsDraft.propertyUsers = this.settingsDraft.propertyUsers.filter(function (e) { return e !== email; });
+          this.settingsDraft.propertyUsers = this.settingsDraft.propertyUsers.filter((e) => e !== email);
         },
         saveSettingsDraft: async function () {
           this.settingsError = '';
           try {
-            var s = await gas('saveSettings', this.activeProperty.id, this.settingsDraft);
+            const s = await gas('saveSettings', this.activeProperty.id, this.settingsDraft);
             this.data.settings.propertyAdmins = s.propertyAdmins;
             this.data.settings.propertyUsers = s.propertyUsers;
             this.showSettings = false;
@@ -866,17 +856,17 @@
         /* ---------- global admins (global admin only) ---------- */
         loadGlobalAdmins: async function () {
           try {
-            var list = await gas('getGlobalAdmins');
+            const list = await gas('getGlobalAdmins');
             this.globalAdmins = list; this.globalAdminsDraft = list.slice();
           } catch (err) {
             this.globalAdminsError = err.message;
           }
         },
         addGlobalAdminEmail: function () {
-          var e = this.newGlobalAdminEmail.trim();
+          const e = this.newGlobalAdminEmail.trim();
           if (!e) return;
           if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { this.globalAdminsError = 'Enter a valid email address.'; return; }
-          var exists = this.globalAdminsDraft.some(function (x) { return x.toLowerCase() === e.toLowerCase(); });
+          const exists = this.globalAdminsDraft.some((x) => x.toLowerCase() === e.toLowerCase());
           if (!exists) this.globalAdminsDraft.push(e);
           this.newGlobalAdminEmail = ''; this.globalAdminsError = '';
         },
@@ -885,12 +875,12 @@
           if (this.session.email && email.toLowerCase() === this.session.email.toLowerCase()) {
             if (!confirm('This removes your own global admin access. Continue?')) return;
           }
-          this.globalAdminsDraft = this.globalAdminsDraft.filter(function (e) { return e !== email; });
+          this.globalAdminsDraft = this.globalAdminsDraft.filter((e) => e !== email);
         },
         saveGlobalAdminsDraft: async function () {
           this.globalAdminsError = '';
           try {
-            var list = await gas('saveGlobalAdmins', this.globalAdminsDraft);
+            const list = await gas('saveGlobalAdmins', this.globalAdminsDraft);
             this.globalAdmins = list; this.globalAdminsDraft = list.slice();
             this.showStatus('Global admins saved.', 'success');
           } catch (err) {

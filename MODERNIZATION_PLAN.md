@@ -4,10 +4,10 @@ Status legend: 🔲 Not started · 🟡 In progress · ✅ Done · ⏭️ Skippe
 
 | Phase | Scope | Status |
 |---|---|---|
-| [Phase 1](#phase-1-toasts-palette-sticky-header-var-modal-a11y-promise-wrapper) | Promise-ify `google.script.run` (#1) + toasts (#4) + palette (#6) + sticky-header CSS var (#7) + modal a11y (#8) | 🟡 In progress — code done, awaiting manual/embedded verification |
-| [Phase 2](#phase-2-iconography) | Inline SVG iconography (#5) | 🔲 Not started |
-| [Phase 3](#phase-3-es5--es6) | ES5 → ES6+ cleanup (#2a) | 🔲 Not started |
-| [Phase 4](#phase-4-composition-api-evaluation) | Composition API rewrite (#2b) | 🔲 Not started |
+| [Phase 1](#phase-1-toasts-palette-sticky-header-var-modal-a11y-promise-wrapper) | Promise-ify `google.script.run` (#1) + toasts (#4) + palette (#6) + sticky-header CSS var (#7) + modal a11y (#8) | ✅ Done |
+| [Phase 2](#phase-2-iconography) | Inline SVG iconography (#5) | ✅ Done |
+| [Phase 3](#phase-3-es5--es6) | ES5 → ES6+ cleanup (#2a) | ✅ Done |
+| [Phase 4](#phase-4-composition-api-evaluation) | Composition API rewrite (#2b) | 🔲 Not started — original trigger premise found invalid, awaiting user decision |
 | Phase 5+ | *(not yet defined — see "Growing this plan")* | — |
 
 ---
@@ -85,10 +85,8 @@ bottom so they aren't lost.
 
 ## Phase 1: Toasts, palette, sticky-header var, modal a11y, Promise wrapper
 
-**Status:** 🟡 In progress — all five sub-items implemented and committed; blocked on manual
-smoke testing and the embedded-in-Google-Sites check (see Exit gate), which need an actual
-Apps Script deployment and a browser — not available in the implementing session. **Do not
-mark ✅ until a human (or a session with deploy/browser access) has walked the Exit gate.**
+**Status:** ✅ Done — user confirmed the Exit gate (manual smoke test + embedded-in-Google-
+Sites check) on 2026-07-23. PR: https://github.com/rstevenson1237/manager_tools/pull/4.
 
 **Entry gate:** none — this is the starting phase. Working tree clean on
 `claude/planning-session-zu32ey` before starting.
@@ -178,127 +176,198 @@ payroll** (commit `b987f99`)
       as expected — this is a real behavior to confirm during the embedded-in-Sites check,
       not something confirmable from source
 
-### Exit gate — **not yet walked, needs a session/human with deploy + browser access**
+### Exit gate — ✅ confirmed by user 2026-07-23
 - [x] All checklist items done in both apps, or explicitly marked deferred with reasoning
       (see 1d payroll above)
-- [ ] Manual smoke test on raw `/exec` URL: load data, trigger a success toast, trigger an
+- [x] Manual smoke test on raw `/exec` URL: load data, trigger a success toast, trigger an
       error toast (e.g. bad input), open every modal and close via Escape, resize a column,
       confirm sticky header/section stacking on scroll
-- [ ] **Embedded-in-Google-Sites smoke test**: same checks as above, run inside an actual
+- [x] **Embedded-in-Google-Sites smoke test**: same checks as above, run inside an actual
       Sites embed, in at least Chrome and Safari — this is the step that catches iframe-only
       regressions
-- [ ] No console errors introduced
-- [ ] WCAG AA contrast spot-check on the new row-state tints (carried over from 1c)
-- [ ] Status table at top of this doc updated to ✅ **only after the above are confirmed**
+- [x] No console errors introduced
+- [x] WCAG AA contrast spot-check on the new row-state tints (carried over from 1c)
+- [x] Status table at top of this doc updated to ✅
 
 ### Session log
 - **2026-07-23**: Implemented all five sub-items (1a–1e) as five separate commits
   (`1750271`, `0a917ec`, `25a44df`, `b987f99`, `6a5bb2f`) on
   `claude/planning-session-zu32ey`. JS syntax verified with `node --check` on the extracted
   `<script>` blocks of both files after every commit; no runtime/browser verification was
-  possible in this session (no deployed Apps Script project, no browser available). Payroll's
-  sticky-header parity (part of 1d) was deliberately skipped rather than risking an unverified
-  visual regression — see reasoning inline above. Phase left at 🟡 pending someone with
-  deploy/browser access walking the Exit gate above; flip to ✅ only after that happens.
+  possible in the implementing session (no deployed Apps Script project, no browser
+  available). Payroll's sticky-header parity (part of 1d) was deliberately skipped rather
+  than risking an unverified visual regression — see reasoning inline above.
+- **2026-07-23**: User deployed and walked the Exit gate (manual `/exec` smoke test +
+  embedded-in-Google-Sites check) and confirmed it passes. Phase marked ✅ Done. PR opened
+  from the Claude Code UI for this branch:
+  https://github.com/rstevenson1237/manager_tools/pull/4 — all future commits push to this
+  branch and update that PR; no new PR should be created for this effort.
 
 ---
 
 ## Phase 2: Iconography
 
-**Status:** 🔲 Not started
+**Status:** ✅ Done — user confirmed the Exit gate (icon rendering + embedded-in-Sites
+check) on 2026-07-23.
 
 **Entry gate:** Phase 1 marked ✅ (specifically 1c palette, since icons should use
-`currentColor` against the new tokens).
+`currentColor` against the new tokens). — satisfied, Phase 1 confirmed done 2026-07-23.
 
 **Rationale:** replaces inconsistent OS-rendered emoji (`⚙ × ● ⚠ ✓`) with **inlined SVG**,
 not a CDN icon library — an extra CDN dependency is a real risk inside the sandboxed Sites
 iframe (proxy blocks, load failures) for a handful of glyphs that don't justify it.
 
 ### Task checklist
-- [ ] Identify full glyph inventory across both apps: `⚙` (settings), `×` (remove/close,
-      several places), `●` (pending), `⚠` (error/retry), `✓` (synced) — confirm no others
-      missed via a fresh grep before starting
-- [ ] Source or hand-draw minimal SVG paths for each (e.g. from a permissively-licensed set,
-      redrawn/simplified by hand — do not add a CDN or npm dependency)
-- [ ] Inline each as a `<svg>` in the template (or a small Vue functional component /
-      inline snippet reused via a helper), sized via `em`/`currentColor` so it inherits the
-      surrounding text color and the palette tokens from Phase 1
-- [ ] Replace emoji usages one-for-one in `inventory_audit/Index.html` and
-      `payroll_audit/Index.html`
-- [ ] Optional nice-to-have (only if trivial): animate the "syncing" icon as a rotating
-      spinner instead of the existing `.spin` div, if it can reuse the same CSS keyframe
+- [x] Identified full glyph inventory across both apps via grep: `⚙` settings (1 each app),
+      `×` remove/close (toast-close ×2 total, chip-remove ×4 inventory/×3 payroll,
+      dup-badge ×1 inventory-only), `●` pending (1, inventory-only), `⚠` error/retry
+      (1, inventory-only), `✓` synced (1, inventory-only). The "syncing" badge already used
+      the existing CSS `.spin` div, not an emoji — left untouched.
+- [x] Hand-drew minimal SVG paths for each (close-x, settings gear, dot, warning triangle,
+      checkmark, duplicate/copy icon for the ×N badge) — no CDN or npm dependency added
+- [x] Inlined each directly in the templates as `<svg class="icon" ... stroke/fill=
+      "currentColor">`, so they inherit each context's existing text color (badge classes,
+      `--danger`, etc.) and will track any future palette changes automatically
+- [x] Replaced every emoji usage one-for-one in both `Index.html` files
+- [x] Added a shared `.icon` CSS class (baseline alignment) and switched `.chip-remove` /
+      `.toast-close` to `inline-flex` centering; `.dup-badge` changed from `inline-block` to
+      `inline-flex` so its new icon aligns with the count text
+- [ ] Skipped: animating the "syncing" badge — it was already the `.spin` CSS spinner, not
+      an emoji, so out of scope for this phase
 
-### Exit gate
-- [ ] No emoji glyphs remain in either `Index.html` for status/UI iconography
-- [ ] No new external network dependency added (verify: no new `<script src=` /
-      `<link href=` pointing off-origin)
-- [ ] Icons render consistently and pick up palette colors correctly in both apps
-- [ ] Embedded-in-Sites smoke test (icons visible, not blocked, correctly colored)
-- [ ] Status table updated to ✅
+### Exit gate — ✅ confirmed by user 2026-07-23
+- [x] No emoji glyphs remain in either `Index.html` (verified via grep — zero matches)
+- [x] No new external network dependency added (verified — only the pre-existing Vue CDN
+      `<script src=` tag remains in each file)
+- [x] HTML tag balance verified programmatically (Python `HTMLParser` walk) — no unclosed
+      or mismatched tags introduced by the hand-written SVG markup
+- [x] JS syntax re-verified with `node --check` after the change (unaffected, but confirms
+      the edits didn't corrupt anything in the `<script>` block)
+- [x] Icons render as expected (correct shape, size, color, alignment next to text)
+- [x] Embedded-in-Sites smoke test passed
+- [x] Status table updated to ✅
 
 ### Session log
-- *(empty)*
+- **2026-07-23**: Implemented as a single commit (`eb92d11`) on
+  `claude/planning-session-zu32ey`, part of PR #4
+  (https://github.com/rstevenson1237/manager_tools/pull/4). Icon count sanity-checked:
+  inventory has 10 `class="icon"` usages (1 toast-close + 1 gear + 1 dup-badge + 1 pending +
+  1 error + 1 synced + 4 chip-remove), payroll has 5 (1 toast-close + 1 gear + 3
+  chip-remove) — both match the glyph inventory exactly.
+- **2026-07-23**: User confirmed the Exit gate (rendering + embedded-in-Sites check) passes.
+  Phase marked ✅ Done.
 
 ---
 
 ## Phase 3: ES5 → ES6+
 
-**Status:** 🔲 Not started
+**Status:** ✅ Done — user confirmed the Exit gate (manual regression pass across both
+apps' core flows, embedded-in-Sites check) on 2026-07-23.
 
 **Entry gate:** Phase 1's item 1a (Promise wrapper) must be ✅ and merged first — doing the
 `var`→`const/let`/arrow-function pass before the Promise migration would mean touching the
 same lines twice and makes the `async/await` conversion harder to review cleanly on top of
-still-ES5 callback code.
+still-ES5 callback code. — satisfied, Phase 1 confirmed done 2026-07-23.
 
 **Rationale:** mechanical modernization enabled by the V8 runtime + modern iframe (no
 functional change, no build-step requirement). Large diff — treat as its own isolated
 commit(s), not bundled with any feature work.
 
 ### Task checklist
-- [ ] `inventory_audit/Index.html`: replace all `var` → `const`/`let` as appropriate
-- [ ] `inventory_audit/Index.html`: replace `function(){...}` callbacks passed to
-      `map`/`filter`/`forEach`/etc. with arrow functions; remove now-unnecessary
-      `var self = this` capture points
-- [ ] Repeat both steps for `payroll_audit/Index.html`
-- [ ] Do **not** change logic/behavior in this pass — pure syntax modernization
-- [ ] Review diff carefully for `this`-binding changes in non-lexical contexts (e.g. a
-      `function` used as an event handler where `this` intentionally referred to the DOM
-      element, not the Vue instance) — arrow functions would break that specific case, so
-      each conversion needs a sanity check, not blanket find-replace
+- [x] `inventory_audit/Index.html`: replaced all `var` → `const`/`let` as appropriate
+- [x] `inventory_audit/Index.html`: replaced `function(){...}` callbacks passed to
+      `map`/`filter`/`forEach`/`some`/`reduce`, plus `setTimeout`,
+      `google.script.url.getLocation`, and `FileReader.onload`, with arrow functions;
+      removed every `var self = this` capture point (13 in inventory, 8 in payroll) —
+      since the enclosing Vue method is still a regular `function` (correctly `this`-bound
+      by Vue when called), nested arrow functions now reference `this` directly instead of
+      capturing it into `self`
+- [x] Repeated for `payroll_audit/Index.html`; also converted `STATUS_CLASS_MAP`'s
+      module-level `test: function(s){...}` predicates to arrows since they don't use
+      `this` at all
+- [x] No logic/behavior changed — pure syntax modernization. Verified by reviewing the full
+      `git diff` line by line for both files: every removed line is a `var`→`const`/`let`
+      keyword swap, a `function(...)`→`(...) =>` conversion, or a `self.`→`this.` rewrite
+      inside a converted arrow callback. No control flow, conditionals, or data shapes
+      changed.
+- [x] Checked specifically for `this`-binding traps: **kept all Vue lifecycle hooks
+      (`mounted`/`beforeUnmount`), `computed` properties, and `methods` themselves as
+      regular `function` expressions** — converting those to arrows would have broken
+      Vue's `this` binding, since an arrow function has no own `this` and would have
+      resolved to the enclosing `<script>` scope instead of the component instance. Only
+      *nested* callbacks (arguments to array methods, timers, event/DOM callbacks) were
+      converted to arrows.
 
-### Exit gate
-- [ ] No remaining `var` declarations in either `Index.html` (verify via grep)
-- [ ] No remaining `var self = this` pattern (verify via grep)
-- [ ] Full manual regression pass: load, edit/select a note (inventory), CSV upload,
-      settings save, sync, column drag/resize (inventory) — behavior identical to pre-Phase-3
-- [ ] Embedded-in-Sites smoke test
-- [ ] Status table updated to ✅
+### Exit gate — ✅ confirmed by user 2026-07-23
+- [x] No remaining `var` declarations in either `Index.html` (verified via grep — zero)
+- [x] No remaining `self` identifier anywhere in either file (verified via grep — zero;
+      stronger check than just `var self = this`, confirms no dangling references)
+- [x] JS syntax verified with `node --check` on the extracted `<script>` blocks of both
+      files, immediately after each file's conversion
+- [x] Full manual regression pass (load, edit/select a note in inventory, CSV upload in
+      both apps, settings save, sync, column drag/resize in inventory) confirmed identical
+      to pre-Phase-3 behavior
+- [x] Embedded-in-Sites smoke test passed
+- [x] Status table updated to ✅
 
 ### Session log
-- *(empty)*
+- **2026-07-23**: Implemented as two commits, one per app, on
+  `claude/planning-session-zu32ey` (part of PR #4):
+  `inventory_audit` conversion and `payroll_audit` conversion. Reviewed the full `git diff`
+  for both files line by line during implementation — every change is a mechanical
+  `var`→`const`/`let` or `function`→arrow conversion, confirmed no logic drift. No
+  runtime/browser regression testing was possible in the implementing session.
+- **2026-07-23**: User ran the manual regression pass (including note-editing/sync in
+  inventory and CSV upload in both apps) and the embedded-in-Sites check, confirmed no
+  regressions. Phase marked ✅ Done.
 
 ---
 
 ## Phase 4: Composition API evaluation
 
-**Status:** 🔲 Not started
+**Status:** ⏸️ Paused — original trigger premise found invalid, see below.
 
-**Entry gate:** Phases 1–3 ✅. Additionally — **this phase requires an explicit go/no-go
-decision, not just checklist completion**, because unlike the prior phases it has no direct
+**What happened (2026-07-23):** when this phase came up, the user asked how "shared code"
+would actually work given the real workflow: `inventory_audit` and `payroll_audit` are two
+**separate, independently-deployed Apps Script projects**, and both are maintained by
+**manually copying file contents into the Apps Script editor** — no `clasp`, no build step,
+no cross-project sync tooling.
+
+Under that constraint, Apps Script offers exactly two ways to share code across projects:
+1. **Apps Script Libraries** — one project can publish itself as a library another project
+   imports. This only exposes **server-side `.gs` functions**. It does not work for
+   `HtmlService`-served frontend code, so it can't share the Vue composables this phase was
+   about.
+2. **Manual copy-paste of identical source**, kept in sync by hand — which is already
+   exactly how the `gas()` wrapper, toast CSS/logic, palette tokens, and modal-Escape
+   handler are shared between the two files today, under the plain Options API.
+
+**Conclusion:** migrating to the Composition API would not change either of those facts —
+it would not create a single copy of a composable that both apps reference; you'd still
+hand-paste the same composable source into both `Index.html` files and keep them in sync by
+convention, exactly as today. The original trigger condition ("this enables real sharing
+that wasn't possible before") does not hold under this deployment model. The only remaining
+benefit would be **in-file organization** (grouping each file's own logic by feature) —a
+real but much smaller win than what justified the phase, and it doesn't offset the
+regression risk to the sync/pending state machine and inventory's drag/resize handlers.
+
+**Decision:** paused, not cancelled. Revisit only if the deployment model changes — e.g. the
+workflow adopts `clasp`/a build step, or a real Apps Script Library is introduced to share
+the server-side `Code.gs` logic (a separate, narrower idea from what this phase originally
+proposed, and one that wouldn't need a frontend rewrite at all). If picking this back up,
+first re-establish a concrete trigger condition — don't restart the Composition API rewrite
+on the original premise, since it's been shown not to hold.
+
+~~**Entry gate:** Phases 1–3 ✅. Additionally — this phase requires an explicit go/no-go
+decision, not just checklist completion, because unlike the prior phases it has no direct
 user-facing payoff on its own. Do not start the rewrite without re-confirming with the user
-that the trigger condition below is actually met.
-
-**Trigger condition (re-confirm before starting):** the value of the Composition API here
-is **enabling shared code between `inventory_audit` and `payroll_audit`** — pulling common
-logic (the `gas()` wrapper usage patterns, toast/status handling, settings/admin modal
-logic, CSV-upload state machine) into reusable composables instead of duplicated
-per-app methods. If, when this phase comes up, there is no active plan to actually extract
-shared logic, **defer this phase again** rather than doing a rewrite for its own sake — the
-risk (regressing the sync/pending state machine and inventory's drag/resize handlers) isn't
-justified by tidiness alone.
+that the trigger condition below is actually met.~~ *(superseded — trigger condition
+invalidated, see above)*
 
 ### Task checklist (do not start until trigger condition reconfirmed)
-- [ ] Re-confirm trigger condition with the user; log the decision here either way
+- [x] Re-confirmed trigger condition with the user 2026-07-23 — **invalidated**, see the
+      pause rationale above. The remaining checklist items below are left unstarted; they
+      describe what a future revisit would need to do if a real trigger condition emerges.
 - [ ] Inventory the logic that's actually duplicated between the two apps today (don't
       assume — diff the two `Index.html` files' `methods` blocks)
 - [ ] Design composable boundaries (e.g. `useGasCall()`, `useToasts()`,
@@ -320,7 +389,15 @@ justified by tidiness alone.
 - [ ] Status table updated to ✅
 
 ### Session log
-- *(empty)*
+- **2026-07-23**: User asked how cross-project code sharing would actually work given the
+  manual copy-paste-into-Apps-Script-editor workflow (no build step, no clasp, two separate
+  GAS projects). Investigated: Apps Script Libraries only cover server-side `.gs` functions,
+  not `HtmlService` frontend code, so they can't share the Vue composables this phase was
+  about; the only real cross-file sharing mechanism available is the manual-copy-paste
+  discipline already in use for `gas()`/toasts/palette under the current Options API. The
+  Composition API rewrite would not change that. Original trigger condition invalidated;
+  phase paused (not cancelled) rather than proceeding on a premise that doesn't hold. User
+  confirmed: pause Phase 4, move to closing out and merging the completed phases.
 
 ---
 
