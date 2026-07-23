@@ -795,15 +795,32 @@ function buildPropertyWorkbook_(ss) {
 
 /** Create a brand-new workbook for a property, fully initialized, and
  * register it. Run from Editor → Run → addProperty (edit the name first). */
-function addProperty(name) {
+function addProperty(name="Maximon") {
   name = String(name || '').trim();
   if (!name) throw new Error('addProperty: name is required.');
+  
+  // 1. Create the spreadsheet (this defaults to the root directory)
   const ss = SpreadsheetApp.create(name);
+  
+  // 2. Move the new spreadsheet to the same folder as this script
+  const scriptId = ScriptApp.getScriptId();
+  const scriptFile = DriveApp.getFileById(scriptId);
+  const parents = scriptFile.getParents();
+  
+  if (parents.hasNext()) {
+    const scriptFolder = parents.next();
+    const ssFile = DriveApp.getFileById(ss.getId());
+    ssFile.moveTo(scriptFolder);
+  }
+  
+  // 3. Continue with the rest of your original logic
   buildPropertyWorkbook_(ss);
+  
   const id = newPropertyId_(name);
   const registry = loadRegistry_();
   registry.push({ id: id, name: name, spreadsheetId: ss.getId() });
   saveRegistry_(registry);
+  
   const result = { id: id, name: name, spreadsheetId: ss.getId(), url: ss.getUrl() };
   Logger.log('Property added: ' + JSON.stringify(result));
   return result;
