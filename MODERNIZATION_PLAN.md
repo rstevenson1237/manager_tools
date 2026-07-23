@@ -4,7 +4,7 @@ Status legend: 🔲 Not started · 🟡 In progress · ✅ Done · ⏭️ Skippe
 
 | Phase | Scope | Status |
 |---|---|---|
-| [Phase 1](#phase-1-toasts-palette-sticky-header-var-modal-a11y-promise-wrapper) | Promise-ify `google.script.run` (#1) + toasts (#4) + palette (#6) + sticky-header CSS var (#7) + modal a11y (#8) | 🔲 Not started |
+| [Phase 1](#phase-1-toasts-palette-sticky-header-var-modal-a11y-promise-wrapper) | Promise-ify `google.script.run` (#1) + toasts (#4) + palette (#6) + sticky-header CSS var (#7) + modal a11y (#8) | 🟡 In progress — code done, awaiting manual/embedded verification |
 | [Phase 2](#phase-2-iconography) | Inline SVG iconography (#5) | 🔲 Not started |
 | [Phase 3](#phase-3-es5--es6) | ES5 → ES6+ cleanup (#2a) | 🔲 Not started |
 | [Phase 4](#phase-4-composition-api-evaluation) | Composition API rewrite (#2b) | 🔲 Not started |
@@ -85,7 +85,10 @@ bottom so they aren't lost.
 
 ## Phase 1: Toasts, palette, sticky-header var, modal a11y, Promise wrapper
 
-**Status:** 🔲 Not started
+**Status:** 🟡 In progress — all five sub-items implemented and committed; blocked on manual
+smoke testing and the embedded-in-Google-Sites check (see Exit gate), which need an actual
+Apps Script deployment and a browser — not available in the implementing session. **Do not
+mark ✅ until a human (or a session with deploy/browser access) has walked the Exit gate.**
 
 **Entry gate:** none — this is the starting phase. Working tree clean on
 `claude/planning-session-zu32ey` before starting.
@@ -97,55 +100,87 @@ per item (or per item-per-app) so each is independently revertable.
 
 ### Task checklist
 
-**1a. Promise-ify `google.script.run`**
-- [ ] Add a `gas(funcName, ...args)` Promise wrapper to `inventory_audit/Index.html`
-- [ ] Add the same wrapper to `payroll_audit/Index.html`
-- [ ] Migrate `.withSuccessHandler/.withFailureHandler` call sites to `await gas(...)`
+**1a. Promise-ify `google.script.run`** — ✅ done (commit `1750271`)
+- [x] Add a `gas(funcName, ...args)` Promise wrapper to `inventory_audit/Index.html`
+- [x] Add the same wrapper to `payroll_audit/Index.html`
+- [x] Migrate `.withSuccessHandler/.withFailureHandler` call sites to `await gas(...)`
       one at a time, preserving existing error-message handling (`err.message`) — behavior
       must stay identical, this is a mechanical transport change only
-  - [ ] inventory: bootstrap load, data load, sync batch, CSV summary/upload, remove data,
-        settings save/reset, global admins load/save
-  - [ ] payroll: mirror the equivalent call sites (enumerate during implementation —
-        payroll has ~13 chains per the initial audit)
-- [ ] Confirm methods calling `gas()` are `async` and callers don't assume sync return
+  - [x] inventory: bootstrap load, data load, sync batch, CSV summary/upload, remove data,
+        settings save/reset, global admins load/save (10 call sites)
+  - [x] payroll: bootstrap load, data load, company code/PDP/sales-summary/pooled saves,
+        CSV summary/upload (dynamic function name via `gas(meta.fn, ...)`), remove data,
+        settings save/reset, global admins load/save (13 call sites)
+- [x] Confirm methods calling `gas()` are `async` and callers don't assume sync return
+- [x] `google.script.url.getLocation()` in `loadBootstrap` intentionally left as a plain
+      callback — it's a different API (no `.withFailureHandler`), not a `gas()` candidate
 
-**1b. Floating toasts (replace in-flow `#status`)**
-- [ ] Convert `#status` to a `position: fixed` toast stack (top-right or bottom-right,
-      `z-index` above modals which are currently `z-index:50`)
-- [ ] Keep existing `showStatus`/`_statusTimer` logic: success/loading auto-dismiss,
-      error persists until manually dismissed
-- [ ] Support multiple stacked toasts if more than one status can be in flight
-      (check: can loading + a stale error coexist today?)
-- [ ] Apply to both `inventory_audit/Index.html` and `payroll_audit/Index.html`
+**1b. Floating toasts (replace in-flow `#status`)** — ✅ done (commit `0a917ec`)
+- [x] Convert `#status` to a `position: fixed` toast stack (top-right, `z-index: 60`,
+      above modals at `z-index: 50`)
+- [x] Keep existing `showStatus` API surface (call sites elsewhere unchanged) — reimplemented
+      internally as a `toasts` array instead of single `statusMsg`/`statusType`
+- [x] Support multiple stacked toasts: starting a new 'loading' toast clears the stack
+      (mirrors old single-banner overwrite behavior); a subsequent success/error toast
+      clears any lingering 'loading' toast. In the current app these still never overlap in
+      practice (every `showStatus` sequence is loading → terminal, never concurrent), so true
+      simultaneous stacking is untested but the data structure supports it if that changes.
+- [x] **Behavior change from the original, intentional per Gemini's ask**: error toasts now
+      persist until manually dismissed (✕ button) instead of auto-clearing after 4s; success
+      toasts auto-dismiss after 3s (was 4s)
+- [x] Applied to both apps
 
-**1c. Palette modernization**
-- [ ] Update the shared `:root` tokens in `inventory_audit/Index.html` (green/yellow/red →
-      emerald/amber/rose tints per the review, e.g. `#ecfdf5` / `#fffbeb` / `#fff1f2`)
-- [ ] Mirror in `payroll_audit/Index.html`, folding in its extra `--orange`/`--orange-b`
-      tokens so both apps share one coherent system
-- [ ] Check text contrast (WCAG AA) for row-state text against new background tints
-- [ ] Preserve row-state *semantics* (correct/review/adjust mapping unchanged)
+**1c. Palette modernization** — ✅ done (commit `25a44df`)
+- [x] Updated shared `:root` tokens in both apps: `--green #ecfdf5`, `--yellow #fffbeb`,
+      `--red #fff1f2` (emerald/amber/rose-50); payroll's `--orange` also updated to `#fff7ed`
+      for consistency
+- [x] Bold accent tokens (`--green-b`/`--yellow-b`/`--red-b`/`--orange-b`) left unchanged —
+      they're used for text/icons and already have strong contrast against the new lighter
+      backgrounds
+- [ ] **Not verified**: WCAG AA contrast check of row-state text against the new tints —
+      needs an actual contrast-checker pass against rendered output, not done from source
+      alone. Do this during the Exit gate smoke test.
+- [x] Row-state semantics unchanged (correct/review/adjust → same CSS classes, only their
+      background color values changed)
 
-**1d. Sticky header CSS variable**
-- [ ] Introduce `--table-header-height` custom property in both apps
-- [ ] inventory: replace the hardcoded `tr.section td { top:29px }`
-      (`inventory_audit/Index.html:53`) with `top: var(--table-header-height)`
-- [ ] payroll: adopt the same variable for its `th` sticky offset for parity, even though
-      it has no section-row collision today
-- [ ] Verify no visual regression in header stacking at default and slightly larger
-      font-size (browser zoom test)
+**1d. Sticky header CSS variable** — ✅ done for inventory, ⏭️ **intentionally deferred for
+payroll** (commit `b987f99`)
+- [x] Introduced `--table-header-height: 29px` in inventory's `:root`
+- [x] inventory: `tr.section td { top:29px }` → `top: var(--table-header-height)`, and `th`
+      now has an explicit `height: var(--table-header-height)` so the two values can never
+      drift apart (this is the actual fix — previously they matched only by coincidence)
+- [x] Value unchanged (29px) so there should be no visual change in inventory — **not yet
+      confirmed visually**, see Exit gate
+- [ ] ⏭️ **payroll: skipped, not done.** Reasoning: payroll's `th` uses different padding
+      (`6px 10px` vs inventory's `4px 8px`) so its natural rendered height is not 29px.
+      Forcing `height: var(--table-header-height)` on payroll's `th` would shrink/change its
+      header visually, and payroll has no two-tier sticky header depending on the value in
+      the first place (no `tr.section` equivalent) — so there is no bug to fix there, only a
+      cosmetic-consistency argument, and no way to visually verify the change in this session
+      (no browser, no live deployment). Judged the regression risk not worth a purely
+      speculative parity win. **If a future session adds a two-tier sticky header to payroll,
+      apply the same variable pattern then** — that's the point at which parity actually
+      matters functionally, not just stylistically.
 
-**1e. Modal accessibility**
-- [ ] Add `Escape`-key listener to close active modals (CSV modal, remove modal, settings
-      modal — both apps' equivalents)
-- [ ] Add `backdrop-filter: blur(4px)` + darker overlay background to `.overlay`
-- [ ] Autofocus first interactive element on modal open via `nextTick(() => ref.focus())`
-- [ ] Add `role="dialog"` and `aria-modal="true"` to modal containers
-- [ ] Confirm Escape/focus behavior is scoped correctly to the iframe (won't intercept
-      Sites-level Escape, and that's expected — document it in the log if it surprises you)
+**1e. Modal accessibility** — ✅ done (commit `6a5bb2f`)
+- [x] `Escape` key closes the active modal via the same action its visible button would
+      trigger (Cancel/Close/Done); stages with an in-flight backend call (`checking`/
+      `importing`/`removing`) have no button today either, so Escape is a no-op there too —
+      this matches existing UI affordances rather than introducing new abrupt-cancel behavior
+- [x] `.overlay` now has `backdrop-filter: blur(4px)` (+ `-webkit-` prefix) and a darker
+      scrim (`rgba(15,23,42,.6)`)
+- [x] Settings modal autofocuses the property-admin email input via `ref="firstSettingsInput"`
+      + `this.$nextTick(...)` on `openSettings()`
+- [x] `role="dialog"` + `aria-modal="true"` added to all three modal containers in both apps
+- [x] payroll previously had no `beforeUnmount` hook at all — added one so the new keydown
+      listener has somewhere to be cleaned up (parity with inventory's existing pattern)
+- [ ] **Not verified**: that Escape/focus only respond once focus is inside the app iframe,
+      as expected — this is a real behavior to confirm during the embedded-in-Sites check,
+      not something confirmable from source
 
-### Exit gate
-- [ ] All checklist items done in both apps (or explicitly marked N/A with reason)
+### Exit gate — **not yet walked, needs a session/human with deploy + browser access**
+- [x] All checklist items done in both apps, or explicitly marked deferred with reasoning
+      (see 1d payroll above)
 - [ ] Manual smoke test on raw `/exec` URL: load data, trigger a success toast, trigger an
       error toast (e.g. bad input), open every modal and close via Escape, resize a column,
       confirm sticky header/section stacking on scroll
@@ -153,10 +188,18 @@ per item (or per item-per-app) so each is independently revertable.
       Sites embed, in at least Chrome and Safari — this is the step that catches iframe-only
       regressions
 - [ ] No console errors introduced
-- [ ] Status table at top of this doc updated to ✅
+- [ ] WCAG AA contrast spot-check on the new row-state tints (carried over from 1c)
+- [ ] Status table at top of this doc updated to ✅ **only after the above are confirmed**
 
 ### Session log
-- *(empty — add entries as work happens)*
+- **2026-07-23**: Implemented all five sub-items (1a–1e) as five separate commits
+  (`1750271`, `0a917ec`, `25a44df`, `b987f99`, `6a5bb2f`) on
+  `claude/planning-session-zu32ey`. JS syntax verified with `node --check` on the extracted
+  `<script>` blocks of both files after every commit; no runtime/browser verification was
+  possible in this session (no deployed Apps Script project, no browser available). Payroll's
+  sticky-header parity (part of 1d) was deliberately skipped rather than risking an unverified
+  visual regression — see reasoning inline above. Phase left at 🟡 pending someone with
+  deploy/browser access walking the Exit gate above; flip to ✅ only after that happens.
 
 ---
 
