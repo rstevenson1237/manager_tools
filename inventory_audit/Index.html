@@ -37,7 +37,8 @@
     .tab .count{font-weight:400;opacity:.85;margin-left:6px;font-size:12px;}
     .toast-stack{position:fixed;top:16px;right:16px;z-index:60;display:flex;flex-direction:column;gap:8px;max-width:320px;}
     .toast{padding:10px 36px 10px 12px;border-radius:6px;font-weight:600;font-size:13px;box-shadow:0 2px 10px rgba(0,0,0,.18);position:relative;animation:toast-in .15s ease;}
-    .toast-close{position:absolute;top:6px;right:6px;background:none;border:none;padding:2px 6px;font-size:14px;line-height:1;cursor:pointer;color:inherit;opacity:.6;}
+    .icon{display:inline-block;vertical-align:-2px;flex-shrink:0;}
+    .toast-close{position:absolute;top:6px;right:6px;background:none;border:none;padding:2px 6px;line-height:1;cursor:pointer;color:inherit;opacity:.6;display:inline-flex;align-items:center;}
     .toast-close:hover{opacity:1;}
     @keyframes toast-in{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:translateY(0);}}
     .s-loading{background:#e8f0fe;color:var(--brand);}
@@ -60,7 +61,7 @@
     tr.row-correct{background:var(--green);}
     tr.row-review{background:var(--yellow);}
     tr.row-adjust{background:var(--red);}
-    .dup-badge{display:inline-block;margin-left:6px;font-size:10px;font-weight:700;color:#fff;background:var(--grey-b);border-radius:8px;padding:1px 6px;vertical-align:middle;}
+    .dup-badge{display:inline-flex;align-items:center;gap:3px;margin-left:6px;font-size:10px;font-weight:700;color:#fff;background:var(--grey-b);border-radius:8px;padding:1px 6px;vertical-align:middle;}
     .flag{font-weight:600;color:var(--red-b);}
     .qty{text-align:right;font-variant-numeric:tabular-nums;}
     .variance-high{color:var(--red-b);font-weight:700;}
@@ -100,7 +101,7 @@
     .settings-error{background:#f8d7da;color:#721c24;padding:8px 10px;border-radius:6px;font-size:13px;margin-bottom:10px;}
     .chip-list{list-style:none;margin:8px 0;padding:0;display:flex;flex-wrap:wrap;gap:6px;}
     .chip-list li{background:#f1f3f4;border-radius:12px;padding:4px 6px 4px 10px;font-size:12px;display:flex;align-items:center;gap:6px;}
-    .chip-remove{border:none;background:none;color:var(--danger);font-weight:700;cursor:pointer;font-size:14px;line-height:1;padding:0 2px;}
+    .chip-remove{border:none;background:none;color:var(--danger);cursor:pointer;line-height:1;padding:0 2px;display:inline-flex;align-items:center;}
     .add-row{display:flex;gap:6px;}
     .add-row input{flex:1;padding:6px 8px;border:1px solid #ccc;border-radius:5px;font-size:13px;}
     .col-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px;margin-top:6px;}
@@ -112,7 +113,7 @@
     <div class="toast-stack">
       <div v-for="t in toasts" :key="t.id" :class="['toast', 's-' + t.type]">
         {{ t.msg }}
-        <button class="toast-close" @click="dismissToast(t.id)" aria-label="Dismiss">×</button>
+        <button class="toast-close" @click="dismissToast(t.id)" aria-label="Dismiss"><svg class="icon" width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
       </div>
     </div>
 
@@ -140,7 +141,7 @@
             {{ syncing ? 'Syncing…' : (pendingCount ? 'Sync now (' + pendingCount + ')' : 'Sync now') }}
           </button>
           <button class="ghost" @click="loadData()" :disabled="loading">Refresh</button>
-          <button class="ghost" v-if="session.isAdmin" @click="openSettings">⚙ Settings</button>
+          <button class="ghost" v-if="session.isAdmin" @click="openSettings"><svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M8.6 1.5h2.8l.4 2.1c.5.15.95.36 1.38.62l1.8-1.2 2 2-1.2 1.8c.26.43.47.88.62 1.38l2.1.4v2.8l-2.1.4c-.15.5-.36.95-.62 1.38l1.2 1.8-2 2-1.8-1.2c-.43.26-.88.47-1.38.62l-.4 2.1H8.6l-.4-2.1a6.6 6.6 0 01-1.38-.62l-1.8 1.2-2-2 1.2-1.8a6.6 6.6 0 01-.62-1.38l-2.1-.4V8.6l2.1-.4c.15-.5.36-.95.62-1.38l-1.2-1.8 2-2 1.8 1.2c.43-.26.88-.47 1.38-.62l.4-2.1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><circle cx="10" cy="10" r="2.6" stroke="currentColor" stroke-width="1.3"/></svg> Settings</button>
         </div>
       </div>
 
@@ -178,7 +179,7 @@
               <tr class="empty" v-if="!section.items.length"><td :colspan="totalCols">No items in this category.</td></tr>
               <tr v-for="it in section.items" :key="section.key + '-' + it.row" :class="rowClass(it)">
                 <td><strong>{{ it.item }}</strong>
-                  <span class="dup-badge" v-if="dupCounts[it.row] > 1" :title="'Appears in ' + dupCounts[it.row] + ' categories'">×{{ dupCounts[it.row] }}</span>
+                  <span class="dup-badge" v-if="dupCounts[it.row] > 1" :title="'Appears in ' + dupCounts[it.row] + ' categories'"><svg class="icon" width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="2"/></svg>{{ dupCounts[it.row] }}</span>
                 </td>
                 <td v-for="col in visibleColumnDefs" :key="col.key" :class="[colClass(col.key), varianceClass(col.key, it.variance)]" :style="colStyle(col.key)">
                   <span v-if="col.key === 'flag' && it.flag" class="flag">{{ it.flag }}</span>
@@ -196,10 +197,10 @@
                   </select>
                 </td>
                 <td class="sync-cell">
-                  <span v-if="syncStatus[dkey(activeKey, it.row)] === 'pending'" class="badge badge-pending">● pending</span>
+                  <span v-if="syncStatus[dkey(activeKey, it.row)] === 'pending'" class="badge badge-pending"><svg class="icon" width="8" height="8" viewBox="0 0 8 8" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="4" cy="4" r="4"/></svg> pending</span>
                   <span v-else-if="syncStatus[dkey(activeKey, it.row)] === 'syncing'" class="badge badge-syncing"><span class="spin" style="margin-right:0;width:10px;height:10px;"></span></span>
-                  <span v-else-if="syncStatus[dkey(activeKey, it.row)] === 'error'" class="badge badge-error" :title="syncErrors[dkey(activeKey, it.row)] || 'Sync failed'">⚠ retry</span>
-                  <span v-else-if="syncStatus[dkey(activeKey, it.row)] === 'synced'" class="badge badge-synced">✓ synced</span>
+                  <span v-else-if="syncStatus[dkey(activeKey, it.row)] === 'error'" class="badge badge-error" :title="syncErrors[dkey(activeKey, it.row)] || 'Sync failed'"><svg class="icon" width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M12 3L22 20H2L12 3z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><line x1="12" y1="9" x2="12" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17" r="1" fill="currentColor"/></svg> retry</span>
+                  <span v-else-if="syncStatus[dkey(activeKey, it.row)] === 'synced'" class="badge badge-synced"><svg class="icon" width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M5 12l5 5L20 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg> synced</span>
                 </td>
               </tr>
             </template>
@@ -282,7 +283,7 @@
             <p class="muted">Accounts that can upload/replace data, remove data, and change these settings for this property only. Global admins always have access to every property regardless of this list.</p>
             <ul class="chip-list">
               <li v-for="e in settingsDraft.propertyAdmins" :key="e">
-                {{ e }}<button class="chip-remove" @click="removePropertyAdminEmail(e)" title="Remove">×</button>
+                {{ e }}<button class="chip-remove" @click="removePropertyAdminEmail(e)" title="Remove"><svg class="icon" width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
               </li>
             </ul>
             <div class="add-row">
@@ -296,7 +297,7 @@
             <p class="muted">Accounts with view-only access to this property.</p>
             <ul class="chip-list">
               <li v-for="e in settingsDraft.propertyUsers" :key="e">
-                {{ e }}<button class="chip-remove" @click="removePropertyUserEmail(e)" title="Remove">×</button>
+                {{ e }}<button class="chip-remove" @click="removePropertyUserEmail(e)" title="Remove"><svg class="icon" width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
               </li>
             </ul>
             <div class="add-row">
@@ -321,7 +322,7 @@
             <p class="muted">Dropdown options managers choose from. Each must start with CORRECT, REVIEW, or ADJUST.</p>
             <ul class="chip-list">
               <li v-for="c in settingsDraft.noteCategories" :key="c">
-                {{ c }}<button class="chip-remove" @click="removeCategory(c)" title="Remove">×</button>
+                {{ c }}<button class="chip-remove" @click="removeCategory(c)" title="Remove"><svg class="icon" width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
               </li>
             </ul>
             <div class="add-row">
@@ -343,7 +344,7 @@
             <template v-if="globalAdminsDraft">
               <ul class="chip-list">
                 <li v-for="e in globalAdminsDraft" :key="e">
-                  {{ e }}<button class="chip-remove" @click="removeGlobalAdminEmail(e)" title="Remove">×</button>
+                  {{ e }}<button class="chip-remove" @click="removeGlobalAdminEmail(e)" title="Remove"><svg class="icon" width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
                 </li>
               </ul>
               <div class="add-row">
