@@ -5,8 +5,8 @@ Status legend: 🔲 Not started · 🟡 In progress · ✅ Done · ⏭️ Skippe
 | Phase | Scope | Status |
 |---|---|---|
 | [Phase 1](#phase-1-toasts-palette-sticky-header-var-modal-a11y-promise-wrapper) | Promise-ify `google.script.run` (#1) + toasts (#4) + palette (#6) + sticky-header CSS var (#7) + modal a11y (#8) | ✅ Done |
-| [Phase 2](#phase-2-iconography) | Inline SVG iconography (#5) | 🟡 In progress — code done, awaiting verification |
-| [Phase 3](#phase-3-es5--es6) | ES5 → ES6+ cleanup (#2a) | 🔲 Not started |
+| [Phase 2](#phase-2-iconography) | Inline SVG iconography (#5) | ✅ Done |
+| [Phase 3](#phase-3-es5--es6) | ES5 → ES6+ cleanup (#2a) | 🟡 In progress |
 | [Phase 4](#phase-4-composition-api-evaluation) | Composition API rewrite (#2b) | 🔲 Not started |
 | Phase 5+ | *(not yet defined — see "Growing this plan")* | — |
 
@@ -207,9 +207,8 @@ payroll** (commit `b987f99`)
 
 ## Phase 2: Iconography
 
-**Status:** 🟡 In progress — code done and committed; blocked on the same kind of
-manual/embedded verification Phase 1 needed (see Exit gate). **Do not mark ✅ until a
-human confirms the icons actually render correctly.**
+**Status:** ✅ Done — user confirmed the Exit gate (icon rendering + embedded-in-Sites
+check) on 2026-07-23.
 
 **Entry gate:** Phase 1 marked ✅ (specifically 1c palette, since icons should use
 `currentColor` against the new tokens). — satisfied, Phase 1 confirmed done 2026-07-23.
@@ -236,7 +235,7 @@ iframe (proxy blocks, load failures) for a handful of glyphs that don't justify 
 - [ ] Skipped: animating the "syncing" badge — it was already the `.spin` CSS spinner, not
       an emoji, so out of scope for this phase
 
-### Exit gate — **not yet walked, needs a session/human with deploy + browser access**
+### Exit gate — ✅ confirmed by user 2026-07-23
 - [x] No emoji glyphs remain in either `Index.html` (verified via grep — zero matches)
 - [x] No new external network dependency added (verified — only the pre-existing Vue CDN
       `<script src=` tag remains in each file)
@@ -244,11 +243,9 @@ iframe (proxy blocks, load failures) for a handful of glyphs that don't justify 
       or mismatched tags introduced by the hand-written SVG markup
 - [x] JS syntax re-verified with `node --check` after the change (unaffected, but confirms
       the edits didn't corrupt anything in the `<script>` block)
-- [ ] **Not verified — needs a browser**: icons actually render as expected (correct shape,
-      size, and color) rather than just being syntactically present; alignment next to text
-      in buttons/badges/chips looks right at actual rendered size
-- [ ] Embedded-in-Sites smoke test: same rendering check inside an actual Sites embed
-- [ ] Status table updated to ✅ **only after the above are confirmed**
+- [x] Icons render as expected (correct shape, size, color, alignment next to text)
+- [x] Embedded-in-Sites smoke test passed
+- [x] Status table updated to ✅
 
 ### Session log
 - **2026-07-23**: Implemented as a single commit (`eb92d11`) on
@@ -256,19 +253,20 @@ iframe (proxy blocks, load failures) for a handful of glyphs that don't justify 
   (https://github.com/rstevenson1237/manager_tools/pull/4). Icon count sanity-checked:
   inventory has 10 `class="icon"` usages (1 toast-close + 1 gear + 1 dup-badge + 1 pending +
   1 error + 1 synced + 4 chip-remove), payroll has 5 (1 toast-close + 1 gear + 3
-  chip-remove) — both match the glyph inventory exactly. No visual/browser verification was
-  possible in the implementing session; left at 🟡 pending that check.
+  chip-remove) — both match the glyph inventory exactly.
+- **2026-07-23**: User confirmed the Exit gate (rendering + embedded-in-Sites check) passes.
+  Phase marked ✅ Done.
 
 ---
 
 ## Phase 3: ES5 → ES6+
 
-**Status:** 🔲 Not started
+**Status:** 🟡 In progress
 
 **Entry gate:** Phase 1's item 1a (Promise wrapper) must be ✅ and merged first — doing the
 `var`→`const/let`/arrow-function pass before the Promise migration would mean touching the
 same lines twice and makes the `async/await` conversion harder to review cleanly on top of
-still-ES5 callback code.
+still-ES5 callback code. — satisfied, Phase 1 confirmed done 2026-07-23.
 
 **Rationale:** mechanical modernization enabled by the V8 runtime + modern iframe (no
 functional change, no build-step requirement). Large diff — treat as its own isolated
