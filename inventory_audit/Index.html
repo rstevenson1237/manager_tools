@@ -85,7 +85,7 @@
     .muted{color:var(--grey-b);font-size:12px;}
     .empty-state{padding:60px 20px;text-align:center;color:var(--grey-b);}
     /* modal */
-    .overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;display:flex;align-items:center;justify-content:center;}
+    .overlay{position:fixed;inset:0;background:rgba(15,23,42,.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:50;display:flex;align-items:center;justify-content:center;}
     .modal{background:#fff;border-radius:10px;max-width:460px;width:92%;padding:20px;box-shadow:0 8px 30px rgba(0,0,0,.3);}
     .modal h3{margin:0 0 10px;color:var(--brand);}
     .modal .warn{background:#fff3cd;border:1px solid #ffe08a;color:#7a5b00;border-radius:6px;padding:12px;}
@@ -218,7 +218,7 @@
 
       <!-- CSV upload modal -->
       <div class="overlay" v-if="csv.stage">
-        <div class="modal">
+        <div class="modal" role="dialog" aria-modal="true" aria-label="CSV upload">
           <template v-if="csv.stage === 'checking'">
             <h3>Checking existing data…</h3>
             <p><span class="spin"></span>One moment.</p>
@@ -251,7 +251,7 @@
 
       <!-- Remove data modal -->
       <div class="overlay" v-if="removeModal.stage">
-        <div class="modal">
+        <div class="modal" role="dialog" aria-modal="true" aria-label="Remove data">
           <template v-if="removeModal.stage === 'confirm'">
             <h3>Remove all count data?</h3>
             <div class="warn"><b>This deletes both Count Details sheets and every note.</b> The next upload will recreate them.</div>
@@ -273,7 +273,7 @@
 
       <!-- Settings modal (property admin, and global admin) -->
       <div class="overlay" v-if="showSettings">
-        <div class="modal settings-modal">
+        <div class="modal settings-modal" role="dialog" aria-modal="true" aria-label="Settings">
           <h3>Settings — {{ activeProperty && activeProperty.name }}</h3>
           <p class="settings-error" v-if="settingsError">{{ settingsError }}</p>
 
@@ -286,7 +286,7 @@
               </li>
             </ul>
             <div class="add-row">
-              <input type="email" v-model="newPropertyAdminEmail" placeholder="name@company.com" @keydown.enter.prevent="addPropertyAdminEmail">
+              <input type="email" ref="firstSettingsInput" v-model="newPropertyAdminEmail" placeholder="name@company.com" @keydown.enter.prevent="addPropertyAdminEmail">
               <button class="ghost" @click="addPropertyAdminEmail">Add</button>
             </div>
           </section>
@@ -459,13 +459,27 @@
         this._autoSyncTimer = setInterval(this.autoSyncTick, AUTO_SYNC_MS);
         this._beforeUnload = this.onBeforeUnload.bind(this);
         window.addEventListener('beforeunload', this._beforeUnload);
+        this._onKeydown = this.handleEscapeKey.bind(this);
+        window.addEventListener('keydown', this._onKeydown);
       },
       beforeUnmount: function () {
         clearInterval(this._autoSyncTimer);
         window.removeEventListener('beforeunload', this._beforeUnload);
+        window.removeEventListener('keydown', this._onKeydown);
       },
       methods: {
         dkey: function (ds, row) { return ds + ' ' + row; },
+
+        handleEscapeKey: function (e) {
+          if (e.key !== 'Escape') return;
+          if (this.showSettings) { this.closeSettings(); return; }
+          if (this.csv.stage === 'confirm' || this.csv.stage === 'error') { this.closeCsvModal(); return; }
+          if (this.csv.stage === 'done') { this.finishCsvUpload(); return; }
+          if (this.removeModal.stage === 'confirm' || this.removeModal.stage === 'error') { this.closeRemoveModal(); return; }
+          if (this.removeModal.stage === 'done') { this.finishRemove(); return; }
+          // 'checking' / 'importing' / 'removing' stages have no cancel action in the
+          // UI either — an operation is in flight, so Escape is a no-op there too.
+        },
 
         showStatus: function (msg, type) {
           var self = this;
@@ -817,6 +831,10 @@
           this.globalAdmins = []; this.globalAdminsDraft = null; this.newGlobalAdminEmail = ''; this.globalAdminsError = '';
           this.showSettings = true;
           if (this.bootstrap.isGlobalAdmin) this.loadGlobalAdmins();
+          var self = this;
+          this.$nextTick(function () {
+            if (self.$refs.firstSettingsInput) self.$refs.firstSettingsInput.focus();
+          });
         },
         closeSettings: function () { this.showSettings = false; this.settingsDraft = null; },
         addPropertyAdminEmail: function () {
