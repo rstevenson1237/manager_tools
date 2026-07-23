@@ -503,6 +503,16 @@
       { test: function (s) { return s.indexOf('Wrong Company Code') === 0; }, cls: 'row-wrongcode' }
     ];
 
+    // Promise wrapper around google.script.run so call sites can use async/await
+    // instead of chained .withSuccessHandler()/.withFailureHandler() callbacks.
+    var gas = function (funcName) {
+      var args = Array.prototype.slice.call(arguments, 1);
+      return new Promise(function (resolve, reject) {
+        var runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+        runner[funcName].apply(runner, args);
+      });
+    };
+
     var app = Vue.createApp({
       data: function () {
         return {
@@ -590,26 +600,24 @@
         },
 
         /* ---------- bootstrap / property selection ---------- */
-        loadBootstrap: function () {
+        loadBootstrap: async function () {
           this.bootLoading = true;
-          var self = this;
-          google.script.run
-            .withSuccessHandler(function (b) {
-              self.bootstrap = b;
-              self.bootLoading = false;
-              if (!b.properties.length) return;
-              if (b.properties.length === 1) { self.selectProperty(b.properties[0]); return; }
-              google.script.url.getLocation(function (loc) {
-                var wanted = loc && loc.parameter && loc.parameter.property;
-                var match = wanted && b.properties.filter(function (p) { return p.id === wanted; })[0];
-                self.selectProperty(match || b.properties[0]);
-              });
-            })
-            .withFailureHandler(function (err) {
-              self.bootLoading = false;
-              self.showStatus('Error loading properties: ' + err.message, 'error');
-            })
-            .getBootstrap();
+          try {
+            var b = await gas('getBootstrap');
+            this.bootstrap = b;
+            this.bootLoading = false;
+            if (!b.properties.length) return;
+            if (b.properties.length === 1) { this.selectProperty(b.properties[0]); return; }
+            var self = this;
+            google.script.url.getLocation(function (loc) {
+              var wanted = loc && loc.parameter && loc.parameter.property;
+              var match = wanted && b.properties.filter(function (p) { return p.id === wanted; })[0];
+              self.selectProperty(match || b.properties[0]);
+            });
+          } catch (err) {
+            this.bootLoading = false;
+            this.showStatus('Error loading properties: ' + err.message, 'error');
+          }
         },
         onPropertyChange: function (id) {
           var p = this.bootstrap.properties.filter(function (x) { return x.id === id; })[0];
@@ -621,75 +629,77 @@
         },
 
         /* ---------- load ---------- */
-        loadData: function () {
+        loadData: async function () {
           if (!this.activeProperty) return;
           this.loading = true;
           this.showStatus('Loading payroll data…', 'loading');
-          var self = this;
-          google.script.run
-            .withSuccessHandler(function (payload) {
-              self.data = payload;
-              self.session = payload.session;
-              self.companyCodeDraft = payload.settings.companyCode || '';
-              self.salesSummaryDraft = (payload.settings.salesSummary || []).map(function (r) {
-                return { label: r.label, value: r.value };
-              });
-              self.pooledDraft = (payload.settings.pooledWithholding || []).map(function (p) {
-                return { label: p.label, jobClass: p.jobClass, poolServersText: (p.poolServers || []).join(', ') };
-              });
-              var draft = {};
-              payload.daily.days.forEach(function (d) {
-                var e = payload.pdpManual.byDay.filter(function (x) { return x.date === d; })[0] || {};
-                draft[d] = { addlTips: e.addlTips || 0, cashSvc: e.cashSvc || 0, ccFee: e.ccFee || 0,
-                  ccSvc: e.ccSvc || 0, declared: e.declared || 0 };
-              });
-              self.pdpManualDraft = draft;
-              self.loading = false;
-              self.showStatus('Data loaded.', 'success');
-            })
-            .withFailureHandler(function (err) {
-              self.loading = false;
-              self.showStatus('Error loading data: ' + err.message, 'error');
-            })
-            .getPayrollData(this.activeProperty.id);
+          try {
+            var payload = await gas('getPayrollData', this.activeProperty.id);
+            this.data = payload;
+            this.session = payload.session;
+            this.companyCodeDraft = payload.settings.companyCode || '';
+            this.salesSummaryDraft = (payload.settings.salesSummary || []).map(function (r) {
+              return { label: r.label, value: r.value };
+            });
+            this.pooledDraft = (payload.settings.pooledWithholding || []).map(function (p) {
+              return { label: p.label, jobClass: p.jobClass, poolServersText: (p.poolServers || []).join(', ') };
+            });
+            var draft = {};
+            payload.daily.days.forEach(function (d) {
+              var e = payload.pdpManual.byDay.filter(function (x) { return x.date === d; })[0] || {};
+              draft[d] = { addlTips: e.addlTips || 0, cashSvc: e.cashSvc || 0, ccFee: e.ccFee || 0,
+                ccSvc: e.ccSvc || 0, declared: e.declared || 0 };
+            });
+            this.pdpManualDraft = draft;
+            this.loading = false;
+            this.showStatus('Data loaded.', 'success');
+          } catch (err) {
+            this.loading = false;
+            this.showStatus('Error loading data: ' + err.message, 'error');
+          }
         },
 
         /* ---------- manual-entry saves (admin) ---------- */
-        saveCompanyCode: function () {
-          var self = this;
-          google.script.run
-            .withSuccessHandler(function (code) {
-              self.data.settings.companyCode = code;
-              self.showStatus('Company code saved.', 'success');
-              self.loadData();
-            })
-            .withFailureHandler(function (err) { self.showStatus('Error: ' + err.message, 'error'); })
-            .saveCompanyCode(this.activeProperty.id, this.companyCodeDraft);
+        saveCompanyCode: async function () {
+          try {
+            var code = await gas('saveCompanyCode', this.activeProperty.id, this.companyCodeDraft);
+            this.data.settings.companyCode = code;
+            this.showStatus('Company code saved.', 'success');
+            this.loadData();
+          } catch (err) {
+            this.showStatus('Error: ' + err.message, 'error');
+          }
         },
-        savePdpManualTotals: function () {
-          var self = this;
-          google.script.run
-            .withSuccessHandler(function () { self.showStatus('PDP daily totals saved.', 'success'); self.loadData(); })
-            .withFailureHandler(function (err) { self.showStatus('Error: ' + err.message, 'error'); })
-            .savePdpManualTotals(this.activeProperty.id, this.pdpManualDraft);
+        savePdpManualTotals: async function () {
+          try {
+            await gas('savePdpManualTotals', this.activeProperty.id, this.pdpManualDraft);
+            this.showStatus('PDP daily totals saved.', 'success');
+            this.loadData();
+          } catch (err) {
+            this.showStatus('Error: ' + err.message, 'error');
+          }
         },
-        saveSalesSummary: function () {
-          var self = this;
-          google.script.run
-            .withSuccessHandler(function () { self.showStatus('Sales Summary saved.', 'success'); self.loadData(); })
-            .withFailureHandler(function (err) { self.showStatus('Error: ' + err.message, 'error'); })
-            .saveSalesSummary(this.activeProperty.id, this.salesSummaryDraft);
+        saveSalesSummary: async function () {
+          try {
+            await gas('saveSalesSummary', this.activeProperty.id, this.salesSummaryDraft);
+            this.showStatus('Sales Summary saved.', 'success');
+            this.loadData();
+          } catch (err) {
+            this.showStatus('Error: ' + err.message, 'error');
+          }
         },
-        savePooledConfig: function () {
-          var self = this;
+        savePooledConfig: async function () {
           var payload = this.pooledDraft.map(function (p) {
             return { label: p.label, jobClass: p.jobClass,
               poolServers: (p.poolServersText || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean) };
           });
-          google.script.run
-            .withSuccessHandler(function () { self.showStatus('Pooled withholding saved.', 'success'); self.loadData(); })
-            .withFailureHandler(function (err) { self.showStatus('Error: ' + err.message, 'error'); })
-            .savePooledConfig(this.activeProperty.id, payload);
+          try {
+            await gas('savePooledConfig', this.activeProperty.id, payload);
+            this.showStatus('Pooled withholding saved.', 'success');
+            this.loadData();
+          } catch (err) {
+            this.showStatus('Error: ' + err.message, 'error');
+          }
         },
 
         /* ---------- CSV upload / remove (admin) ---------- */
@@ -705,41 +715,43 @@
           var reader = new FileReader();
           var self = this;
           var meta = this.csvMeta(kind);
-          reader.onload = function (ev) {
+          reader.onload = async function (ev) {
             e.target.value = '';
             self.csv = { stage: 'checking', kind: kind, label: meta.label, existingRows: 0, fileText: ev.target.result, error: null, result: null };
-            google.script.run
-              .withSuccessHandler(function (summary) {
-                var sheetInfo = summary.sheets.filter(function (s) { return s.key === kind; })[0];
-                self.csv.existingRows = sheetInfo ? sheetInfo.rows : 0;
-                if (self.csv.existingRows > 0) { self.csv.stage = 'confirm'; }
-                else { self.doUpload(); }
-              })
-              .withFailureHandler(function (err) { self.csv.stage = 'error'; self.csv.error = err.message; })
-              .getExistingDataSummary(self.activeProperty.id);
+            try {
+              var summary = await gas('getExistingDataSummary', self.activeProperty.id);
+              var sheetInfo = summary.sheets.filter(function (s) { return s.key === kind; })[0];
+              self.csv.existingRows = sheetInfo ? sheetInfo.rows : 0;
+              if (self.csv.existingRows > 0) { self.csv.stage = 'confirm'; }
+              else { self.doUpload(); }
+            } catch (err) {
+              self.csv.stage = 'error'; self.csv.error = err.message;
+            }
           };
           reader.readAsText(f);
         },
-        doUpload: function () {
+        doUpload: async function () {
           this.csv.stage = 'importing';
-          var self = this;
           var meta = this.csvMeta(this.csv.kind);
-          var runner = google.script.run
-            .withSuccessHandler(function (res) { self.csv.stage = 'done'; self.csv.result = res; })
-            .withFailureHandler(function (err) { self.csv.stage = 'error'; self.csv.error = err.message; });
-          runner[meta.fn](this.activeProperty.id, this.csv.fileText);
+          try {
+            var res = await gas(meta.fn, this.activeProperty.id, this.csv.fileText);
+            this.csv.stage = 'done'; this.csv.result = res;
+          } catch (err) {
+            this.csv.stage = 'error'; this.csv.error = err.message;
+          }
         },
         closeCsvModal: function () { this.csv = { stage: null, kind: null, label: '', existingRows: 0, fileText: null, error: null, result: null }; },
         finishCsvUpload: function () { this.closeCsvModal(); this.loadData(); },
 
         askRemove: function () { this.removeModal = { stage: 'confirm', error: null }; },
-        doRemove: function () {
+        doRemove: async function () {
           this.removeModal.stage = 'removing';
-          var self = this;
-          google.script.run
-            .withSuccessHandler(function () { self.removeModal.stage = 'done'; })
-            .withFailureHandler(function (err) { self.removeModal.stage = 'error'; self.removeModal.error = err.message; })
-            .removeAllPayrollData(this.activeProperty.id);
+          try {
+            await gas('removeAllPayrollData', this.activeProperty.id);
+            this.removeModal.stage = 'done';
+          } catch (err) {
+            this.removeModal.stage = 'error'; this.removeModal.error = err.message;
+          }
         },
         closeRemoveModal: function () { this.removeModal = { stage: null, error: null }; },
         finishRemove: function () { this.closeRemoveModal(); this.loadData(); },
@@ -781,42 +793,41 @@
         removePropertyUserEmail: function (email) {
           this.settingsDraft.propertyUsers = this.settingsDraft.propertyUsers.filter(function (e) { return e !== email; });
         },
-        saveSettingsDraft: function () {
+        saveSettingsDraft: async function () {
           this.settingsError = '';
-          var self = this;
-          google.script.run
-            .withSuccessHandler(function (s) {
-              self.data.settings.propertyAdmins = s.propertyAdmins;
-              self.data.settings.propertyUsers = s.propertyUsers;
-              self.showSettings = false;
-              self.settingsDraft = null;
-              self.showStatus('Settings saved.', 'success');
-            })
-            .withFailureHandler(function (err) { self.settingsError = err.message; })
-            .saveSettings(this.activeProperty.id, this.settingsDraft);
+          try {
+            var s = await gas('saveSettings', this.activeProperty.id, this.settingsDraft);
+            this.data.settings.propertyAdmins = s.propertyAdmins;
+            this.data.settings.propertyUsers = s.propertyUsers;
+            this.showSettings = false;
+            this.settingsDraft = null;
+            this.showStatus('Settings saved.', 'success');
+          } catch (err) {
+            this.settingsError = err.message;
+          }
         },
-        resetSettingsToDefault: function () {
+        resetSettingsToDefault: async function () {
           if (!confirm('Reset this property\'s settings to the hardcoded defaults? This clears the company code, manual-entry figures, admins, and users.')) return;
           this.settingsError = '';
-          var self = this;
-          google.script.run
-            .withSuccessHandler(function () {
-              self.showSettings = false;
-              self.settingsDraft = null;
-              self.showStatus('Settings reset to defaults.', 'success');
-              self.loadData();
-            })
-            .withFailureHandler(function (err) { self.settingsError = err.message; })
-            .resetSettings(this.activeProperty.id);
+          try {
+            await gas('resetSettings', this.activeProperty.id);
+            this.showSettings = false;
+            this.settingsDraft = null;
+            this.showStatus('Settings reset to defaults.', 'success');
+            this.loadData();
+          } catch (err) {
+            this.settingsError = err.message;
+          }
         },
 
         /* ---------- global admins (global admin only) ---------- */
-        loadGlobalAdmins: function () {
-          var self = this;
-          google.script.run
-            .withSuccessHandler(function (list) { self.globalAdmins = list; self.globalAdminsDraft = list.slice(); })
-            .withFailureHandler(function (err) { self.globalAdminsError = err.message; })
-            .getGlobalAdmins();
+        loadGlobalAdmins: async function () {
+          try {
+            var list = await gas('getGlobalAdmins');
+            this.globalAdmins = list; this.globalAdminsDraft = list.slice();
+          } catch (err) {
+            this.globalAdminsError = err.message;
+          }
         },
         addGlobalAdminEmail: function () {
           var e = this.newGlobalAdminEmail.trim();
@@ -833,16 +844,15 @@
           }
           this.globalAdminsDraft = this.globalAdminsDraft.filter(function (e) { return e !== email; });
         },
-        saveGlobalAdminsDraft: function () {
+        saveGlobalAdminsDraft: async function () {
           this.globalAdminsError = '';
-          var self = this;
-          google.script.run
-            .withSuccessHandler(function (list) {
-              self.globalAdmins = list; self.globalAdminsDraft = list.slice();
-              self.showStatus('Global admins saved.', 'success');
-            })
-            .withFailureHandler(function (err) { self.globalAdminsError = err.message; })
-            .saveGlobalAdmins(this.globalAdminsDraft);
+          try {
+            var list = await gas('saveGlobalAdmins', this.globalAdminsDraft);
+            this.globalAdmins = list; this.globalAdminsDraft = list.slice();
+            this.showStatus('Global admins saved.', 'success');
+          } catch (err) {
+            this.globalAdminsError = err.message;
+          }
         }
       }
     });
