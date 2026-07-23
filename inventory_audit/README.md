@@ -318,7 +318,7 @@ hidden buttons.
 2. Add the files: `Code.gs`, `Import.gs` (script); `Index.html` (HTML, named
    exactly `Index`). In **Project Settings**, show and replace
    `appsscript.json` with the provided manifest.
-3. The seed global admin (`rstevenson1237@gmail.com`) lives in
+3. The seed global admin (`robert.stevenson@atlasrestaurantgroup.com`) lives in
    `DEFAULT_GLOBAL_ADMINS` in `Code.gs`. Change it there before first deploy
    if a different account should be the initial admin, or just sign in as
    that account once deployed and add co-admins from the Settings panel.
