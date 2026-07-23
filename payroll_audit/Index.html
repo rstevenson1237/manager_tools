@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <style>
+    :root{--brand:#1a73e8;--brand-dark:#1557b0;--green:#d9ead3;--green-b:#38761d;
+      --yellow:#fff2cc;--yellow-b:#bf9000;--red:#f4cccc;--red-b:#cc0000;--orange:#fce5cd;--orange-b:#b45f06;
+      --grey-b:#5f6368;--danger:#d93025;}
+    *{box-sizing:border-box;}
+    [v-cloak]{display:none;}
+    body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;margin:0;padding:8px;background:#f8f9fa;color:#202124;}
+    .header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:8px;}
+    h2{margin:0;color:var(--brand);font-size:20px;}
+    h4{margin:0 0 4px;color:#3c4043;}
+    .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+    button{background:var(--brand);color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;transition:background-color .15s ease;}
+    button:hover:not(:disabled){background:var(--brand-dark);}
+    button:disabled{background:#ccc;cursor:not-allowed;}
+    button.ghost{background:#e8eaed;color:#3c4043;}
+    button.ghost:hover:not(:disabled){background:#dadce0;}
+    button.danger{background:var(--danger);}
+    button.danger:hover:not(:disabled){background:#b3271b;}
+    button.small{padding:5px 10px;font-size:12px;}
+    .property-select{width:auto;padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;background:#fff;color:#202124;font-weight:600;}
+    /* admin bar */
+    #adminBar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#eef3fe;border:1px solid #cfe0ff;
+      border-radius:8px;padding:10px 12px;margin-bottom:10px;}
+    #adminBar .who{font-size:12px;color:var(--grey-b);margin-left:auto;}
+    #adminBar label.upload{background:var(--brand);color:#fff;padding:8px 14px;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;}
+    #adminBar label.upload:hover{background:var(--brand-dark);}
+    #adminBar input[type=file]{display:none;}
+    .cc-field{display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #cfe0ff;border-radius:6px;padding:4px 4px 4px 10px;}
+    .cc-field label{font-size:12px;font-weight:700;color:var(--grey-b);}
+    .cc-field input{border:none;width:70px;font-weight:700;font-size:13px;padding:4px;}
+    .admin-title{font-weight:700;color:#3c4043;}
+    .tabs{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;}
+    .tab{background:#e8eaed;color:#3c4043;padding:8px 14px;border-radius:6px 6px 0 0;cursor:pointer;font-weight:600;border:none;}
+    .tab.active{background:var(--brand);color:#fff;}
+    .tab .count{font-weight:400;opacity:.85;margin-left:6px;font-size:12px;}
+    #status{padding:10px 12px;margin-bottom:10px;border-radius:6px;font-weight:600;transition:opacity .2s ease;}
+    .s-loading{background:#e8f0fe;color:var(--brand);}
+    .s-success{background:#d4edda;color:#155724;}
+    .s-error{background:#f8d7da;color:#721c24;}
+    .table-container{width:100%;max-height:600px;overflow:auto;border:1px solid #ddd;background:#fff;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,.05);margin-bottom:16px;}
+    table{width:100%;border-collapse:collapse;}
+    th{background:#f1f3f4;padding:6px 10px;text-align:left;position:sticky;top:0;z-index:2;box-shadow:0 1px 0 #ddd;font-size:12px;white-space:nowrap;}
+    td{padding:6px 10px;border-bottom:1px solid #eee;font-size:13px;vertical-align:middle;white-space:nowrap;}
+    td.num, th.num{text-align:right;font-variant-numeric:tabular-nums;}
+    tr.total-row td{font-weight:700;background:#f1f3f4;border-top:2px solid #ccc;}
+    tr.row-match{background:var(--green);}
+    tr.row-missing{background:var(--red);}
+    tr.row-mismatch{background:var(--yellow);}
+    tr.row-wrongcode{background:var(--orange);}
+    input.cell-input{width:90px;padding:4px 6px;border:1px solid #ccc;border-radius:4px;font-size:12px;text-align:right;}
+    input.text-input{padding:6px 8px;border:1px solid #ccc;border-radius:5px;font-size:13px;width:100%;}
+    .section-title{font-weight:700;color:#3c4043;margin:18px 0 8px;font-size:15px;}
+    .muted{color:var(--grey-b);font-size:12px;}
+    .empty-state{padding:60px 20px;text-align:center;color:var(--grey-b);}
+    .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-bottom:16px;}
+    .card{background:#fff;border:1px solid #ddd;border-radius:8px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.05);}
+    .card .stat{font-size:22px;font-weight:700;color:var(--brand);}
+    .card .label{font-size:12px;color:var(--grey-b);margin-bottom:4px;}
+    .card .row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+    .field-row{display:flex;flex-direction:column;gap:3px;margin-bottom:8px;}
+    .field-row label{font-size:11px;font-weight:700;color:var(--grey-b);text-transform:uppercase;letter-spacing:.03em;}
+    .compare-good{color:var(--green-b);font-weight:700;}
+    .compare-bad{color:var(--red-b);font-weight:700;}
+    /* modal */
+    .overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;display:flex;align-items:center;justify-content:center;}
+    .modal{background:#fff;border-radius:10px;max-width:460px;width:92%;padding:20px;box-shadow:0 8px 30px rgba(0,0,0,.3);}
+    .modal.wide{max-width:640px;}
+    .modal h3{margin:0 0 10px;color:var(--brand);}
+    .modal .warn{background:#fff3cd;border:1px solid #ffe08a;color:#7a5b00;border-radius:6px;padding:12px;}
+    .modal ul{margin:8px 0 0 18px;padding:0;}
+    .modal .row{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;}
+    .spin{display:inline-block;width:14px;height:14px;border:2px solid #cfe0ff;border-top-color:var(--brand);border-radius:50%;animation:s .8s linear infinite;vertical-align:middle;margin-right:6px;}
+    @keyframes s{to{transform:rotate(360deg);}}
+    .settings-modal{max-width:600px;max-height:86vh;overflow-y:auto;}
+    .settings-section{margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid #eee;}
+    .settings-section:last-of-type{border-bottom:none;}
+    .settings-error{background:#f8d7da;color:#721c24;padding:8px 10px;border-radius:6px;font-size:13px;margin-bottom:10px;}
+    .chip-list{list-style:none;margin:8px 0;padding:0;display:flex;flex-wrap:wrap;gap:6px;}
+    .chip-list li{background:#f1f3f4;border-radius:12px;padding:4px 6px 4px 10px;font-size:12px;display:flex;align-items:center;gap:6px;}
+    .chip-remove{border:none;background:none;color:var(--danger);font-weight:700;cursor:pointer;font-size:14px;line-height:1;padding:0 2px;}
+    .add-row{display:flex;gap:6px;}
+    .add-row input{flex:1;padding:6px 8px;border:1px solid #ccc;border-radius:5px;font-size:13px;}
+  </style>
+</head>
+<body>
+  <div id="app" v-cloak>
+    <div v-if="bootLoading" class="empty-state"><span class="spin"></span>Loading…</div>
+
+    <div v-else-if="!bootstrap.properties.length" class="empty-state">
+      No properties are configured for your account.<br>Contact an admin.
+    </div>
+
+    <template v-else>
+      <div class="header">
+        <h2>{{ activeProperty ? activeProperty.name + ' — Payroll Audit' : 'Payroll Audit' }}</h2>
+        <div class="controls">
+          <select v-if="bootstrap.properties.length > 1" class="property-select"
+            :value="activeProperty && activeProperty.id" @change="onPropertyChange($event.target.value)">
+            <option v-for="p in bootstrap.properties" :key="p.id" :value="p.id">{{ p.name }}</option>
+          </select>
+          <button class="ghost" @click="loadData()" :disabled="loading">Refresh</button>
+          <button class="ghost" v-if="session.isAdmin" @click="openSettings">⚙ Settings</button>
+        </div>
+      </div>
+
+      <div id="adminBar" v-if="session.isAdmin">
+        <span class="admin-title">Admin</span>
+        <div class="cc-field">
+          <label>Company Code</label>
+          <input type="text" v-model="companyCodeDraft" @keydown.enter.prevent="saveCompanyCode" placeholder="e.g. QPI">
+          <button class="small ghost" @click="saveCompanyCode">Save</button>
+        </div>
+        <label class="upload">Upload PDP Export (CSV)
+          <input type="file" accept=".csv" @change="onCsvFileChosen($event, 'pdp')">
+        </label>
+        <label class="upload">Upload Toast Labor (CSV)
+          <input type="file" accept=".csv" @change="onCsvFileChosen($event, 'toast')">
+        </label>
+        <label class="upload">Upload Toast Payments (CSV)
+          <input type="file" accept=".csv" @change="onCsvFileChosen($event, 'payments')">
+        </label>
+        <button class="danger" @click="askRemove">Remove all data</button>
+        <span class="who">signed in as {{ session.email || 'unknown' }}<template v-if="bootstrap.isGlobalAdmin"> · global admin</template></span>
+      </div>
+
+      <div id="status" :class="'s-' + statusType" v-if="statusMsg">{{ statusMsg }}</div>
+
+      <div class="tabs" v-if="data">
+        <button v-for="v in VIEWS" :key="v.key" :class="['tab', { active: v.key === activeView }]" @click="activeView = v.key">
+          {{ v.label }}
+        </button>
+      </div>
+
+      <!-- ============================ VIEW: DAY-BY-DAY AUDIT ============================ -->
+      <div v-if="data && activeView === 'daily'">
+        <p class="muted">Pay period: {{ periodLabel }}. Each column buckets sales into the business day they belong
+          to (a sale after midnight but before 5:00am counts against the prior day).</p>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th class="num" v-for="d in data.daily.days" :key="d">{{ formatDateShort(d) }}</th>
+                <th class="num">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in dailyRowDefs" :key="r.key">
+                <td><strong>{{ r.label }}</strong></td>
+                <td class="num" v-for="(d, i) in data.daily.perDay" :key="i">{{ formatCurrency(d[r.key]) }}</td>
+                <td class="num"><strong>{{ formatCurrency(data.daily.totals[r.key]) }}</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ============================ VIEW: TOTALS AUDIT ============================ -->
+      <div v-if="data && activeView === 'totals'">
+        <div class="section-title">Period Totals (Payments)</div>
+        <div class="table-container">
+          <table>
+            <thead><tr><th></th><th class="num">Total</th></tr></thead>
+            <tbody>
+              <tr v-for="r in dailyRowDefs" :key="r.key">
+                <td>{{ r.label }}</td><td class="num">{{ formatCurrency(data.daily.totals[r.key]) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="section-title">PDP Daily Totals (manual entry)</div>
+        <p class="muted">From PDP → Calculated Data → TOTALS (DAILY) → Gratuity Income. PDP Total = Addl Tips + Cash SVC + CC SVC.</p>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th class="num" v-for="d in data.daily.days" :key="d">{{ formatDateShort(d) }}</th>
+                <th class="num">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="f in PDP_FIELDS" :key="f.key">
+                <td>{{ f.label }}</td>
+                <td class="num" v-for="d in data.daily.days" :key="d">
+                  <input v-if="session.isAdmin" class="cell-input" type="number" step="0.01"
+                    v-model.number="pdpManualDraft[d][f.key]">
+                  <template v-else>{{ formatCurrency(pdpManualDraft[d][f.key]) }}</template>
+                </td>
+                <td class="num"><strong>{{ formatCurrency(pdpDayTotalSum(f.key)) }}</strong></td>
+              </tr>
+              <tr class="total-row">
+                <td>PDP Total</td>
+                <td class="num" v-for="d in data.daily.days" :key="d">{{ formatCurrency(pdpDayTotal(d)) }}</td>
+                <td class="num">{{ formatCurrency(pdpGrandTotal) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="controls" style="margin-bottom:16px;" v-if="session.isAdmin">
+          <button @click="savePdpManualTotals">Save PDP daily totals</button>
+        </div>
+
+        <div class="cards">
+          <div class="card">
+            <div class="label">Toast Total (Payments)</div>
+            <div class="stat">{{ formatCurrency(data.daily.totals.toastTotal) }}</div>
+          </div>
+          <div class="card">
+            <div class="label">PDP Total (manual entry)</div>
+            <div class="stat">{{ formatCurrency(pdpGrandTotal) }}</div>
+          </div>
+          <div class="card">
+            <div class="label">Difference (PDP − Toast)</div>
+            <div class="stat" :class="Math.abs(pdpGrandTotal - data.daily.totals.toastTotal) > 1 ? 'compare-bad' : 'compare-good'">
+              {{ formatCurrency(pdpGrandTotal - data.daily.totals.toastTotal) }}
+            </div>
+          </div>
+        </div>
+
+        <div class="section-title">Sales Summary (manual entry)</div>
+        <p class="muted">Free-form comparison figures pulled from the POS Sales Summary report, for cross-checking against the Payments data above.</p>
+        <div class="table-container">
+          <table>
+            <thead><tr><th>Label</th><th class="num">Value</th><th v-if="session.isAdmin"></th></tr></thead>
+            <tbody>
+              <tr v-for="(row, i) in salesSummaryDraft" :key="i">
+                <td><input v-if="session.isAdmin" class="text-input" type="text" v-model="row.label" placeholder="e.g. Net Sales">
+                    <template v-else>{{ row.label }}</template></td>
+                <td class="num"><input v-if="session.isAdmin" class="cell-input" type="number" step="0.01" v-model.number="row.value">
+                    <template v-else>{{ formatCurrency(row.value) }}</template></td>
+                <td v-if="session.isAdmin"><button class="small ghost" @click="salesSummaryDraft.splice(i,1)">Remove</button></td>
+              </tr>
+              <tr class="total-row">
+                <td>Total</td><td class="num">{{ formatCurrency(salesSummaryTotal) }}</td><td v-if="session.isAdmin"></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="controls" style="margin-bottom:16px;" v-if="session.isAdmin">
+          <button class="ghost" @click="salesSummaryDraft.push({label:'', value:0})" :disabled="salesSummaryDraft.length >= 10">Add row</button>
+          <button @click="saveSalesSummary">Save Sales Summary</button>
+        </div>
+      </div>
+
+      <!-- ============================ VIEW: ERROR REPORTING ============================ -->
+      <div v-if="data && activeView === 'errors'">
+        <div class="cards">
+          <div class="card">
+            <div class="label">Employees reconciled</div>
+            <div class="stat">{{ data.hours.length }}</div>
+          </div>
+          <div class="card">
+            <div class="label">Unmatched / flagged</div>
+            <div class="stat" :class="data.unmatched.length ? 'compare-bad' : 'compare-good'">{{ data.unmatched.length }}</div>
+          </div>
+        </div>
+
+        <div class="section-title">Unmatched Employees</div>
+        <div class="table-container" v-if="data.unmatched.length">
+          <table>
+            <thead><tr><th>Employee</th><th>Error</th></tr></thead>
+            <tbody>
+              <tr v-for="u in data.unmatched" :key="u.name" :class="rowClassForStatus(u.error)">
+                <td>{{ u.name }}</td><td>{{ u.error }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="muted" v-else>No errors found — every employee matched between PDP and Toast.</p>
+
+        <div class="section-title">Hours Reconciliation (PDP vs Toast)</div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr><th>Employee</th><th class="num">PDP Hours</th><th class="num">Toast Hours</th><th>Co Code</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="h in data.hours" :key="h.name" :class="rowClassForStatus(h.status)">
+                <td>{{ h.name }}</td>
+                <td class="num">{{ h.pdpHours.toFixed(2) }}</td>
+                <td class="num">{{ h.toastHours.toFixed(2) }}</td>
+                <td>{{ h.coCode || '—' }}</td>
+                <td>{{ h.status }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ============================ VIEW: EMPLOYEE WITHHOLDING ============================ -->
+      <div v-if="data && activeView === 'withholding'">
+        <div class="section-title">Per-Server 2% Withholding</div>
+        <p class="muted">2% of (Tip + Gratuity) on Cash and Other-type payments, per server — the amount added back to payroll as a withholding reimbursement.</p>
+        <div class="table-container">
+          <table>
+            <thead><tr><th>Server</th><th class="num">Amount (2%)</th></tr></thead>
+            <tbody>
+              <tr v-for="r in data.withholding.perServer.rows" :key="r.server">
+                <td>{{ r.server }}</td><td class="num">{{ formatCurrency(r.amount) }}</td>
+              </tr>
+              <tr class="total-row">
+                <td>2% Withholding Addition for Payroll</td><td class="num">{{ formatCurrency(data.withholding.perServer.total) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="section-title">Pooled Withholding</div>
+        <p class="muted">For pooled positions (e.g. AM Bar / Indoor Bar / Outdoor Bar): the pool's combined 2% withholding, split evenly across every Toast employee in the given job class.</p>
+        <div class="cards">
+          <div class="card" v-for="(pool, i) in pooledDraft" :key="i">
+            <div class="field-row">
+              <label>Pool label</label>
+              <input class="text-input" type="text" v-model="pool.label" :disabled="!session.isAdmin">
+            </div>
+            <div class="field-row">
+              <label>Pool servers (comma-separated)</label>
+              <input class="text-input" type="text" v-model="pool.poolServersText" :disabled="!session.isAdmin" placeholder="AM Bar, Indoor Bar, Outdoor Bar">
+            </div>
+            <div class="field-row">
+              <label>Job class (Toast job title)</label>
+              <input class="text-input" type="text" v-model="pool.jobClass" :disabled="!session.isAdmin" placeholder="Bartender">
+            </div>
+            <div class="row"><span class="muted">Pool total</span><strong>{{ formatCurrency(data.withholding.pooled[i] && data.withholding.pooled[i].poolTotal) }}</strong></div>
+            <div class="row"><span class="muted">Employees in class</span><strong>{{ (data.withholding.pooled[i] && data.withholding.pooled[i].employeeCount) || 0 }}</strong></div>
+            <div class="row"><span class="muted">Per employee</span><strong>{{ formatCurrency(data.withholding.pooled[i] && data.withholding.pooled[i].perEmployee) }}</strong></div>
+          </div>
+        </div>
+        <div class="controls" style="margin-bottom:16px;" v-if="session.isAdmin">
+          <button @click="savePooledConfig">Save pooled withholding</button>
+        </div>
+      </div>
+
+      <p v-if="!data && loading" class="muted">Loading payroll data…</p>
+      <p v-else-if="!data" class="muted">No data yet.</p>
+
+      <p class="muted" v-if="data && data.generatedAt">
+        Loaded {{ new Date(data.generatedAt).toLocaleString() }}. Hours, daily totals, and withholding are computed
+        live from the uploaded CSVs — nothing here is stored except the manual-entry figures above.
+      </p>
+
+      <!-- CSV upload modal -->
+      <div class="overlay" v-if="csv.stage">
+        <div class="modal">
+          <template v-if="csv.stage === 'checking'">
+            <h3>Checking existing data…</h3>
+            <p><span class="spin"></span>One moment.</p>
+          </template>
+          <template v-else-if="csv.stage === 'confirm'">
+            <h3>Replace {{ csv.label }} data?</h3>
+            <div class="warn">
+              <b>This permanently erases the current {{ csv.label }} rows:</b>
+              <ul><li>{{ csv.existingRows }} existing rows</li></ul>
+            </div>
+            <div class="row"><button class="ghost" @click="closeCsvModal">Cancel</button><button class="danger" @click="doUpload">Wipe &amp; import</button></div>
+          </template>
+          <template v-else-if="csv.stage === 'importing'">
+            <h3>Importing…</h3>
+            <p><span class="spin"></span>Wiping and loading the new {{ csv.label }} data.</p>
+          </template>
+          <template v-else-if="csv.stage === 'done'">
+            <h3>Import complete</h3>
+            <p>Loaded {{ csv.result.rows }} {{ csv.label }} rows.</p>
+            <div class="row"><button @click="finishCsvUpload">Done</button></div>
+          </template>
+          <template v-else-if="csv.stage === 'error'">
+            <h3>Import failed</h3>
+            <p>{{ csv.error }}</p>
+            <p class="muted">Existing data was not changed.</p>
+            <div class="row"><button class="ghost" @click="closeCsvModal">Close</button></div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Remove data modal -->
+      <div class="overlay" v-if="removeModal.stage">
+        <div class="modal">
+          <template v-if="removeModal.stage === 'confirm'">
+            <h3>Remove all payroll data?</h3>
+            <div class="warn"><b>This deletes the PDP, Toast, and Payments sheets.</b> The next upload will recreate them.</div>
+            <div class="row"><button class="ghost" @click="closeRemoveModal">Cancel</button><button class="danger" @click="doRemove">Remove everything</button></div>
+          </template>
+          <template v-else-if="removeModal.stage === 'removing'">
+            <h3>Removing…</h3><p><span class="spin"></span>Deleting payroll data.</p>
+          </template>
+          <template v-else-if="removeModal.stage === 'done'">
+            <h3>Removed</h3><p>All payroll data deleted.</p>
+            <div class="row"><button @click="finishRemove">Done</button></div>
+          </template>
+          <template v-else-if="removeModal.stage === 'error'">
+            <h3>Could not remove</h3><p>{{ removeModal.error }}</p>
+            <div class="row"><button class="ghost" @click="closeRemoveModal">Close</button></div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Settings modal (property admin, and global admin) -->
+      <div class="overlay" v-if="showSettings">
+        <div class="modal settings-modal">
+          <h3>Settings — {{ activeProperty && activeProperty.name }}</h3>
+          <p class="settings-error" v-if="settingsError">{{ settingsError }}</p>
+
+          <section class="settings-section">
+            <h4>Property admins</h4>
+            <p class="muted">Accounts that can upload/replace data, edit manual-entry figures, and change these settings for this property only. Global admins always have access to every property regardless of this list.</p>
+            <ul class="chip-list">
+              <li v-for="e in settingsDraft.propertyAdmins" :key="e">
+                {{ e }}<button class="chip-remove" @click="removePropertyAdminEmail(e)" title="Remove">×</button>
+              </li>
+            </ul>
+            <div class="add-row">
+              <input type="email" v-model="newPropertyAdminEmail" placeholder="name@company.com" @keydown.enter.prevent="addPropertyAdminEmail">
+              <button class="ghost" @click="addPropertyAdminEmail">Add</button>
+            </div>
+          </section>
+
+          <section class="settings-section">
+            <h4>Property users</h4>
+            <p class="muted">Accounts with view-only access to this property.</p>
+            <ul class="chip-list">
+              <li v-for="e in settingsDraft.propertyUsers" :key="e">
+                {{ e }}<button class="chip-remove" @click="removePropertyUserEmail(e)" title="Remove">×</button>
+              </li>
+            </ul>
+            <div class="add-row">
+              <input type="email" v-model="newPropertyUserEmail" placeholder="name@company.com" @keydown.enter.prevent="addPropertyUserEmail">
+              <button class="ghost" @click="addPropertyUserEmail">Add</button>
+            </div>
+          </section>
+
+          <section class="settings-section">
+            <h4>Reset</h4>
+            <p class="muted">Restore this property's admins, users, company code, and manual-entry figures to the hardcoded defaults.</p>
+            <button class="danger" @click="resetSettingsToDefault">Reset to defaults</button>
+          </section>
+
+          <section class="settings-section" v-if="bootstrap.isGlobalAdmin">
+            <h4>Global admins</h4>
+            <p class="muted">Accounts with admin access to every property, always. Only global admins can edit this list.</p>
+            <p class="settings-error" v-if="globalAdminsError">{{ globalAdminsError }}</p>
+            <template v-if="globalAdminsDraft">
+              <ul class="chip-list">
+                <li v-for="e in globalAdminsDraft" :key="e">
+                  {{ e }}<button class="chip-remove" @click="removeGlobalAdminEmail(e)" title="Remove">×</button>
+                </li>
+              </ul>
+              <div class="add-row">
+                <input type="email" v-model="newGlobalAdminEmail" placeholder="name@company.com" @keydown.enter.prevent="addGlobalAdminEmail">
+                <button class="ghost" @click="addGlobalAdminEmail">Add</button>
+              </div>
+              <div class="row"><button class="ghost" @click="saveGlobalAdminsDraft">Save global admins</button></div>
+            </template>
+          </section>
+
+          <div class="row">
+            <button class="ghost" @click="closeSettings">Cancel</button>
+            <button @click="saveSettingsDraft">Save settings</button>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/vue@3.4.31/dist/vue.global.prod.js"></script>
+  <script>
+    var VIEWS = [
+      { key: 'daily', label: 'Day-by-Day Audit' },
+      { key: 'totals', label: 'Totals Audit' },
+      { key: 'errors', label: 'Error Reporting' },
+      { key: 'withholding', label: 'Employee Withholding' }
+    ];
+    var DAILY_ROW_DEFS = [
+      { key: 'creditTips', label: 'Credit - Tips' },
+      { key: 'creditGrat', label: 'Credit - Grat' },
+      { key: 'cashTips', label: 'Cash - Tips' },
+      { key: 'cashGrat', label: 'Cash - Grat' },
+      { key: 'otherTips', label: 'Other - Tips' },
+      { key: 'otherGrat', label: 'Other - Grat' },
+      { key: 'withholding', label: 'Withholding (2%)' },
+      { key: 'voids', label: 'Voids' },
+      { key: 'denied', label: 'Denied' },
+      { key: 'refunds', label: 'Refunds' },
+      { key: 'toastTotal', label: 'Toast - Total' }
+    ];
+    var PDP_FIELDS = [
+      { key: 'addlTips', label: 'Addl Tips' },
+      { key: 'cashSvc', label: 'Cash SVC' },
+      { key: 'ccFee', label: 'CC Fee' },
+      { key: 'ccSvc', label: 'CC SVC' },
+      { key: 'declared', label: 'Declared' }
+    ];
+    var STATUS_CLASS_MAP = [
+      { test: function (s) { return s === 'Match'; }, cls: 'row-match' },
+      { test: function (s) { return s.indexOf('Missing') === 0; }, cls: 'row-missing' },
+      { test: function (s) { return s.indexOf('Hours Mismatch') === 0; }, cls: 'row-mismatch' },
+      { test: function (s) { return s.indexOf('Wrong Company Code') === 0; }, cls: 'row-wrongcode' }
+    ];
+
+    var app = Vue.createApp({
+      data: function () {
+        return {
+          VIEWS: VIEWS,
+          PDP_FIELDS: PDP_FIELDS,
+          dailyRowDefs: DAILY_ROW_DEFS,
+          bootLoading: true,
+          bootstrap: { email: '', isGlobalAdmin: false, properties: [] },
+          activeProperty: null,
+          activeView: 'daily',
+          data: null,
+          session: { email: '', isAdmin: false },
+          loading: true,
+          statusMsg: '', statusType: '',
+          companyCodeDraft: '',
+          pdpManualDraft: {},      // date -> {addlTips,cashSvc,ccFee,ccSvc,declared}
+          salesSummaryDraft: [],  // [{label, value}]
+          pooledDraft: [],        // [{label, poolServersText, jobClass}]
+          csv: { stage: null, kind: null, label: '', existingRows: 0, fileText: null, error: null, result: null },
+          removeModal: { stage: null, error: null },
+          showSettings: false,
+          settingsDraft: null,
+          newPropertyAdminEmail: '',
+          newPropertyUserEmail: '',
+          settingsError: '',
+          globalAdmins: [],
+          globalAdminsDraft: null,
+          newGlobalAdminEmail: '',
+          globalAdminsError: ''
+        };
+      },
+      computed: {
+        periodLabel: function () {
+          if (!this.data || !this.data.daily.days.length) return '—';
+          var days = this.data.daily.days;
+          return this.formatDateShort(days[0]) + ' – ' + this.formatDateShort(days[days.length - 1]);
+        },
+        pdpGrandTotal: function () {
+          var self = this;
+          if (!this.data) return 0;
+          return this.data.daily.days.reduce(function (s, d) { return s + self.pdpDayTotal(d); }, 0);
+        },
+        salesSummaryTotal: function () {
+          return this.salesSummaryDraft.reduce(function (s, r) { return s + (Number(r.value) || 0); }, 0);
+        }
+      },
+      mounted: function () {
+        this.loadBootstrap();
+      },
+      methods: {
+        showStatus: function (msg, type) {
+          this.statusMsg = msg; this.statusType = type;
+          clearTimeout(this._statusTimer);
+          if (type === 'success' || type === 'error') {
+            this._statusTimer = setTimeout((function (self) { return function () { self.statusMsg = ''; }; })(this), 4000);
+          }
+        },
+
+        formatDateShort: function (isoDate) {
+          var d = new Date(isoDate + 'T00:00:00');
+          return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        },
+        formatCurrency: function (v) {
+          var n = Number(v);
+          if (v === null || v === undefined || isNaN(n)) return '—';
+          return n.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
+        },
+        rowClassForStatus: function (status) {
+          var found = STATUS_CLASS_MAP.filter(function (m) { return m.test(status); })[0];
+          return found ? found.cls : '';
+        },
+
+        pdpDayTotal: function (dateStr) {
+          var e = this.pdpManualDraft[dateStr];
+          if (!e) return 0;
+          return (Number(e.addlTips) || 0) + (Number(e.cashSvc) || 0) + (Number(e.ccSvc) || 0);
+        },
+        pdpDayTotalSum: function (fieldKey) {
+          var self = this;
+          if (!this.data) return 0;
+          return this.data.daily.days.reduce(function (s, d) {
+            var e = self.pdpManualDraft[d];
+            return s + (e ? (Number(e[fieldKey]) || 0) : 0);
+          }, 0);
+        },
+
+        /* ---------- bootstrap / property selection ---------- */
+        loadBootstrap: function () {
+          this.bootLoading = true;
+          var self = this;
+          google.script.run
+            .withSuccessHandler(function (b) {
+              self.bootstrap = b;
+              self.bootLoading = false;
+              if (!b.properties.length) return;
+              if (b.properties.length === 1) { self.selectProperty(b.properties[0]); return; }
+              google.script.url.getLocation(function (loc) {
+                var wanted = loc && loc.parameter && loc.parameter.property;
+                var match = wanted && b.properties.filter(function (p) { return p.id === wanted; })[0];
+                self.selectProperty(match || b.properties[0]);
+              });
+            })
+            .withFailureHandler(function (err) {
+              self.bootLoading = false;
+              self.showStatus('Error loading properties: ' + err.message, 'error');
+            })
+            .getBootstrap();
+        },
+        onPropertyChange: function (id) {
+          var p = this.bootstrap.properties.filter(function (x) { return x.id === id; })[0];
+          if (p) this.selectProperty(p);
+        },
+        selectProperty: function (p) {
+          this.activeProperty = p;
+          this.loadData();
+        },
+
+        /* ---------- load ---------- */
+        loadData: function () {
+          if (!this.activeProperty) return;
+          this.loading = true;
+          this.showStatus('Loading payroll data…', 'loading');
+          var self = this;
+          google.script.run
+            .withSuccessHandler(function (payload) {
+              self.data = payload;
+              self.session = payload.session;
+              self.companyCodeDraft = payload.settings.companyCode || '';
+              self.salesSummaryDraft = (payload.settings.salesSummary || []).map(function (r) {
+                return { label: r.label, value: r.value };
+              });
+              self.pooledDraft = (payload.settings.pooledWithholding || []).map(function (p) {
+                return { label: p.label, jobClass: p.jobClass, poolServersText: (p.poolServers || []).join(', ') };
+              });
+              var draft = {};
+              payload.daily.days.forEach(function (d) {
+                var e = payload.pdpManual.byDay.filter(function (x) { return x.date === d; })[0] || {};
+                draft[d] = { addlTips: e.addlTips || 0, cashSvc: e.cashSvc || 0, ccFee: e.ccFee || 0,
+                  ccSvc: e.ccSvc || 0, declared: e.declared || 0 };
+              });
+              self.pdpManualDraft = draft;
+              self.loading = false;
+              self.showStatus('Data loaded.', 'success');
+            })
+            .withFailureHandler(function (err) {
+              self.loading = false;
+              self.showStatus('Error loading data: ' + err.message, 'error');
+            })
+            .getPayrollData(this.activeProperty.id);
+        },
+
+        /* ---------- manual-entry saves (admin) ---------- */
+        saveCompanyCode: function () {
+          var self = this;
+          google.script.run
+            .withSuccessHandler(function (code) {
+              self.data.settings.companyCode = code;
+              self.showStatus('Company code saved.', 'success');
+              self.loadData();
+            })
+            .withFailureHandler(function (err) { self.showStatus('Error: ' + err.message, 'error'); })
+            .saveCompanyCode(this.activeProperty.id, this.companyCodeDraft);
+        },
+        savePdpManualTotals: function () {
+          var self = this;
+          google.script.run
+            .withSuccessHandler(function () { self.showStatus('PDP daily totals saved.', 'success'); self.loadData(); })
+            .withFailureHandler(function (err) { self.showStatus('Error: ' + err.message, 'error'); })
+            .savePdpManualTotals(this.activeProperty.id, this.pdpManualDraft);
+        },
+        saveSalesSummary: function () {
+          var self = this;
+          google.script.run
+            .withSuccessHandler(function () { self.showStatus('Sales Summary saved.', 'success'); self.loadData(); })
+            .withFailureHandler(function (err) { self.showStatus('Error: ' + err.message, 'error'); })
+            .saveSalesSummary(this.activeProperty.id, this.salesSummaryDraft);
+        },
+        savePooledConfig: function () {
+          var self = this;
+          var payload = this.pooledDraft.map(function (p) {
+            return { label: p.label, jobClass: p.jobClass,
+              poolServers: (p.poolServersText || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean) };
+          });
+          google.script.run
+            .withSuccessHandler(function () { self.showStatus('Pooled withholding saved.', 'success'); self.loadData(); })
+            .withFailureHandler(function (err) { self.showStatus('Error: ' + err.message, 'error'); })
+            .savePooledConfig(this.activeProperty.id, payload);
+        },
+
+        /* ---------- CSV upload / remove (admin) ---------- */
+        csvMeta: function (kind) {
+          return {
+            pdp: { label: 'PDP', fn: 'processPdpCsv' },
+            toast: { label: 'Toast Labor', fn: 'processToastCsv' },
+            payments: { label: 'Toast Payments', fn: 'processPaymentsCsv' }
+          }[kind];
+        },
+        onCsvFileChosen: function (e, kind) {
+          var f = e.target.files[0]; if (!f) return;
+          var reader = new FileReader();
+          var self = this;
+          var meta = this.csvMeta(kind);
+          reader.onload = function (ev) {
+            e.target.value = '';
+            self.csv = { stage: 'checking', kind: kind, label: meta.label, existingRows: 0, fileText: ev.target.result, error: null, result: null };
+            google.script.run
+              .withSuccessHandler(function (summary) {
+                var sheetInfo = summary.sheets.filter(function (s) { return s.key === kind; })[0];
+                self.csv.existingRows = sheetInfo ? sheetInfo.rows : 0;
+                if (self.csv.existingRows > 0) { self.csv.stage = 'confirm'; }
+                else { self.doUpload(); }
+              })
+              .withFailureHandler(function (err) { self.csv.stage = 'error'; self.csv.error = err.message; })
+              .getExistingDataSummary(self.activeProperty.id);
+          };
+          reader.readAsText(f);
+        },
+        doUpload: function () {
+          this.csv.stage = 'importing';
+          var self = this;
+          var meta = this.csvMeta(this.csv.kind);
+          var runner = google.script.run
+            .withSuccessHandler(function (res) { self.csv.stage = 'done'; self.csv.result = res; })
+            .withFailureHandler(function (err) { self.csv.stage = 'error'; self.csv.error = err.message; });
+          runner[meta.fn](this.activeProperty.id, this.csv.fileText);
+        },
+        closeCsvModal: function () { this.csv = { stage: null, kind: null, label: '', existingRows: 0, fileText: null, error: null, result: null }; },
+        finishCsvUpload: function () { this.closeCsvModal(); this.loadData(); },
+
+        askRemove: function () { this.removeModal = { stage: 'confirm', error: null }; },
+        doRemove: function () {
+          this.removeModal.stage = 'removing';
+          var self = this;
+          google.script.run
+            .withSuccessHandler(function () { self.removeModal.stage = 'done'; })
+            .withFailureHandler(function (err) { self.removeModal.stage = 'error'; self.removeModal.error = err.message; })
+            .removeAllPayrollData(this.activeProperty.id);
+        },
+        closeRemoveModal: function () { this.removeModal = { stage: null, error: null }; },
+        finishRemove: function () { this.closeRemoveModal(); this.loadData(); },
+
+        /* ---------- settings (property admin) ---------- */
+        openSettings: function () {
+          this.settingsDraft = {
+            propertyAdmins: this.data.settings.propertyAdmins.slice(),
+            propertyUsers: this.data.settings.propertyUsers.slice()
+          };
+          this.newPropertyAdminEmail = ''; this.newPropertyUserEmail = ''; this.settingsError = '';
+          this.globalAdmins = []; this.globalAdminsDraft = null; this.newGlobalAdminEmail = ''; this.globalAdminsError = '';
+          this.showSettings = true;
+          if (this.bootstrap.isGlobalAdmin) this.loadGlobalAdmins();
+        },
+        closeSettings: function () { this.showSettings = false; this.settingsDraft = null; },
+        addPropertyAdminEmail: function () {
+          var e = this.newPropertyAdminEmail.trim();
+          if (!e) return;
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { this.settingsError = 'Enter a valid email address.'; return; }
+          var exists = this.settingsDraft.propertyAdmins.some(function (x) { return x.toLowerCase() === e.toLowerCase(); });
+          if (!exists) this.settingsDraft.propertyAdmins.push(e);
+          this.newPropertyAdminEmail = ''; this.settingsError = '';
+        },
+        removePropertyAdminEmail: function (email) {
+          if (!this.bootstrap.isGlobalAdmin && this.session.email && email.toLowerCase() === this.session.email.toLowerCase()) {
+            if (!confirm('This removes your own admin access to this property. Continue?')) return;
+          }
+          this.settingsDraft.propertyAdmins = this.settingsDraft.propertyAdmins.filter(function (e) { return e !== email; });
+        },
+        addPropertyUserEmail: function () {
+          var e = this.newPropertyUserEmail.trim();
+          if (!e) return;
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { this.settingsError = 'Enter a valid email address.'; return; }
+          var exists = this.settingsDraft.propertyUsers.some(function (x) { return x.toLowerCase() === e.toLowerCase(); });
+          if (!exists) this.settingsDraft.propertyUsers.push(e);
+          this.newPropertyUserEmail = ''; this.settingsError = '';
+        },
+        removePropertyUserEmail: function (email) {
+          this.settingsDraft.propertyUsers = this.settingsDraft.propertyUsers.filter(function (e) { return e !== email; });
+        },
+        saveSettingsDraft: function () {
+          this.settingsError = '';
+          var self = this;
+          google.script.run
+            .withSuccessHandler(function (s) {
+              self.data.settings.propertyAdmins = s.propertyAdmins;
+              self.data.settings.propertyUsers = s.propertyUsers;
+              self.showSettings = false;
+              self.settingsDraft = null;
+              self.showStatus('Settings saved.', 'success');
+            })
+            .withFailureHandler(function (err) { self.settingsError = err.message; })
+            .saveSettings(this.activeProperty.id, this.settingsDraft);
+        },
+        resetSettingsToDefault: function () {
+          if (!confirm('Reset this property\'s settings to the hardcoded defaults? This clears the company code, manual-entry figures, admins, and users.')) return;
+          this.settingsError = '';
+          var self = this;
+          google.script.run
+            .withSuccessHandler(function () {
+              self.showSettings = false;
+              self.settingsDraft = null;
+              self.showStatus('Settings reset to defaults.', 'success');
+              self.loadData();
+            })
+            .withFailureHandler(function (err) { self.settingsError = err.message; })
+            .resetSettings(this.activeProperty.id);
+        },
+
+        /* ---------- global admins (global admin only) ---------- */
+        loadGlobalAdmins: function () {
+          var self = this;
+          google.script.run
+            .withSuccessHandler(function (list) { self.globalAdmins = list; self.globalAdminsDraft = list.slice(); })
+            .withFailureHandler(function (err) { self.globalAdminsError = err.message; })
+            .getGlobalAdmins();
+        },
+        addGlobalAdminEmail: function () {
+          var e = this.newGlobalAdminEmail.trim();
+          if (!e) return;
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { this.globalAdminsError = 'Enter a valid email address.'; return; }
+          var exists = this.globalAdminsDraft.some(function (x) { return x.toLowerCase() === e.toLowerCase(); });
+          if (!exists) this.globalAdminsDraft.push(e);
+          this.newGlobalAdminEmail = ''; this.globalAdminsError = '';
+        },
+        removeGlobalAdminEmail: function (email) {
+          if (this.globalAdminsDraft.length <= 1) { this.globalAdminsError = 'At least one global admin is required.'; return; }
+          if (this.session.email && email.toLowerCase() === this.session.email.toLowerCase()) {
+            if (!confirm('This removes your own global admin access. Continue?')) return;
+          }
+          this.globalAdminsDraft = this.globalAdminsDraft.filter(function (e) { return e !== email; });
+        },
+        saveGlobalAdminsDraft: function () {
+          this.globalAdminsError = '';
+          var self = this;
+          google.script.run
+            .withSuccessHandler(function (list) {
+              self.globalAdmins = list; self.globalAdminsDraft = list.slice();
+              self.showStatus('Global admins saved.', 'success');
+            })
+            .withFailureHandler(function (err) { self.globalAdminsError = err.message; })
+            .saveGlobalAdmins(this.globalAdminsDraft);
+        }
+      }
+    });
+
+    app.mount('#app');
+  </script>
+</body>
+</html>
