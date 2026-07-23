@@ -5,7 +5,7 @@ Status legend: 🔲 Not started · 🟡 In progress · ✅ Done · ⏭️ Skippe
 | Phase | Scope | Status |
 |---|---|---|
 | [Phase 1](#phase-1-toasts-palette-sticky-header-var-modal-a11y-promise-wrapper) | Promise-ify `google.script.run` (#1) + toasts (#4) + palette (#6) + sticky-header CSS var (#7) + modal a11y (#8) | ✅ Done |
-| [Phase 2](#phase-2-iconography) | Inline SVG iconography (#5) | 🟡 In progress |
+| [Phase 2](#phase-2-iconography) | Inline SVG iconography (#5) | 🟡 In progress — code done, awaiting verification |
 | [Phase 3](#phase-3-es5--es6) | ES5 → ES6+ cleanup (#2a) | 🔲 Not started |
 | [Phase 4](#phase-4-composition-api-evaluation) | Composition API rewrite (#2b) | 🔲 Not started |
 | Phase 5+ | *(not yet defined — see "Growing this plan")* | — |
@@ -207,7 +207,9 @@ payroll** (commit `b987f99`)
 
 ## Phase 2: Iconography
 
-**Status:** 🟡 In progress
+**Status:** 🟡 In progress — code done and committed; blocked on the same kind of
+manual/embedded verification Phase 1 needed (see Exit gate). **Do not mark ✅ until a
+human confirms the icons actually render correctly.**
 
 **Entry gate:** Phase 1 marked ✅ (specifically 1c palette, since icons should use
 `currentColor` against the new tokens). — satisfied, Phase 1 confirmed done 2026-07-23.
@@ -217,29 +219,45 @@ not a CDN icon library — an extra CDN dependency is a real risk inside the san
 iframe (proxy blocks, load failures) for a handful of glyphs that don't justify it.
 
 ### Task checklist
-- [ ] Identify full glyph inventory across both apps: `⚙` (settings), `×` (remove/close,
-      several places), `●` (pending), `⚠` (error/retry), `✓` (synced) — confirm no others
-      missed via a fresh grep before starting
-- [ ] Source or hand-draw minimal SVG paths for each (e.g. from a permissively-licensed set,
-      redrawn/simplified by hand — do not add a CDN or npm dependency)
-- [ ] Inline each as a `<svg>` in the template (or a small Vue functional component /
-      inline snippet reused via a helper), sized via `em`/`currentColor` so it inherits the
-      surrounding text color and the palette tokens from Phase 1
-- [ ] Replace emoji usages one-for-one in `inventory_audit/Index.html` and
-      `payroll_audit/Index.html`
-- [ ] Optional nice-to-have (only if trivial): animate the "syncing" icon as a rotating
-      spinner instead of the existing `.spin` div, if it can reuse the same CSS keyframe
+- [x] Identified full glyph inventory across both apps via grep: `⚙` settings (1 each app),
+      `×` remove/close (toast-close ×2 total, chip-remove ×4 inventory/×3 payroll,
+      dup-badge ×1 inventory-only), `●` pending (1, inventory-only), `⚠` error/retry
+      (1, inventory-only), `✓` synced (1, inventory-only). The "syncing" badge already used
+      the existing CSS `.spin` div, not an emoji — left untouched.
+- [x] Hand-drew minimal SVG paths for each (close-x, settings gear, dot, warning triangle,
+      checkmark, duplicate/copy icon for the ×N badge) — no CDN or npm dependency added
+- [x] Inlined each directly in the templates as `<svg class="icon" ... stroke/fill=
+      "currentColor">`, so they inherit each context's existing text color (badge classes,
+      `--danger`, etc.) and will track any future palette changes automatically
+- [x] Replaced every emoji usage one-for-one in both `Index.html` files
+- [x] Added a shared `.icon` CSS class (baseline alignment) and switched `.chip-remove` /
+      `.toast-close` to `inline-flex` centering; `.dup-badge` changed from `inline-block` to
+      `inline-flex` so its new icon aligns with the count text
+- [ ] Skipped: animating the "syncing" badge — it was already the `.spin` CSS spinner, not
+      an emoji, so out of scope for this phase
 
-### Exit gate
-- [ ] No emoji glyphs remain in either `Index.html` for status/UI iconography
-- [ ] No new external network dependency added (verify: no new `<script src=` /
-      `<link href=` pointing off-origin)
-- [ ] Icons render consistently and pick up palette colors correctly in both apps
-- [ ] Embedded-in-Sites smoke test (icons visible, not blocked, correctly colored)
-- [ ] Status table updated to ✅
+### Exit gate — **not yet walked, needs a session/human with deploy + browser access**
+- [x] No emoji glyphs remain in either `Index.html` (verified via grep — zero matches)
+- [x] No new external network dependency added (verified — only the pre-existing Vue CDN
+      `<script src=` tag remains in each file)
+- [x] HTML tag balance verified programmatically (Python `HTMLParser` walk) — no unclosed
+      or mismatched tags introduced by the hand-written SVG markup
+- [x] JS syntax re-verified with `node --check` after the change (unaffected, but confirms
+      the edits didn't corrupt anything in the `<script>` block)
+- [ ] **Not verified — needs a browser**: icons actually render as expected (correct shape,
+      size, and color) rather than just being syntactically present; alignment next to text
+      in buttons/badges/chips looks right at actual rendered size
+- [ ] Embedded-in-Sites smoke test: same rendering check inside an actual Sites embed
+- [ ] Status table updated to ✅ **only after the above are confirmed**
 
 ### Session log
-- *(empty)*
+- **2026-07-23**: Implemented as a single commit (`eb92d11`) on
+  `claude/planning-session-zu32ey`, part of PR #4
+  (https://github.com/rstevenson1237/manager_tools/pull/4). Icon count sanity-checked:
+  inventory has 10 `class="icon"` usages (1 toast-close + 1 gear + 1 dup-badge + 1 pending +
+  1 error + 1 synced + 4 chip-remove), payroll has 5 (1 toast-close + 1 gear + 3
+  chip-remove) — both match the glyph inventory exactly. No visual/browser verification was
+  possible in the implementing session; left at 🟡 pending that check.
 
 ---
 
