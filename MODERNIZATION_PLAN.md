@@ -6,8 +6,8 @@ Status legend: 🔲 Not started · 🟡 In progress · ✅ Done · ⏭️ Skippe
 |---|---|---|
 | [Phase 1](#phase-1-toasts-palette-sticky-header-var-modal-a11y-promise-wrapper) | Promise-ify `google.script.run` (#1) + toasts (#4) + palette (#6) + sticky-header CSS var (#7) + modal a11y (#8) | ✅ Done |
 | [Phase 2](#phase-2-iconography) | Inline SVG iconography (#5) | ✅ Done |
-| [Phase 3](#phase-3-es5--es6) | ES5 → ES6+ cleanup (#2a) | 🟡 In progress — code done, awaiting verification |
-| [Phase 4](#phase-4-composition-api-evaluation) | Composition API rewrite (#2b) | 🔲 Not started |
+| [Phase 3](#phase-3-es5--es6) | ES5 → ES6+ cleanup (#2a) | ✅ Done |
+| [Phase 4](#phase-4-composition-api-evaluation) | Composition API rewrite (#2b) | 🔲 Not started — trigger condition being reconfirmed |
 | Phase 5+ | *(not yet defined — see "Growing this plan")* | — |
 
 ---
@@ -261,9 +261,8 @@ iframe (proxy blocks, load failures) for a handful of glyphs that don't justify 
 
 ## Phase 3: ES5 → ES6+
 
-**Status:** 🟡 In progress — code done and committed; blocked on the same kind of manual
-regression pass Phases 1–2 needed (see Exit gate). **Do not mark ✅ until a human has run
-through the app's core flows and confirmed nothing broke.**
+**Status:** ✅ Done — user confirmed the Exit gate (manual regression pass across both
+apps' core flows, embedded-in-Sites check) on 2026-07-23.
 
 **Entry gate:** Phase 1's item 1a (Promise wrapper) must be ✅ and merged first — doing the
 `var`→`const/let`/arrow-function pass before the Promise migration would mean touching the
@@ -299,20 +298,17 @@ commit(s), not bundled with any feature work.
       *nested* callbacks (arguments to array methods, timers, event/DOM callbacks) were
       converted to arrows.
 
-### Exit gate — **not yet walked, needs a human regression pass**
+### Exit gate — ✅ confirmed by user 2026-07-23
 - [x] No remaining `var` declarations in either `Index.html` (verified via grep — zero)
 - [x] No remaining `self` identifier anywhere in either file (verified via grep — zero;
       stronger check than just `var self = this`, confirms no dangling references)
 - [x] JS syntax verified with `node --check` on the extracted `<script>` blocks of both
       files, immediately after each file's conversion
-- [ ] **Not verified — needs a human**: full manual regression pass (load, edit/select a
-      note in inventory, CSV upload in both apps, settings save, sync, column drag/resize
-      in inventory) confirming behavior is identical to pre-Phase-3. This phase carries more
-      behavioral risk than Phases 1-2 since it touches nearly every line of both files'
-      `<script>` blocks — the `git diff` review during implementation only confirms the
-      *diff* is mechanical, not that the app still behaves correctly at runtime.
-- [ ] Embedded-in-Sites smoke test
-- [ ] Status table updated to ✅ **only after the above are confirmed**
+- [x] Full manual regression pass (load, edit/select a note in inventory, CSV upload in
+      both apps, settings save, sync, column drag/resize in inventory) confirmed identical
+      to pre-Phase-3 behavior
+- [x] Embedded-in-Sites smoke test passed
+- [x] Status table updated to ✅
 
 ### Session log
 - **2026-07-23**: Implemented as two commits, one per app, on
@@ -320,12 +316,10 @@ commit(s), not bundled with any feature work.
   `inventory_audit` conversion and `payroll_audit` conversion. Reviewed the full `git diff`
   for both files line by line during implementation — every change is a mechanical
   `var`→`const`/`let` or `function`→arrow conversion, confirmed no logic drift. No
-  runtime/browser regression testing was possible in the implementing session. This is the
-  highest-risk phase completed so far by line-count touched (nearly the entire `<script>`
-  block of both files), so the manual regression pass in the Exit gate matters more here
-  than it did for Phases 1-2 — please exercise the note-editing/sync flow (inventory) and
-  the CSV upload flow (both apps) specifically, since those have the deepest nesting of
-  converted callbacks.
+  runtime/browser regression testing was possible in the implementing session.
+- **2026-07-23**: User ran the manual regression pass (including note-editing/sync in
+  inventory and CSV upload in both apps) and the embedded-in-Sites check, confirmed no
+  regressions. Phase marked ✅ Done.
 
 ---
 
