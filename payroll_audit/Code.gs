@@ -57,7 +57,7 @@ const FIRST_DATA_ROW = 2;
  * registry live in this standalone project's Script Properties.
  */
 const GLOBAL_ADMIN_KEY = 'GLOBAL_ADMIN_EMAILS';
-const DEFAULT_GLOBAL_ADMINS = ['rstevenson1237@gmail.com'];
+const DEFAULT_GLOBAL_ADMINS = ['robert.stevenson@atlasrestaurantgroup.com'];
 const REGISTRY_KEY = 'PROPERTY_REGISTRY_V1';
 
 function scriptProps_() {
