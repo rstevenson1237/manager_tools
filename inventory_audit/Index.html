@@ -366,23 +366,20 @@
 
   <script src="https://cdn.jsdelivr.net/npm/vue@3.4.31/dist/vue.global.prod.js"></script>
   <script>
-    var CATEGORY_GROUPS = ['CORRECT', 'REVIEW', 'ADJUST'];
-    var NUMERIC_COLS = ['currentQty', 'currentCost', 'currentTotal', 'previousQty', 'prevCost', 'prevTotal', 'adjustment', 'variance'];
-    var CURRENCY_COLS = ['currentCost', 'currentTotal', 'prevCost', 'prevTotal'];
-    var STATUS_CLASS = { correct: 'row-correct', review: 'row-review', adjust: 'row-adjust' };
-    var AUTO_SYNC_MS = 20000;
+    const CATEGORY_GROUPS = ['CORRECT', 'REVIEW', 'ADJUST'];
+    const NUMERIC_COLS = ['currentQty', 'currentCost', 'currentTotal', 'previousQty', 'prevCost', 'prevTotal', 'adjustment', 'variance'];
+    const CURRENCY_COLS = ['currentCost', 'currentTotal', 'prevCost', 'prevTotal'];
+    const STATUS_CLASS = { correct: 'row-correct', review: 'row-review', adjust: 'row-adjust' };
+    const AUTO_SYNC_MS = 20000;
 
     // Promise wrapper around google.script.run so call sites can use async/await
     // instead of chained .withSuccessHandler()/.withFailureHandler() callbacks.
-    var gas = function (funcName) {
-      var args = Array.prototype.slice.call(arguments, 1);
-      return new Promise(function (resolve, reject) {
-        var runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
-        runner[funcName].apply(runner, args);
-      });
-    };
+    const gas = (funcName, ...args) => new Promise((resolve, reject) => {
+      const runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+      runner[funcName](...args);
+    });
 
-    var app = Vue.createApp({
+    const app = Vue.createApp({
       data: function () {
         return {
           CATEGORY_GROUPS: CATEGORY_GROUPS,
@@ -425,24 +422,23 @@
       },
       computed: {
         activeTab: function () {
-          var self = this;
-          return this.tabsRaw.filter(function (t) { return t.key === self.activeKey; })[0] || null;
+          return this.tabsRaw.filter((t) => t.key === this.activeKey)[0] || null;
         },
         visibleColumnDefs: function () {
-          var vis = this.settings.visibleColumns;
-          var all = this.settings.allColumns;
-          var byKey = {};
-          all.forEach(function (c) { byKey[c.key] = c; });
-          var order = this.columnOrder.length ? this.columnOrder : all.map(function (c) { return c.key; });
-          return order.filter(function (k) { return vis.indexOf(k) !== -1 && byKey[k]; }).map(function (k) { return byKey[k]; });
+          const vis = this.settings.visibleColumns;
+          const all = this.settings.allColumns;
+          const byKey = {};
+          all.forEach((c) => { byKey[c.key] = c; });
+          const order = this.columnOrder.length ? this.columnOrder : all.map((c) => c.key);
+          return order.filter((k) => vis.indexOf(k) !== -1 && byKey[k]).map((k) => byKey[k]);
         },
         totalCols: function () { return this.visibleColumnDefs.length + 3; },
         pendingCount: function () { return Object.keys(this.pending).length; },
         dupCounts: function () {
-          var c = {};
+          const c = {};
           if (!this.activeTab) return c;
-          this.activeTab.sections.forEach(function (s) {
-            s.items.forEach(function (it) { c[it.row] = (c[it.row] || 0) + 1; });
+          this.activeTab.sections.forEach((s) => {
+            s.items.forEach((it) => { c[it.row] = (c[it.row] || 0) + 1; });
           });
           return c;
         },
@@ -483,29 +479,28 @@
         },
 
         showStatus: function (msg, type) {
-          var self = this;
           if (type === 'loading') {
             // a new operation starting supersedes whatever was showing before,
             // same as the old single-banner behavior
             this.toasts = [];
           } else {
-            this.toasts = this.toasts.filter(function (t) { return t.type !== 'loading'; });
+            this.toasts = this.toasts.filter((t) => t.type !== 'loading');
           }
-          var id = ++this._toastSeq;
+          const id = ++this._toastSeq;
           this.toasts.push({ id: id, msg: msg, type: type });
           if (type === 'success') {
-            setTimeout(function () { self.dismissToast(id); }, 3000);
+            setTimeout(() => { this.dismissToast(id); }, 3000);
           }
           // 'error' toasts persist until manually dismissed; 'loading' is dismissed
           // implicitly when the follow-up success/error toast arrives.
         },
         dismissToast: function (id) {
-          this.toasts = this.toasts.filter(function (t) { return t.id !== id; });
+          this.toasts = this.toasts.filter((t) => t.id !== id);
         },
 
         colClass: function (key) { return NUMERIC_COLS.indexOf(key) !== -1 ? 'qty' : ''; },
         colStyle: function (key) {
-          var w = this.columnWidths[key];
+          const w = this.columnWidths[key];
           return w ? { width: w + 'px', maxWidth: w + 'px' } : {};
         },
         varianceClass: function (key, variance) {
@@ -515,23 +510,23 @@
           return '';
         },
         formatCell: function (it, key) {
-          var v = it[key];
+          const v = it[key];
           if (v === '' || v === null || v === undefined) return '—';
           if (key === 'variance') {
             if (v === -1) return 'Zero $ cost';
             return (v * 100).toFixed(1) + '%';
           }
           if (CURRENCY_COLS.indexOf(key) !== -1) {
-            var n = Number(v);
+            const n = Number(v);
             return isNaN(n) ? '—' : n.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
           }
           if (key === 'adjustment') {
-            var an = Number(v);
+            const an = Number(v);
             if (isNaN(an)) return '—';
             return (an > 0 ? '+' : '') + an.toLocaleString(undefined, { maximumFractionDigits: 2 });
           }
           if (key === 'currentQty' || key === 'previousQty') {
-            var qn = Number(v);
+            const qn = Number(v);
             return isNaN(qn) ? String(v) : qn.toLocaleString(undefined, { maximumFractionDigits: 2 });
           }
           return v;
@@ -539,10 +534,9 @@
 
         /* ---------- column reorder / resize (session-only) ---------- */
         ensureColumnOrder: function () {
-          var have = {};
-          this.columnOrder.forEach(function (k) { have[k] = true; });
-          var self = this;
-          this.settings.allColumns.forEach(function (c) { if (!have[c.key]) self.columnOrder.push(c.key); });
+          const have = {};
+          this.columnOrder.forEach((k) => { have[k] = true; });
+          this.settings.allColumns.forEach((c) => { if (!have[c.key]) this.columnOrder.push(c.key); });
         },
         onColDragStart: function (key, e) {
           this.dragKey = key;
@@ -551,9 +545,9 @@
         onColDrop: function (targetKey, e) {
           e.preventDefault();
           if (!this.dragKey || this.dragKey === targetKey) return;
-          var order = this.columnOrder.slice();
-          var from = order.indexOf(this.dragKey);
-          var to = order.indexOf(targetKey);
+          const order = this.columnOrder.slice();
+          const from = order.indexOf(this.dragKey);
+          const to = order.indexOf(targetKey);
           if (from === -1 || to === -1) return;
           order.splice(from, 1);
           order.splice(to, 0, this.dragKey);
@@ -563,18 +557,17 @@
         startResize: function (key, e) {
           e.preventDefault();
           e.stopPropagation();
-          var startX = e.clientX;
-          var startWidth = this.columnWidths[key] || e.target.parentElement.offsetWidth;
-          var self = this;
-          function onMove(ev) {
-            var w = Math.max(60, startWidth + (ev.clientX - startX));
-            self.columnWidths = Object.assign({}, self.columnWidths);
-            self.columnWidths[key] = w;
-          }
-          function onUp() {
+          const startX = e.clientX;
+          const startWidth = this.columnWidths[key] || e.target.parentElement.offsetWidth;
+          const onMove = (ev) => {
+            const w = Math.max(60, startWidth + (ev.clientX - startX));
+            this.columnWidths = Object.assign({}, this.columnWidths);
+            this.columnWidths[key] = w;
+          };
+          const onUp = () => {
             window.removeEventListener('mousemove', onMove);
             window.removeEventListener('mouseup', onUp);
-          }
+          };
           window.addEventListener('mousemove', onMove);
           window.addEventListener('mouseup', onUp);
         },
@@ -583,16 +576,15 @@
         loadBootstrap: async function () {
           this.bootLoading = true;
           try {
-            var b = await gas('getBootstrap');
+            const b = await gas('getBootstrap');
             this.bootstrap = b;
             this.bootLoading = false;
             if (!b.properties.length) return;
             if (b.properties.length === 1) { this.selectProperty(b.properties[0]); return; }
-            var self = this;
-            google.script.url.getLocation(function (loc) {
-              var wanted = loc && loc.parameter && loc.parameter.property;
-              var match = wanted && b.properties.filter(function (p) { return p.id === wanted; })[0];
-              self.selectProperty(match || b.properties[0]);
+            google.script.url.getLocation((loc) => {
+              const wanted = loc && loc.parameter && loc.parameter.property;
+              const match = wanted && b.properties.filter((p) => p.id === wanted)[0];
+              this.selectProperty(match || b.properties[0]);
             });
           } catch (err) {
             this.bootLoading = false;
@@ -600,7 +592,7 @@
           }
         },
         onPropertyChange: function (id) {
-          var p = this.bootstrap.properties.filter(function (x) { return x.id === id; })[0];
+          const p = this.bootstrap.properties.filter((x) => x.id === id)[0];
           if (p) this.selectProperty(p);
         },
         selectProperty: function (p) {
@@ -615,14 +607,13 @@
         loadData: async function (force) {
           if (!this.activeProperty) return;
           if (this.pendingCount && !force) {
-            var ok = confirm('You have ' + this.pendingCount + ' unsynced change(s). Refreshing now discards them unless they finish syncing first. Refresh anyway?');
+            const ok = confirm('You have ' + this.pendingCount + ' unsynced change(s). Refreshing now discards them unless they finish syncing first. Refresh anyway?');
             if (!ok) return;
           }
           this.loading = true;
           this.showStatus('Loading inventory data…', 'loading');
           try {
-            var payload = await gas('getInventoryData', this.activeProperty.id);
-            var self = this;
+            const payload = await gas('getInventoryData', this.activeProperty.id);
             this.tabsRaw = payload.tabs;
             this.generatedAt = payload.generatedAt;
             this.session = payload.session;
@@ -631,9 +622,9 @@
             if (!this.activeKey && payload.tabs.length) this.activeKey = payload.tabs[0].key;
             this.pending = {}; this.syncStatus = {}; this.syncErrors = {}; this.categoryOverride = {};
             this.origNotes = {};
-            payload.tabs.forEach(function (t) {
-              t.sections.forEach(function (s) {
-                s.items.forEach(function (it) { self.origNotes[self.dkey(t.key, it.row)] = it.note || ''; });
+            payload.tabs.forEach((t) => {
+              t.sections.forEach((s) => {
+                s.items.forEach((it) => { this.origNotes[this.dkey(t.key, it.row)] = it.note || ''; });
               });
             });
             this.loading = false;
@@ -647,67 +638,67 @@
         /* ---------- review / notes ---------- */
         findItem: function (row) {
           if (!this.activeTab) return null;
-          for (var i = 0; i < this.activeTab.sections.length; i++) {
-            var found = this.activeTab.sections[i].items.filter(function (it) { return it.row === row; })[0];
+          for (let i = 0; i < this.activeTab.sections.length; i++) {
+            const found = this.activeTab.sections[i].items.filter((it) => it.row === row)[0];
             if (found) return found;
           }
           return null;
         },
         noteOf: function (row) {
-          var k = this.dkey(this.activeKey, row);
+          const k = this.dkey(this.activeKey, row);
           if (this.pending[k]) return this.pending[k].note;
-          var it = this.findItem(row);
+          const it = this.findItem(row);
           return it ? (it.note || '') : '';
         },
         statusOf: function (note) {
-          var n = (note || '').trim().toUpperCase();
+          const n = (note || '').trim().toUpperCase();
           if (n.indexOf('CORRECT') === 0) return 'correct';
           if (n.indexOf('REVIEW') === 0) return 'review';
           if (n.indexOf('ADJUST') === 0) return 'adjust';
           return note ? 'other' : '';
         },
         rowClass: function (it) {
-          var cls = STATUS_CLASS[this.statusOf(this.noteOf(it.row))];
+          const cls = STATUS_CLASS[this.statusOf(this.noteOf(it.row))];
           return cls || '';
         },
         categoryOf: function (row) {
-          var k = this.dkey(this.activeKey, row);
+          const k = this.dkey(this.activeKey, row);
           if (this.categoryOverride[k]) return this.categoryOverride[k];
-          var s = this.statusOf(this.noteOf(row));
+          const s = this.statusOf(this.noteOf(row));
           if (s === 'correct') return 'CORRECT';
           if (s === 'review') return 'REVIEW';
           if (s === 'adjust') return 'ADJUST';
           return null;
         },
         filteredCategories: function (row) {
-          var cat = this.categoryOf(row);
-          var list = cat
-            ? this.settings.noteCategories.filter(function (c) { return c.indexOf(cat) === 0; })
+          const cat = this.categoryOf(row);
+          let list = cat
+            ? this.settings.noteCategories.filter((c) => c.indexOf(cat) === 0)
             : this.settings.noteCategories.slice();
           // Preserve legacy/free-text notes (e.g. saved before the dropdown existed, or
           // a category since removed by an admin) as a selectable option instead of
           // silently blanking the <select> when the exact string isn't in the list.
-          var current = this.noteOf(row);
+          const current = this.noteOf(row);
           if (current && list.indexOf(current) === -1) list = [current].concat(list);
           return list;
         },
         pickCategory: function (it, group) {
-          var k = this.dkey(this.activeKey, it.row);
+          const k = this.dkey(this.activeKey, it.row);
           this.categoryOverride[k] = group;
-          var bare = this.settings.noteCategories.filter(function (c) { return c === group; })[0]
-            || this.settings.noteCategories.filter(function (c) { return c.indexOf(group) === 0; })[0]
+          const bare = this.settings.noteCategories.filter((c) => c === group)[0]
+            || this.settings.noteCategories.filter((c) => c.indexOf(group) === 0)[0]
             || group;
           this.applyEdit(it, bare);
         },
         onSelect: function (it, value) { this.applyEdit(it, value); },
         applyEdit: function (it, value) {
-          var dsKey = this.activeKey;
-          var k = this.dkey(dsKey, it.row);
-          var t = this.activeTab;
-          t.sections.forEach(function (s) {
-            s.items.forEach(function (row2) { if (row2.row === it.row) row2.note = value; });
+          const dsKey = this.activeKey;
+          const k = this.dkey(dsKey, it.row);
+          const t = this.activeTab;
+          t.sections.forEach((s) => {
+            s.items.forEach((row2) => { if (row2.row === it.row) row2.note = value; });
           });
-          var baseline = this.origNotes[k] !== undefined ? this.origNotes[k] : '';
+          const baseline = this.origNotes[k] !== undefined ? this.origNotes[k] : '';
           if (value === baseline) {
             delete this.pending[k];
             delete this.syncStatus[k];
@@ -720,47 +711,45 @@
         /* ---------- sync (in-memory edits -> sheet) ---------- */
         autoSyncTick: function () { if (this.autoSync) this.syncPending(); },
         syncPending: async function () {
-          var entries = [];
-          for (var k in this.pending) if (this.pending.hasOwnProperty(k)) entries.push(this.pending[k]);
+          const entries = [];
+          for (const k in this.pending) if (this.pending.hasOwnProperty(k)) entries.push(this.pending[k]);
           if (!entries.length || this.syncing || !this.activeProperty) return;
           this.syncing = true;
-          var self = this;
-          var keys = entries.map(function (e) { return self.dkey(e.datastore, e.row); });
-          keys.forEach(function (k) { self.syncStatus[k] = 'syncing'; });
+          const keys = entries.map((e) => this.dkey(e.datastore, e.row));
+          keys.forEach((k) => { this.syncStatus[k] = 'syncing'; });
           try {
-            var res = await gas('saveNotesBatch', this.activeProperty.id, entries.map(function (e) {
-              return { datastore: e.datastore, row: e.row, note: e.note, expectedItem: e.item };
-            }));
+            const res = await gas('saveNotesBatch', this.activeProperty.id, entries.map((e) => ({
+              datastore: e.datastore, row: e.row, note: e.note, expectedItem: e.item
+            })));
             this.onSyncResult(entries, res);
           } catch (err) {
-            keys.forEach(function (k) { self.syncStatus[k] = 'error'; self.syncErrors[k] = err.message; });
+            keys.forEach((k) => { this.syncStatus[k] = 'error'; this.syncErrors[k] = err.message; });
             this.showStatus('Sync failed: ' + err.message, 'error');
           } finally {
             this.syncing = false;
           }
         },
         onSyncResult: function (entries, res) {
-          var self = this;
-          var results = (res && res.results) || [];
-          var okCount = 0, errCount = 0;
-          entries.forEach(function (e, i) {
-            var k = self.dkey(e.datastore, e.row);
-            var r = results[i];
+          const results = (res && res.results) || [];
+          let okCount = 0, errCount = 0;
+          entries.forEach((e, i) => {
+            const k = this.dkey(e.datastore, e.row);
+            const r = results[i];
             if (r && r.ok) {
               okCount++;
-              self.origNotes[k] = e.note;
-              delete self.pending[k];
-              self.syncStatus[k] = 'synced';
-              setTimeout(function () { if (self.syncStatus[k] === 'synced') delete self.syncStatus[k]; }, 2500);
+              this.origNotes[k] = e.note;
+              delete this.pending[k];
+              this.syncStatus[k] = 'synced';
+              setTimeout(() => { if (this.syncStatus[k] === 'synced') delete this.syncStatus[k]; }, 2500);
             } else {
               errCount++;
-              self.syncStatus[k] = 'error';
-              self.syncErrors[k] = (r && r.error) || 'Unknown error';
+              this.syncStatus[k] = 'error';
+              this.syncErrors[k] = (r && r.error) || 'Unknown error';
             }
           });
           if (res && res.progress) {
-            Object.keys(res.progress).forEach(function (dsKey) {
-              var t = self.tabsRaw.filter(function (x) { return x.key === dsKey; })[0];
+            Object.keys(res.progress).forEach((dsKey) => {
+              const t = this.tabsRaw.filter((x) => x.key === dsKey)[0];
               if (t) t.counts = res.progress[dsKey];
             });
           }
@@ -777,20 +766,19 @@
 
         /* ---------- CSV upload / remove (admin) ---------- */
         onCsvFileChosen: function (e) {
-          var f = e.target.files[0]; if (!f) return;
-          var reader = new FileReader();
-          var self = this;
-          reader.onload = async function (ev) {
-            self.csvFileText = ev.target.result;
+          const f = e.target.files[0]; if (!f) return;
+          const reader = new FileReader();
+          reader.onload = async (ev) => {
+            this.csvFileText = ev.target.result;
             e.target.value = '';
-            self.csv = { stage: 'checking', summary: null, error: null, result: null };
+            this.csv = { stage: 'checking', summary: null, error: null, result: null };
             try {
-              var summary = await gas('getExistingDataSummary', self.activeProperty.id);
-              self.csv.summary = summary;
-              if (summary.hasData) { self.csv.stage = 'confirm'; }
-              else { self.doUpload(); }
+              const summary = await gas('getExistingDataSummary', this.activeProperty.id);
+              this.csv.summary = summary;
+              if (summary.hasData) { this.csv.stage = 'confirm'; }
+              else { this.doUpload(); }
             } catch (err) {
-              self.csv.stage = 'error'; self.csv.error = err.message;
+              this.csv.stage = 'error'; this.csv.error = err.message;
             }
           };
           reader.readAsText(f);
@@ -798,7 +786,7 @@
         doUpload: async function () {
           this.csv.stage = 'importing';
           try {
-            var res = await gas('processCSVData', this.activeProperty.id, this.csvFileText);
+            const res = await gas('processCSVData', this.activeProperty.id, this.csvFileText);
             this.csv.stage = 'done'; this.csv.result = res;
           } catch (err) {
             this.csv.stage = 'error'; this.csv.error = err.message;
@@ -832,17 +820,16 @@
           this.globalAdmins = []; this.globalAdminsDraft = null; this.newGlobalAdminEmail = ''; this.globalAdminsError = '';
           this.showSettings = true;
           if (this.bootstrap.isGlobalAdmin) this.loadGlobalAdmins();
-          var self = this;
-          this.$nextTick(function () {
-            if (self.$refs.firstSettingsInput) self.$refs.firstSettingsInput.focus();
+          this.$nextTick(() => {
+            if (this.$refs.firstSettingsInput) this.$refs.firstSettingsInput.focus();
           });
         },
         closeSettings: function () { this.showSettings = false; this.settingsDraft = null; },
         addPropertyAdminEmail: function () {
-          var e = this.newPropertyAdminEmail.trim();
+          const e = this.newPropertyAdminEmail.trim();
           if (!e) return;
           if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { this.settingsError = 'Enter a valid email address.'; return; }
-          var exists = this.settingsDraft.propertyAdmins.some(function (x) { return x.toLowerCase() === e.toLowerCase(); });
+          const exists = this.settingsDraft.propertyAdmins.some((x) => x.toLowerCase() === e.toLowerCase());
           if (!exists) this.settingsDraft.propertyAdmins.push(e);
           this.newPropertyAdminEmail = ''; this.settingsError = '';
         },
@@ -850,26 +837,26 @@
           if (!this.bootstrap.isGlobalAdmin && this.session.email && email.toLowerCase() === this.session.email.toLowerCase()) {
             if (!confirm('This removes your own admin access to this property. Continue?')) return;
           }
-          this.settingsDraft.propertyAdmins = this.settingsDraft.propertyAdmins.filter(function (e) { return e !== email; });
+          this.settingsDraft.propertyAdmins = this.settingsDraft.propertyAdmins.filter((e) => e !== email);
         },
         addPropertyUserEmail: function () {
-          var e = this.newPropertyUserEmail.trim();
+          const e = this.newPropertyUserEmail.trim();
           if (!e) return;
           if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { this.settingsError = 'Enter a valid email address.'; return; }
-          var exists = this.settingsDraft.propertyUsers.some(function (x) { return x.toLowerCase() === e.toLowerCase(); });
+          const exists = this.settingsDraft.propertyUsers.some((x) => x.toLowerCase() === e.toLowerCase());
           if (!exists) this.settingsDraft.propertyUsers.push(e);
           this.newPropertyUserEmail = ''; this.settingsError = '';
         },
         removePropertyUserEmail: function (email) {
-          this.settingsDraft.propertyUsers = this.settingsDraft.propertyUsers.filter(function (e) { return e !== email; });
+          this.settingsDraft.propertyUsers = this.settingsDraft.propertyUsers.filter((e) => e !== email);
         },
         toggleColumn: function (key) {
-          var i = this.settingsDraft.visibleColumns.indexOf(key);
+          const i = this.settingsDraft.visibleColumns.indexOf(key);
           if (i === -1) this.settingsDraft.visibleColumns.push(key);
           else this.settingsDraft.visibleColumns.splice(i, 1);
         },
         addCategory: function () {
-          var c = this.newCategory.trim().toUpperCase();
+          const c = this.newCategory.trim().toUpperCase();
           if (!c) return;
           if (!/^(CORRECT|REVIEW|ADJUST)/.test(c)) { this.settingsError = 'Category must start with CORRECT, REVIEW, or ADJUST.'; return; }
           if (this.settingsDraft.noteCategories.indexOf(c) === -1) this.settingsDraft.noteCategories.push(c);
@@ -877,12 +864,12 @@
         },
         removeCategory: function (c) {
           if (this.settingsDraft.noteCategories.length <= 1) { this.settingsError = 'At least one note category is required.'; return; }
-          this.settingsDraft.noteCategories = this.settingsDraft.noteCategories.filter(function (x) { return x !== c; });
+          this.settingsDraft.noteCategories = this.settingsDraft.noteCategories.filter((x) => x !== c);
         },
         saveSettingsDraft: async function () {
           this.settingsError = '';
           try {
-            var s = await gas('saveSettings', this.activeProperty.id, this.settingsDraft);
+            const s = await gas('saveSettings', this.activeProperty.id, this.settingsDraft);
             this.settings = s;
             this.ensureColumnOrder();
             this.showSettings = false;
@@ -896,7 +883,7 @@
           if (!confirm('Reset this property\'s settings to the hardcoded defaults? This clears custom admins, users, columns, and categories.')) return;
           this.settingsError = '';
           try {
-            var s = await gas('resetSettings', this.activeProperty.id);
+            const s = await gas('resetSettings', this.activeProperty.id);
             this.settings = s;
             this.ensureColumnOrder();
             this.settingsDraft = {
@@ -912,17 +899,17 @@
         /* ---------- global admins (global admin only) ---------- */
         loadGlobalAdmins: async function () {
           try {
-            var list = await gas('getGlobalAdmins');
+            const list = await gas('getGlobalAdmins');
             this.globalAdmins = list; this.globalAdminsDraft = list.slice();
           } catch (err) {
             this.globalAdminsError = err.message;
           }
         },
         addGlobalAdminEmail: function () {
-          var e = this.newGlobalAdminEmail.trim();
+          const e = this.newGlobalAdminEmail.trim();
           if (!e) return;
           if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { this.globalAdminsError = 'Enter a valid email address.'; return; }
-          var exists = this.globalAdminsDraft.some(function (x) { return x.toLowerCase() === e.toLowerCase(); });
+          const exists = this.globalAdminsDraft.some((x) => x.toLowerCase() === e.toLowerCase());
           if (!exists) this.globalAdminsDraft.push(e);
           this.newGlobalAdminEmail = ''; this.globalAdminsError = '';
         },
@@ -931,12 +918,12 @@
           if (this.session.email && email.toLowerCase() === this.session.email.toLowerCase()) {
             if (!confirm('This removes your own global admin access. Continue?')) return;
           }
-          this.globalAdminsDraft = this.globalAdminsDraft.filter(function (e) { return e !== email; });
+          this.globalAdminsDraft = this.globalAdminsDraft.filter((e) => e !== email);
         },
         saveGlobalAdminsDraft: async function () {
           this.globalAdminsError = '';
           try {
-            var list = await gas('saveGlobalAdmins', this.globalAdminsDraft);
+            const list = await gas('saveGlobalAdmins', this.globalAdminsDraft);
             this.globalAdmins = list; this.globalAdminsDraft = list.slice();
             this.showStatus('Global admins saved.', 'success');
           } catch (err) {
