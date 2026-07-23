@@ -4,8 +4,8 @@ Status legend: 🔲 Not started · 🟡 In progress · ✅ Done · ⏭️ Skippe
 
 | Phase | Scope | Status |
 |---|---|---|
-| [Phase 1](#phase-1-toasts-palette-sticky-header-var-modal-a11y-promise-wrapper) | Promise-ify `google.script.run` (#1) + toasts (#4) + palette (#6) + sticky-header CSS var (#7) + modal a11y (#8) | 🟡 In progress — code done, awaiting manual/embedded verification |
-| [Phase 2](#phase-2-iconography) | Inline SVG iconography (#5) | 🔲 Not started |
+| [Phase 1](#phase-1-toasts-palette-sticky-header-var-modal-a11y-promise-wrapper) | Promise-ify `google.script.run` (#1) + toasts (#4) + palette (#6) + sticky-header CSS var (#7) + modal a11y (#8) | ✅ Done |
+| [Phase 2](#phase-2-iconography) | Inline SVG iconography (#5) | 🟡 In progress |
 | [Phase 3](#phase-3-es5--es6) | ES5 → ES6+ cleanup (#2a) | 🔲 Not started |
 | [Phase 4](#phase-4-composition-api-evaluation) | Composition API rewrite (#2b) | 🔲 Not started |
 | Phase 5+ | *(not yet defined — see "Growing this plan")* | — |
@@ -85,10 +85,8 @@ bottom so they aren't lost.
 
 ## Phase 1: Toasts, palette, sticky-header var, modal a11y, Promise wrapper
 
-**Status:** 🟡 In progress — all five sub-items implemented and committed; blocked on manual
-smoke testing and the embedded-in-Google-Sites check (see Exit gate), which need an actual
-Apps Script deployment and a browser — not available in the implementing session. **Do not
-mark ✅ until a human (or a session with deploy/browser access) has walked the Exit gate.**
+**Status:** ✅ Done — user confirmed the Exit gate (manual smoke test + embedded-in-Google-
+Sites check) on 2026-07-23. PR: https://github.com/rstevenson1237/manager_tools/pull/4.
 
 **Entry gate:** none — this is the starting phase. Working tree clean on
 `claude/planning-session-zu32ey` before starting.
@@ -178,37 +176,41 @@ payroll** (commit `b987f99`)
       as expected — this is a real behavior to confirm during the embedded-in-Sites check,
       not something confirmable from source
 
-### Exit gate — **not yet walked, needs a session/human with deploy + browser access**
+### Exit gate — ✅ confirmed by user 2026-07-23
 - [x] All checklist items done in both apps, or explicitly marked deferred with reasoning
       (see 1d payroll above)
-- [ ] Manual smoke test on raw `/exec` URL: load data, trigger a success toast, trigger an
+- [x] Manual smoke test on raw `/exec` URL: load data, trigger a success toast, trigger an
       error toast (e.g. bad input), open every modal and close via Escape, resize a column,
       confirm sticky header/section stacking on scroll
-- [ ] **Embedded-in-Google-Sites smoke test**: same checks as above, run inside an actual
+- [x] **Embedded-in-Google-Sites smoke test**: same checks as above, run inside an actual
       Sites embed, in at least Chrome and Safari — this is the step that catches iframe-only
       regressions
-- [ ] No console errors introduced
-- [ ] WCAG AA contrast spot-check on the new row-state tints (carried over from 1c)
-- [ ] Status table at top of this doc updated to ✅ **only after the above are confirmed**
+- [x] No console errors introduced
+- [x] WCAG AA contrast spot-check on the new row-state tints (carried over from 1c)
+- [x] Status table at top of this doc updated to ✅
 
 ### Session log
 - **2026-07-23**: Implemented all five sub-items (1a–1e) as five separate commits
   (`1750271`, `0a917ec`, `25a44df`, `b987f99`, `6a5bb2f`) on
   `claude/planning-session-zu32ey`. JS syntax verified with `node --check` on the extracted
   `<script>` blocks of both files after every commit; no runtime/browser verification was
-  possible in this session (no deployed Apps Script project, no browser available). Payroll's
-  sticky-header parity (part of 1d) was deliberately skipped rather than risking an unverified
-  visual regression — see reasoning inline above. Phase left at 🟡 pending someone with
-  deploy/browser access walking the Exit gate above; flip to ✅ only after that happens.
+  possible in the implementing session (no deployed Apps Script project, no browser
+  available). Payroll's sticky-header parity (part of 1d) was deliberately skipped rather
+  than risking an unverified visual regression — see reasoning inline above.
+- **2026-07-23**: User deployed and walked the Exit gate (manual `/exec` smoke test +
+  embedded-in-Google-Sites check) and confirmed it passes. Phase marked ✅ Done. PR opened
+  from the Claude Code UI for this branch:
+  https://github.com/rstevenson1237/manager_tools/pull/4 — all future commits push to this
+  branch and update that PR; no new PR should be created for this effort.
 
 ---
 
 ## Phase 2: Iconography
 
-**Status:** 🔲 Not started
+**Status:** 🟡 In progress
 
 **Entry gate:** Phase 1 marked ✅ (specifically 1c palette, since icons should use
-`currentColor` against the new tokens).
+`currentColor` against the new tokens). — satisfied, Phase 1 confirmed done 2026-07-23.
 
 **Rationale:** replaces inconsistent OS-rendered emoji (`⚙ × ● ⚠ ✓`) with **inlined SVG**,
 not a CDN icon library — an extra CDN dependency is a real risk inside the sandboxed Sites
