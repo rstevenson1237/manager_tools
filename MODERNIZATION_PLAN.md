@@ -6,7 +6,7 @@ Status legend: 🔲 Not started · 🟡 In progress · ✅ Done · ⏭️ Skippe
 |---|---|---|
 | [Phase 1](#phase-1-toasts-palette-sticky-header-var-modal-a11y-promise-wrapper) | Promise-ify `google.script.run` (#1) + toasts (#4) + palette (#6) + sticky-header CSS var (#7) + modal a11y (#8) | ✅ Done |
 | [Phase 2](#phase-2-iconography) | Inline SVG iconography (#5) | ✅ Done |
-| [Phase 3](#phase-3-es5--es6) | ES5 → ES6+ cleanup (#2a) | 🟡 In progress |
+| [Phase 3](#phase-3-es5--es6) | ES5 → ES6+ cleanup (#2a) | 🟡 In progress — code done, awaiting verification |
 | [Phase 4](#phase-4-composition-api-evaluation) | Composition API rewrite (#2b) | 🔲 Not started |
 | Phase 5+ | *(not yet defined — see "Growing this plan")* | — |
 
@@ -261,7 +261,9 @@ iframe (proxy blocks, load failures) for a handful of glyphs that don't justify 
 
 ## Phase 3: ES5 → ES6+
 
-**Status:** 🟡 In progress
+**Status:** 🟡 In progress — code done and committed; blocked on the same kind of manual
+regression pass Phases 1–2 needed (see Exit gate). **Do not mark ✅ until a human has run
+through the app's core flows and confirmed nothing broke.**
 
 **Entry gate:** Phase 1's item 1a (Promise wrapper) must be ✅ and merged first — doing the
 `var`→`const/let`/arrow-function pass before the Promise migration would mean touching the
@@ -273,27 +275,57 @@ functional change, no build-step requirement). Large diff — treat as its own i
 commit(s), not bundled with any feature work.
 
 ### Task checklist
-- [ ] `inventory_audit/Index.html`: replace all `var` → `const`/`let` as appropriate
-- [ ] `inventory_audit/Index.html`: replace `function(){...}` callbacks passed to
-      `map`/`filter`/`forEach`/etc. with arrow functions; remove now-unnecessary
-      `var self = this` capture points
-- [ ] Repeat both steps for `payroll_audit/Index.html`
-- [ ] Do **not** change logic/behavior in this pass — pure syntax modernization
-- [ ] Review diff carefully for `this`-binding changes in non-lexical contexts (e.g. a
-      `function` used as an event handler where `this` intentionally referred to the DOM
-      element, not the Vue instance) — arrow functions would break that specific case, so
-      each conversion needs a sanity check, not blanket find-replace
+- [x] `inventory_audit/Index.html`: replaced all `var` → `const`/`let` as appropriate
+- [x] `inventory_audit/Index.html`: replaced `function(){...}` callbacks passed to
+      `map`/`filter`/`forEach`/`some`/`reduce`, plus `setTimeout`,
+      `google.script.url.getLocation`, and `FileReader.onload`, with arrow functions;
+      removed every `var self = this` capture point (13 in inventory, 8 in payroll) —
+      since the enclosing Vue method is still a regular `function` (correctly `this`-bound
+      by Vue when called), nested arrow functions now reference `this` directly instead of
+      capturing it into `self`
+- [x] Repeated for `payroll_audit/Index.html`; also converted `STATUS_CLASS_MAP`'s
+      module-level `test: function(s){...}` predicates to arrows since they don't use
+      `this` at all
+- [x] No logic/behavior changed — pure syntax modernization. Verified by reviewing the full
+      `git diff` line by line for both files: every removed line is a `var`→`const`/`let`
+      keyword swap, a `function(...)`→`(...) =>` conversion, or a `self.`→`this.` rewrite
+      inside a converted arrow callback. No control flow, conditionals, or data shapes
+      changed.
+- [x] Checked specifically for `this`-binding traps: **kept all Vue lifecycle hooks
+      (`mounted`/`beforeUnmount`), `computed` properties, and `methods` themselves as
+      regular `function` expressions** — converting those to arrows would have broken
+      Vue's `this` binding, since an arrow function has no own `this` and would have
+      resolved to the enclosing `<script>` scope instead of the component instance. Only
+      *nested* callbacks (arguments to array methods, timers, event/DOM callbacks) were
+      converted to arrows.
 
-### Exit gate
-- [ ] No remaining `var` declarations in either `Index.html` (verify via grep)
-- [ ] No remaining `var self = this` pattern (verify via grep)
-- [ ] Full manual regression pass: load, edit/select a note (inventory), CSV upload,
-      settings save, sync, column drag/resize (inventory) — behavior identical to pre-Phase-3
+### Exit gate — **not yet walked, needs a human regression pass**
+- [x] No remaining `var` declarations in either `Index.html` (verified via grep — zero)
+- [x] No remaining `self` identifier anywhere in either file (verified via grep — zero;
+      stronger check than just `var self = this`, confirms no dangling references)
+- [x] JS syntax verified with `node --check` on the extracted `<script>` blocks of both
+      files, immediately after each file's conversion
+- [ ] **Not verified — needs a human**: full manual regression pass (load, edit/select a
+      note in inventory, CSV upload in both apps, settings save, sync, column drag/resize
+      in inventory) confirming behavior is identical to pre-Phase-3. This phase carries more
+      behavioral risk than Phases 1-2 since it touches nearly every line of both files'
+      `<script>` blocks — the `git diff` review during implementation only confirms the
+      *diff* is mechanical, not that the app still behaves correctly at runtime.
 - [ ] Embedded-in-Sites smoke test
-- [ ] Status table updated to ✅
+- [ ] Status table updated to ✅ **only after the above are confirmed**
 
 ### Session log
-- *(empty)*
+- **2026-07-23**: Implemented as two commits, one per app, on
+  `claude/planning-session-zu32ey` (part of PR #4):
+  `inventory_audit` conversion and `payroll_audit` conversion. Reviewed the full `git diff`
+  for both files line by line during implementation — every change is a mechanical
+  `var`→`const`/`let` or `function`→arrow conversion, confirmed no logic drift. No
+  runtime/browser regression testing was possible in the implementing session. This is the
+  highest-risk phase completed so far by line-count touched (nearly the entire `<script>`
+  block of both files), so the manual regression pass in the Exit gate matters more here
+  than it did for Phases 1-2 — please exercise the note-editing/sync flow (inventory) and
+  the CSV upload flow (both apps) specifically, since those have the deepest nesting of
+  converted callbacks.
 
 ---
 
