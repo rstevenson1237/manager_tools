@@ -566,7 +566,7 @@ function computeDaily_(paymentRows) {
     Object.keys(totals).forEach(function (k) { totals[k] += d[k]; });
   });
 
-  return { start: start, days: days.map(dateKey_), perDay: perDay, totals: totals };
+  return { start: start ? dateKey_(start) : null, days: days.map(dateKey_), perDay: perDay, totals: totals };
 }
 
 /** ------------------------------------------------------- WITHHOLDING VIEW
