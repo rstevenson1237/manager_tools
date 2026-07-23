@@ -5,7 +5,8 @@
   <meta charset="utf-8">
   <style>
     :root{--brand:#1a73e8;--brand-dark:#1557b0;--green:#ecfdf5;--green-b:#38761d;
-      --yellow:#fffbeb;--yellow-b:#bf9000;--red:#fff1f2;--red-b:#cc0000;--grey-b:#5f6368;--danger:#d93025;}
+      --yellow:#fffbeb;--yellow-b:#bf9000;--red:#fff1f2;--red-b:#cc0000;--grey-b:#5f6368;--danger:#d93025;
+      --table-header-height:29px;}
     *{box-sizing:border-box;}
     [v-cloak]{display:none;}
     body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;margin:0;padding:8px;background:#f8f9fa;color:#202124;}
@@ -48,13 +49,13 @@
     .progress-label{font-size:12px;color:var(--grey-b);margin-top:2px;}
     .table-container{width:100%;max-height:680px;overflow:auto;border:1px solid #ddd;background:#fff;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,.05);}
     table{width:100%;border-collapse:collapse;}
-    th{background:#f1f3f4;padding:4px 8px;text-align:left;position:sticky;top:0;z-index:2;box-shadow:0 1px 0 #ddd;font-size:12px;white-space:nowrap;position:relative;}
+    th{background:#f1f3f4;padding:4px 8px;text-align:left;position:sticky;top:0;z-index:2;box-shadow:0 1px 0 #ddd;font-size:12px;white-space:nowrap;position:relative;height:var(--table-header-height);}
     th[draggable=true]{cursor:grab;}
     .col-resize{position:absolute;right:0;top:0;bottom:0;width:6px;cursor:col-resize;user-select:none;}
     .col-resize:hover{background:rgba(0,0,0,.15);}
     td{padding:4px 8px;border-bottom:1px solid #eee;font-size:13px;vertical-align:middle;white-space:nowrap;}
     tr{transition:background-color .25s ease;}
-    tr.section td{background:#eef1f5;font-weight:700;color:#3c4043;text-transform:uppercase;letter-spacing:.03em;font-size:12px;position:sticky;top:29px;z-index:1;white-space:normal;}
+    tr.section td{background:#eef1f5;font-weight:700;color:#3c4043;text-transform:uppercase;letter-spacing:.03em;font-size:12px;position:sticky;top:var(--table-header-height);z-index:1;white-space:normal;}
     tr.empty td{color:var(--grey-b);font-style:italic;font-size:12px;white-space:normal;}
     tr.row-correct{background:var(--green);}
     tr.row-review{background:var(--yellow);}
