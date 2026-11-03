@@ -16,7 +16,7 @@ embeddable in Google Sites.
 
 1. Create a standalone Apps Script project and add these files from this
    folder: `Code.gs`, `Import.gs`, `Parse.gs`, `Budget.gs`, `Store.gs`,
-   `Analysis.gs`, `Index.html`. Replace `appsscript.json` with the one here
+   `Analysis.gs`, `Review.gs`, `Index.html`. Replace `appsscript.json` with the one here
    (Project Settings → "Show appsscript.json"). It turns on the **Drive**
    advanced service (v3), which converts uploaded budget .xlsx files.
 2. In the editor, run **`setup()`**. It creates a workbook called
@@ -133,7 +133,55 @@ scroll. Drag the handle on the Line header to make the column narrower or
 wider (arrow keys work too; double-click resets it). The width is remembered
 in that browser.
 
-## 5. Code layout
+## 5. Budget review
+
+The **Budget review** tab checks a property's budget for a year before (and
+after) it is approved. Pick the property and budget year.
+
+**Status.** A budget uploaded before its year starts is a **draft**. From
+1 January of its year it counts as **approved**, with nothing to click. A new
+version can be uploaded at any time (Upload & settings); it replaces the one
+on file. Who uploaded it, when, and the file name are shown on the review.
+
+**What it is compared with.**
+- *Last year*: R365 actuals for the 12 calendar months. Each month comes from
+  the year before the budget, or two years before when that month is not on
+  file yet. A 2027 budget reviewed in November 2026 uses Nov–Dec 2025 and
+  Jan–Oct 2026. Month-to-date uploads are never used.
+- *Last budget's track record*: the previous year's budget against that
+  year's actuals, for the months on file. For sales, the growth that budget
+  assumed against the growth that came in.
+
+**Where the budget pushes.** Sales growth, and every cost category budgeted at
+least 0.5 pts of sales better than last year and worth $5,000 or more. Each
+one shows what last year's budget asked of the same line and whether it got
+there. "Missed last year" marks lines where last year's budget was missed.
+Costs budgeted worse than last year are listed as **room in the budget**. The
+management fee is never counted as a push, because it is set by contract.
+
+**Looks budgeted incorrectly.** *Likely errors*: a recurring line or
+sub-account budgeted at zero, a negative cost, and a management fee off its
+usual % of sales. *Checks*: lines budgeted with nothing posted last year, fixed
+costs (occupancy, insurance) below last year, payroll taxes off their usual %
+of wages, sub-accounts several times last year, months left blank, one
+month's cost or labor % out of pattern, sales spread across the year unlike
+last year, the workbook's own checks failing, and the workbook's forecast
+column not matching R365. Sub-account checks need detailed uploads. They only
+cover categories the budget breaks into sub-accounts; food cost, for one, is a
+single row. The thresholds are at the top of `Review.gs`.
+
+### Budget template changes (2027)
+
+- **Forecast column.** The 12 MONTH tab now has a "2026 Forecast" column
+  (actuals to date plus the rest of the year). It is read and checked against
+  R365, but last year always comes from R365.
+- **DEC tab.** It has an extra column after the 31st, headed "1" (New Year's
+  Day). It is ignored, so it no longer overwrites December 1.
+- **Negative sales.** Sales rows below zero, including the meal-period split,
+  fail a workbook check. The Bygone's 2027 draft has BAR Beverage Sales
+  negative in every month.
+
+## 6. Code layout
 
 | File | Role | Uses Apps Script services? |
 |---|---|---|
@@ -141,9 +189,10 @@ in that browser.
 | `Budget.gs` | Reads the budget template; .xlsx conversion at the bottom | Only the last two functions |
 | `Store.gs` | Sheet layouts; upload ⇄ sheet rows ⇄ in-memory store | No |
 | `Analysis.gs` | Period report, flags, portfolio, trends | No |
+| `Review.gs` | Budget review | No |
 | `Import.gs` | Upload endpoints (preview / commit) | Yes |
 | `Code.gs` | Setup, access, settings, read endpoints | Yes |
-| `Index.html` | Portfolio, Period report, Trends, Upload & settings | — |
+| `Index.html` | Portfolio, Period report, Trends, Budget review, Upload & settings | — |
 
 ### Tests
 

@@ -12,7 +12,10 @@
  * through" date the manager confirms in the preview.
  *
  * Budget (.xlsx upload or Google Sheet ID): replaces that property's budget
- * for the year. An .xlsx is converted once during preview; the parsed result
+ * for the year. Who uploaded it, when, and the template's own checks are kept
+ * with it for the Budget review. A budget for a year that has not started is
+ * a draft; it counts as approved from 1 January. A new version can be
+ * uploaded at any time. An .xlsx is converted once during preview; the parsed result
  * is held in the script cache for 30 minutes so saving does not convert it
  * again.
  ******************************************************************************/
@@ -150,6 +153,7 @@ function previewBudgetUpload(request) {
     throw new Error('Choose a budget file or enter a Google Sheet ID.');
   }
   if (yearHint) budget.year = yearHint;
+  budget.source = sourceLabel;
 
   const token = Utilities.getUuid();
   CacheService.getScriptCache().put('budget:' + token, JSON.stringify(budget), 1800);
@@ -167,7 +171,9 @@ function previewBudgetUpload(request) {
     token: token, source: sourceLabel, year: budget.year, nameCell: budget.nameCell,
     suggestedProperty: suggestion, checks: budget.checks, lines: lines, operatingIncome: oi,
     glRows: Object.keys(budget.gl).length, dailyDays: Object.keys(budget.daily).length,
-    existing: store.budgets[suggestion] && store.budgets[suggestion][budget.year] ? true : false
+    existing: store.budgets[suggestion] && store.budgets[suggestion][budget.year] ? true : false,
+    status: budgetStatus_(budget.year, today_()),
+    forecastYear: budget.forecast ? budget.forecast.year : null
   });
 }
 
@@ -181,7 +187,7 @@ function commitBudgetUpload(token, property, year) {
   property = String(property || '').trim();
   if (!property) throw new Error('Choose which property this budget belongs to.');
   if (year) budget.year = Number(year);
-  const rows = budgetToRows_(budget, property);
+  const rows = budgetToRows_(budget, property, { at: new Date().toISOString(), by: currentUserEmail_(), file: budget.source || '' });
   const lock = LockService.getScriptLock();
   try { lock.waitLock(30000); }
   catch (e) { throw new Error('Another upload is being saved. Try again in a moment.'); }
@@ -193,7 +199,7 @@ function commitBudgetUpload(token, property, year) {
     appendDataRow_(ss, 'uploads', [Utilities.getUuid().slice(0, 8), new Date().toISOString(), currentUserEmail_(), '',
       'budget', '', String(budget.year), property, rows.length, '']);
     CacheService.getScriptCache().remove('budget:' + token);
-    return safe_({ property: property, year: budget.year, rows: rows.length });
+    return safe_({ property: property, year: budget.year, rows: rows.length, status: budgetStatus_(budget.year, today_()) });
   } finally {
     lock.releaseLock();
   }

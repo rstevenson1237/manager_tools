@@ -8,7 +8,7 @@
  */
 const assert = require('assert');
 const h = require('./harness');
-const g = h.loadGs(['Parse.gs', 'Budget.gs', 'Analysis.gs', 'Store.gs']);
+const g = h.loadGs(['Parse.gs', 'Budget.gs', 'Analysis.gs', 'Store.gs', 'Review.gs']);
 
 let passed = 0;
 function test(name, fn) {
@@ -179,10 +179,23 @@ test('reads R365 number formats', () => {
 console.log('Budget');
 
 /** A small 12 MONTH tab plus one daily tab, in the template's layout. */
-function budgetSheets() {
+/**
+ * The budget template's tabs, cut down. `opts.year` sets the year, `opts.over`
+ * replaces a row's monthly amount (one number, or 12), `opts.forecast` adds
+ * the 2027 template's "YYYY Forecast" column ({ label: annual }), and
+ * `opts.dec` adds a DEC tab ending with the 2027 template's extra "1" column.
+ */
+function budgetSheets(opts) {
+  opts = opts || {};
+  const year = opts.year || 2026, over = opts.over || {}, fc = opts.forecast || null;
   const MONTHS = ['JANUARY', 'FEBRUARY', 'MARCH', null, 'APRIL', 'MAY', 'JUNE', null, 'JULY', 'AUGUST', 'SEPTEMBER', null, 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
-  const header = [null, null, null, null, null].concat(MONTHS, [null, 2026]);
-  const row = (gl, label, monthly) => [0, 0, gl, label, null].concat(MONTHS.map(m => m ? monthly : null));
+  const header = [null, null, null, null, null].concat(MONTHS, [null, year], fc ? [null, (year - 1) + ' Forecast'] : []);
+  const row = (gl, label, monthly) => {
+    const m = label in over ? over[label] : monthly;
+    let i = 0;
+    const cells = MONTHS.map(x => x ? (Array.isArray(m) ? m[i++] : m) : null);
+    return [0, 0, gl, label, null].concat(cells, fc ? [null, null, null, label in fc ? fc[label] : null] : []);
+  };
   const grid = [[null, 'SAMPLE GRILL'], header,
     row('GL CODE', 'RESTAURANT GROSS F&B SALES', 600000),
     row('4540', 'Facilities Fee', 20000),
@@ -213,7 +226,13 @@ function budgetSheets() {
   const days = [null, null, null, null]; for (let d = 1; d <= 31; d++) days.push(d);
   const gross = [null, null, null, 'TOTAL GROSS SALES']; const banquet = [null, null, null, 'BANQUET Sales'];
   for (let d = 1; d <= 31; d++) { gross.push(d === 1 ? 155000 + 15000 : 15000); banquet.push(d === 1 ? 155000 : 0); }
-  return { '12 MONTH': grid, OCT: [[null, null, null, 'OCTOBER'], days, [], gross, banquet] };
+  const out = { '12 MONTH': grid, OCT: [[null, null, null, 'OCTOBER'], days, [], gross, banquet] };
+  if (opts.dec) {
+    const dd = [null, null, null, null]; for (let d = 1; d <= 31; d++) dd.push(d); dd.push(1);
+    const dg = [null, null, null, 'TOTAL GROSS SALES']; for (let d = 1; d <= 31; d++) dg.push(d === 1 ? 40000 : 18000); dg.push('');
+    out.DEC = [[null, null, null, 'DECEMBER'], dd, [], dg];
+  }
+  return out;
 }
 
 test('rolls the 12 MONTH tab up to P&L lines and checks it against the template totals', () => {
@@ -412,6 +431,91 @@ test('portfolio by quarter compares with the prior quarter', () => {
   assert.strictEqual(r.months, 3);
   assert.ok(r.prevOiPct != null, 'Q2 2026 on file');
   near(r.oi, 320600 * 3, 1);
+});
+
+console.log('Budget review');
+
+test('2027 template: DEC tab extra "1" column is not read as Dec 1; forecast column is read', () => {
+  const b = g.parseBudgetSheets_(budgetSheets({ year: 2027, dec: true, forecast: { 'FOOD COST': 0.3, 'TOTAL COMPS': 240000, 'TOTAL NET': 7000000 } }));
+  assert.strictEqual(b.daily['2027-12-01'].gross, 40000, 'Dec 1 kept');
+  assert.strictEqual(b.daily['2027-12-31'].gross, 18000);
+  assert.strictEqual(b.forecast.year, 2026);
+  assert.strictEqual(b.forecast.lines['5002'], 0.3);
+  assert.strictEqual(b.forecast.net, 7000000);
+});
+
+test('negative sales rows fail a workbook check', () => {
+  const b = g.parseBudgetSheets_(budgetSheets({ over: { 'RESTAURANT GROSS F&B SALES': -500 } }));
+  const c = b.checks.filter(x => x.label === 'No negative sales rows')[0];
+  assert.ok(c && !c.ok);
+  assert.ok(/RESTAURANT GROSS F&B SALES is negative in Jan/.test(c.detail));
+});
+
+/** Sample store plus a 2027 budget saved and read back the way the app does it. */
+function reviewStore(over, forecast) {
+  const s = sampleStore();
+  const b = g.parseBudgetSheets_(budgetSheets({ year: 2027, over: over || {}, forecast }));
+  b.checks = [];
+  const rows = g.budgetToRows_(b, 'TST1', { at: '2026-11-02T10:00:00Z', by: 'gm@example.com', file: 'b.xlsx' });
+  s.budgets.TST1[2027] = g.rowsToStore_({ actuals: [], detail: [], budget: rows, tags: [] }, [], {}).budgets.TST1[2027];
+  return s;
+}
+
+test('a budget is a draft until 1 January of its year; upload details are kept', () => {
+  const s = reviewStore();
+  assert.strictEqual(g.buildBudgetReview_(s, 'TST1', 2027, '2026-12-31').status, 'draft');
+  const r = g.buildBudgetReview_(s, 'TST1', 2027, '2027-01-01');
+  assert.strictEqual(r.status, 'approved');
+  assert.strictEqual(r.upload.by, 'gm@example.com');
+});
+
+test('last year takes each month from the latest year on file, never a month-to-date upload', () => {
+  const r = g.buildBudgetReview_(reviewStore(), 'TST1', 2027, '2026-11-03');
+  assert.strictEqual(r.basis.covered, 12);
+  assert.strictEqual(r.basis.months[9], '2026-10');
+  assert.strictEqual(r.basis.months[10], '2025-11', 'Nov 2026 not on file: Nov 2025');
+  assert.strictEqual(r.track.year, 2026);
+  assert.strictEqual(r.track.months, 10);
+});
+
+test('pushes: sales growth and a lower food cost %, with last budget\'s record', () => {
+  const r = g.buildBudgetReview_(reviewStore({ 'RESTAURANT GROSS F&B SALES': 700000, 'FOOD COST': 100000 }), 'TST1', 2027, '2026-11-03');
+  same(r.pushes.map(x => x.key).slice(0, 2), ['NET_SALES', '5002']);
+  const sales = r.pushes[0];
+  near(sales.growthPct, (8400000 / 7616000 - 1) * 100, 0.01);
+  near(sales.track.assumedPct, (600000 / 608000 - 1) * 100, 0.01, '2026 budget against 2025 actual');
+  near(sales.track.deliveredPct, 5.263, 0.01);
+  const food = r.pushes[1];
+  near(food.budgetPct, 100000 / 700000 * 100, 0.01);
+  near(food.pyPct, 110000 / 640000 * 100, 0.01);
+});
+
+test('mistakes: zero, management fee rate, fixed cost drop, blank months', () => {
+  const gaps = [7000, 7000, 0, 7000, 7000, 7000, 0, 7000, 7000, 7000, 7000, 7000];
+  const r = g.buildBudgetReview_(reviewStore({ 'Total Utilities': 0, 'Electricity': 0, 'Water and Sewage': 0, 'Management Fee': 9000,
+    'Total Occupancy Costs': 6000, 'Total Direct Operating Expenses': gaps }), 'TST1', 2027, '2026-11-03');
+  const by = k => r.issues.filter(x => x.key === k);
+  assert.strictEqual(by('7400')[0].severity, 'error');
+  assert.ok(/zero/.test(by('7400')[0].title));
+  assert.ok(!r.pushes.some(x => x.key === '7400'), 'a zero line is a mistake, not a push');
+  assert.ok(/Management fee is 1\.5%/.test(by('9100')[0].title));
+  assert.ok(!r.pushes.some(x => x.key === '9100'), 'the management fee is never a push');
+  assert.ok(/Fixed cost below last year/.test(by('8100')[0].title));
+  assert.ok(/Nothing budgeted in Mar, Jul/.test(by('7005')[0].title));
+});
+
+test('sub-accounts: one budgeted at zero though it ran every month', () => {
+  const r = g.buildBudgetReview_(reviewStore({ 'Linen and Linen Rental': 0, 'Total Direct Operating Expenses': 2000 }), 'TST1', 2027, '2026-11-03');
+  const linen = r.issues.filter(x => /7165/.test(x.title))[0];
+  assert.ok(linen && linen.severity === 'error', JSON.stringify(r.issues.map(x => x.title)));
+  assert.ok(!r.issues.some(x => /5110|5120/.test(x.title)), 'food cost is budgeted as one row: its sub-accounts are not checked');
+});
+
+test('the workbook forecast is checked against R365', () => {
+  const r = g.buildBudgetReview_(reviewStore({}, { 'FOOD COST': 0.3, 'TOTAL COMPS': 240000 }), 'TST1', 2027, '2026-11-03');
+  const f = r.issues.filter(x => /forecast does not match R365/.test(x.title))[0];
+  assert.ok(f, 'forecast issue');
+  assert.ok(/looks like a percentage/.test(f.detail) && /sign is reversed/.test(f.detail));
 });
 
 console.log('\n' + passed + ' passed' + (process.exitCode ? ', some FAILED' : ''));
