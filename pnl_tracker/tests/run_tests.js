@@ -379,4 +379,39 @@ test('trends return 24 months with budget and last year', () => {
   assert.strictEqual(t.points[0].actual, null, 'Nov 2024 not on file');
 });
 
+test('quarter report adds up the months on file against budget and last year', () => {
+  const s = sampleStore();
+  const m = g.buildPeriodReport_(s, 'TST1', '2026-08');
+  const q = g.buildGroupedReport_(s, 'TST1', '2026-08', 'quarter');
+  same(q.months, ['2026-07', '2026-08', '2026-09']);
+  const oi = q.rows.filter(x => x.key === 'OPERATING_INCOME')[0];
+  const moi = m.rows.filter(x => x.key === 'OPERATING_INCOME')[0];
+  near(oi.actual, moi.actual * 3, 1, 'three identical months');
+  near(oi.budget, moi.budget * 3, 1);
+  near(oi.ly, moi.ly * 3, 1);
+  near(oi.pct, moi.pct, 0.01);
+  same(q.flags, []);
+  assert.strictEqual(q.headline.operatingIncome, oi.actual);
+});
+
+test('YTD covers January through the month; Q4 so far holds only October', () => {
+  const s = sampleStore();
+  const y = g.buildGroupedReport_(s, 'TST1', '2026-10', 'ytd');
+  assert.strictEqual(y.months.length, 10);
+  assert.strictEqual(y.stage, 'preliminary', 'October is still preliminary');
+  const q4 = g.buildGroupedReport_(s, 'TST1', '2026-10', 'quarter');
+  same(q4.months, ['2026-10']);
+  assert.strictEqual(q4.expectedMonths, 3);
+  same(g.buildGroupedReport_(s, 'TST1', '2026-10', 'month').months, ['2026-10']);
+});
+
+test('portfolio by quarter compares with the prior quarter', () => {
+  const p = g.buildPortfolio_(sampleStore(), '2026-09', 'quarter');
+  assert.strictEqual(p.grouping, 'quarter');
+  const r = p.rows[0];
+  assert.strictEqual(r.months, 3);
+  assert.ok(r.prevOiPct != null, 'Q2 2026 on file');
+  near(r.oi, 320600 * 3, 1);
+});
+
 console.log('\n' + passed + ' passed' + (process.exitCode ? ', some FAILED' : ''));

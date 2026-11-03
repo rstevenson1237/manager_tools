@@ -289,18 +289,18 @@ function getBootstrap() {
   });
 }
 
-/** All properties for one month. */
-function getPortfolio(period) {
+/** All properties for one month, or the quarter / year to date that month falls in. */
+function getPortfolio(period, grouping) {
   const ss = dataSpreadsheet_();
   requireViewer_(ss);
-  return safe_(buildPortfolio_(loadStore_(ss), String(period)));
+  return safe_(buildPortfolio_(loadStore_(ss), String(period), String(grouping || 'month')));
 }
 
-/** The period report for one property and month. */
-function getPeriodReport(property, period) {
+/** The period report for one property: a month, or the quarter / year to date that month falls in. */
+function getPeriodReport(property, period, grouping) {
   const ss = dataSpreadsheet_();
   requireViewer_(ss);
-  return safe_(buildPeriodReport_(loadStore_(ss), String(property), String(period)));
+  return safe_(buildGroupedReport_(loadStore_(ss), String(property), String(period), String(grouping || 'month')));
 }
 
 /** Monthly series for a property (or 'ALL') and several lines or ratios. */

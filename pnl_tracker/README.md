@@ -117,6 +117,22 @@ operating income are shown but never flagged.
 All thresholds are settings. Properties without a budget still get flags from
 the normal range once 6 months of history are on file.
 
+### Month, quarter or year to date
+
+The Portfolio and Period report have a **Show** choice: Month, Quarter or
+Year to date. A quarter or YTD adds up the months on file in that window.
+Budget covers the same months. Last year covers the same months a year
+earlier, and is shown only when all of them are on file. If the latest month
+is month to date, its budget and last year are cut to the same share of the
+month. Flags, missing lines and notes belong to single months, so they appear
+only in the Month view. In the portfolio, "Prior" means the previous month,
+the previous quarter, or last year's YTD.
+
+In the P&L table, the header row and the Line column stay in view while you
+scroll. Drag the handle on the Line header to make the column narrower or
+wider (arrow keys work too; double-click resets it). The width is remembered
+in that browser.
+
 ## 5. Code layout
 
 | File | Role | Uses Apps Script services? |

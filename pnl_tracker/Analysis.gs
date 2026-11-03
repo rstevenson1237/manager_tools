@@ -296,18 +296,8 @@ function buildPeriodReport_(store, prop, period) {
     return (a.tagged - b.tagged) || ((b.overBy || 0) - (a.overBy || 0));
   });
 
-  const get = function (k) { const r = rows.filter(function (x) { return x.key === k; })[0]; return r || null; };
-  const kpi = function (label, num, den) {
-    const ratio = function (src) {
-      const n = num.reduce(function (s, k) { const r = get(k); return s + (r && r[src] != null ? r[src] : 0); }, 0);
-      const d = den ? (get(den) && get(den)[src]) : null;
-      if (den) return d ? n / d * 100 : null;
-      return n;
-    };
-    const has = function (src) { return num.every(function (k) { const r = get(k); return r && r[src] != null; }); };
-    return { label: label, actual: ratio('actual'), budget: bud && has('budget') ? ratio('budget') : null,
-      ly: lyMonth && has('ly') ? ratio('ly') : null, isPct: !!den };
-  };
+  const get = function (k) { return rows.filter(function (x) { return x.key === k; })[0] || null; };
+  const summary = reportSummary_(rows, !!bud, !!lyMonth);
   const oiRow = get('OPERATING_INCOME');
   const expectedMissing = missing.filter(function (m) { return ['5000', '6000', '7000', '8000'].indexOf(m.section) !== -1; })
     .reduce(function (s, m) { return s + (m.expected || 0); }, 0);
@@ -324,22 +314,10 @@ function buildPeriodReport_(store, prop, period) {
     lyPeriod: lyPeriod,
     threeMonths: has3 ? p3 : null,
     ytdMonths: ytdPeriods,
-    headline: {
-      operatingIncome: oiRow ? oiRow.actual : null,
-      operatingIncomePct: oiRow ? oiRow.pct : null,
-      budget: oiRow ? oiRow.budget : null,
-      budgetPct: oiRow ? oiRow.budgetPct : null,
-      ly: oiRow ? oiRow.ly : null,
-      lyPct: oiRow ? oiRow.lyPct : null,
+    headline: Object.assign(summary.headline, {
       ifMissingPosted: missing.length && oiRow ? oiRow.actual - expectedMissing : null
-    },
-    kpis: [
-      kpi('Net sales', ['NET_SALES']),
-      kpi('Prime cost %', ['TOTAL_5000', 'TOTAL_6000'], 'NET_SALES'),
-      kpi('Cost of sales %', ['TOTAL_5000'], 'NET_SALES'),
-      kpi('Labor %', ['TOTAL_6000'], 'NET_SALES'),
-      kpi('Expenses (7000) %', ['TOTAL_7000'], 'NET_SALES')
-    ],
+    }),
+    kpis: summary.kpis,
     rows: rows,
     flags: flags,
     missing: missing,
@@ -484,31 +462,199 @@ function scaleMap_(map, f) {
   return out;
 }
 
+/* --------------------------------------------------- quarter and YTD views */
+
+const GROUPINGS = ['month', 'quarter', 'ytd'];
+
+/**
+ * The calendar months a grouping covers for the month `period`:
+ *   month    just that month
+ *   quarter  the whole calendar quarter the month falls in
+ *   ytd      January through that month
+ */
+function groupingMonths_(period, grouping) {
+  const y = period.slice(0, 4), m = Number(period.slice(5, 7));
+  let first = m, last = m;
+  if (grouping === 'quarter') { first = Math.floor((m - 1) / 3) * 3 + 1; last = first + 2; }
+  if (grouping === 'ytd') first = 1;
+  const out = [];
+  for (let mo = first; mo <= last; mo++) out.push(y + '-' + (mo < 10 ? '0' : '') + mo);
+  return out;
+}
+
+/** The same grouping one step back: previous month, previous quarter, or last year's YTD. */
+function priorGroupingPeriod_(period, grouping) {
+  return periodAdd_(period, grouping === 'quarter' ? -3 : (grouping === 'ytd' ? -12 : -1));
+}
+
+function worstStage_(stages) {
+  return stages.indexOf('mtd') !== -1 ? 'mtd' : (stages.indexOf('preliminary') !== -1 ? 'preliminary' : (stages.length ? 'settled' : null));
+}
+
+/**
+ * The report for a month, quarter or year to date. A month is the full
+ * period report. A quarter or YTD adds up the months on file in that window:
+ * budget over the same months, last year over the same months a year
+ * earlier (only when every one of them is on file). A month-to-date upload
+ * in the window cuts that month's budget and last year to the same share of
+ * the month, as the monthly report does. Flags, missing lines and notes
+ * belong to single months, so they are left out of these totals.
+ */
+function buildGroupedReport_(store, prop, period, grouping) {
+  grouping = GROUPINGS.indexOf(grouping) === -1 ? 'month' : grouping;
+  if (grouping === 'month') return Object.assign(buildPeriodReport_(store, prop, period), { grouping: 'month', months: [period] });
+
+  const months = groupingMonths_(period, grouping).filter(function (p) { return monthOnFile_(store, prop, p); });
+  if (!months.length) throw new Error('No data on file for ' + prop + ' in that ' + (grouping === 'quarter' ? 'quarter' : 'year') + '.');
+  const lastMonth = months[months.length - 1];
+  const last = monthOnFile_(store, prop, lastMonth);
+
+  // Share of each month that counts: 1, except a month-to-date upload.
+  const fractionOf = {};
+  months.forEach(function (p) {
+    const m = monthOnFile_(store, prop, p);
+    if (m.stage !== 'mtd') { fractionOf[p] = 1; return; }
+    const by = budgetYear_(store, prop, p);
+    fractionOf[p] = budgetMonthFraction_(by && by.daily, Number(p.slice(0, 4)), Number(p.slice(5, 7)), Number(String(m.asOf).slice(8, 10)) || 1);
+  });
+  const sumOver = function (fn) {
+    let s = 0;
+    for (let i = 0; i < months.length; i++) { const v = fn(months[i]); if (v == null) return null; s += v; }
+    return s;
+  };
+  const budgetsByMonth = {};
+  months.forEach(function (p) { budgetsByMonth[p] = budgetMonth_(store, prop, p); });
+  const hasBudget = months.every(function (p) { return budgetsByMonth[p]; });
+  const lyMonths = months.map(function (p) { return periodAdd_(p, -12); });
+  const hasLy = lyMonths.every(function (p) { return monthOnFile_(store, prop, p); });
+
+  const budgetOf = function (key) {
+    if (!hasBudget) return null;
+    return sumOver(function (p) { const b = budgetsByMonth[p]; return key in b ? b[key] * fractionOf[p] : null; });
+  };
+  const lyOf = function (key) {
+    if (!hasLy) return null;
+    return sumOver(function (p) { return amountOf_(store, prop, periodAdd_(p, -12), key) * fractionOf[p]; });
+  };
+
+  const net = sumOver(function (p) { return amountOf_(store, prop, p, 'NET_SALES'); }) || 0;
+  const budNet = budgetOf('NET_SALES');
+  const lyNet = lyOf('NET_SALES');
+
+  const rows = lineCatalog_(store, prop, lastMonth).map(function (meta) {
+    const key = meta.key;
+    const dir = direction_(key, meta.section);
+    const act = sumOver(function (p) { return amountOf_(store, prop, p, key); });
+    const b = budgetOf(key);
+    const ly = lyOf(key);
+    return {
+      key: key, name: meta.name, section: meta.section, kind: meta.kind,
+      actual: act, pct: pctOf_(act, net), reportedPct: null, absent: false,
+      budget: b, budgetPct: b == null ? null : pctOf_(b, budNet),
+      varBudget: b == null ? null : dir * (act - b),
+      ly: ly, lyPct: ly == null ? null : pctOf_(ly, lyNet), varLy: ly == null ? null : dir * (act - ly),
+      three: null, ytd: null, flag: null, missing: null, tag: null
+    };
+  });
+
+  const summary = reportSummary_(rows, hasBudget, hasLy);
+  const stages = months.map(function (p) { return monthOnFile_(store, prop, p).stage; });
+  return {
+    property: prop,
+    period: period,
+    grouping: grouping,
+    months: months,
+    expectedMonths: groupingMonths_(period, grouping).length,
+    stage: worstStage_(stages),
+    asOf: last.asOf,
+    fraction: fractionOf[lastMonth],
+    hasBudget: hasBudget,
+    hasLastYear: hasLy,
+    lyProrated: hasLy && fractionOf[lastMonth] < 1,
+    lyPeriod: lyMonths[lyMonths.length - 1],
+    lyMonths: lyMonths,
+    threeMonths: null,
+    ytdMonths: [],
+    headline: summary.headline,
+    kpis: summary.kpis,
+    rows: rows,
+    flags: [],
+    missing: [],
+    note: ''
+  };
+}
+
+/** Headline and KPI tiles from finished report rows. */
+function reportSummary_(rows, hasBudget, hasLy) {
+  const get = function (k) { return rows.filter(function (x) { return x.key === k; })[0] || null; };
+  const kpi = function (label, num, den) {
+    const ratio = function (src) {
+      const n = num.reduce(function (s, k) { const r = get(k); return s + (r && r[src] != null ? r[src] : 0); }, 0);
+      const d = den ? (get(den) && get(den)[src]) : null;
+      if (den) return d ? n / d * 100 : null;
+      return n;
+    };
+    const has = function (src) { return num.every(function (k) { const r = get(k); return r && r[src] != null; }); };
+    return { label: label, actual: ratio('actual'), budget: hasBudget && has('budget') ? ratio('budget') : null,
+      ly: hasLy && has('ly') ? ratio('ly') : null, isPct: !!den };
+  };
+  const oi = get('OPERATING_INCOME');
+  return {
+    headline: {
+      operatingIncome: oi ? oi.actual : null, operatingIncomePct: oi ? oi.pct : null,
+      budget: oi ? oi.budget : null, budgetPct: oi ? oi.budgetPct : null,
+      ly: oi ? oi.ly : null, lyPct: oi ? oi.lyPct : null, ifMissingPosted: null
+    },
+    kpis: [
+      kpi('Net sales', ['NET_SALES']),
+      kpi('Prime cost %', ['TOTAL_5000', 'TOTAL_6000'], 'NET_SALES'),
+      kpi('Cost of sales %', ['TOTAL_5000'], 'NET_SALES'),
+      kpi('Labor %', ['TOTAL_6000'], 'NET_SALES'),
+      kpi('Expenses (7000) %', ['TOTAL_7000'], 'NET_SALES')
+    ]
+  };
+}
+
 /* -------------------------------------------------------------- portfolio */
 
-/** One row per active property for a month, ranked by operating income %. */
-function buildPortfolio_(store, period) {
+/** Operating income % for a property over a month, quarter or YTD; null when nothing is on file. */
+function groupedOiPct_(store, prop, period, grouping) {
+  let net = 0, oi = 0, any = false;
+  groupingMonths_(period, grouping).forEach(function (p) {
+    if (!monthOnFile_(store, prop, p)) return;
+    any = true;
+    net += amountOf_(store, prop, p, 'NET_SALES') || 0;
+    oi += amountOf_(store, prop, p, 'OPERATING_INCOME') || 0;
+  });
+  return any && net ? oi / net * 100 : null;
+}
+
+/**
+ * One row per active property for a month, quarter or year to date, ranked
+ * by operating income %. "Prior" is the previous month, the previous quarter,
+ * or the same months last year for YTD.
+ */
+function buildPortfolio_(store, period, grouping) {
+  grouping = GROUPINGS.indexOf(grouping) === -1 ? 'month' : grouping;
   const rows = [];
   const total = { net: 0, oi: 0, cos: 0, labor: 0, budOi: 0, budNet: 0, budCount: 0, count: 0 };
+  const span = groupingMonths_(period, grouping);
   store.properties.filter(function (p) { return p.active !== false; }).forEach(function (p) {
-    if (!monthOnFile_(store, p.code, period)) {
+    if (!span.some(function (m) { return monthOnFile_(store, p.code, m); })) {
       rows.push({ code: p.code, name: p.name, onFile: false });
       return;
     }
-    const r = buildPeriodReport_(store, p.code, period);
+    const r = buildGroupedReport_(store, p.code, period, grouping);
     const v = function (k, f) { const x = r.rows.filter(function (y) { return y.key === k; })[0]; return x ? x[f || 'actual'] : null; };
     const net = v('NET_SALES') || 0;
-    const prevPeriod = periodAdd_(period, -1);
-    const prev = monthOnFile_(store, p.code, prevPeriod);
-    const prevNet = prev ? amountOf_(store, p.code, prevPeriod, 'NET_SALES') : null;
     const row = {
-      code: p.code, name: p.name, onFile: true, stage: r.stage, asOf: r.asOf,
+      code: p.code, name: p.name, onFile: true, stage: r.stage, asOf: r.asOf, months: r.months.length,
       net: net, oi: v('OPERATING_INCOME'), oiPct: v('OPERATING_INCOME', 'pct'),
       primePct: net ? ((v('TOTAL_5000') || 0) + (v('TOTAL_6000') || 0)) / net * 100 : null,
       laborPct: v('TOTAL_6000', 'pct'), cosPct: v('TOTAL_5000', 'pct'),
       budgetOi: v('OPERATING_INCOME', 'budget'), varBudgetOi: v('OPERATING_INCOME', 'varBudget'),
       lyOi: v('OPERATING_INCOME', 'ly'), varLyOi: v('OPERATING_INCOME', 'varLy'),
-      prevOiPct: prevNet ? amountOf_(store, p.code, prevPeriod, 'OPERATING_INCOME') / prevNet * 100 : null,
+      prevOiPct: groupedOiPct_(store, p.code, priorGroupingPeriod_(period, grouping), grouping),
       flags: r.flags.filter(function (f) { return !f.tagged; }).length,
       missing: r.missing.length,
       ifMissingPosted: r.headline.ifMissingPosted
@@ -525,6 +671,8 @@ function buildPortfolio_(store, period) {
   });
   return {
     period: period,
+    grouping: grouping,
+    months: span,
     rows: rows,
     totals: {
       properties: total.count,
