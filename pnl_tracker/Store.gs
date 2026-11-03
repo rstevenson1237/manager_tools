@@ -9,8 +9,10 @@
  *            This is the month-to-month history trends and the dashboard use.
  *   Detail   sub-accounts from detailed uploads, one row per month × property
  *            × sub-account. Used only to explain flags in the period report.
- *   Budget   per property and year: rolled-up lines, every GL row, and the
- *            daily sales budget (for month-to-date).
+ *   Budget   per property and year: rolled-up lines, every GL row, the
+ *            daily sales budget (for month-to-date), the workbook's forecast
+ *            of the year before (annual, in the Jan column) and one 'meta'
+ *            row recording the upload (JSON in the Name column).
  *   Tags     the manager's notes and "timing / accrual" tags on a line.
  *   Uploads  one row per upload: who, when, which file, what it held.
  *   _Config  settings (viewers, properties, flag rule).
@@ -56,9 +58,25 @@ function parsedToRows_(parsed, asOf, uploadId, settleDays) {
   return { actuals: actuals, detail: detail, months: months };
 }
 
-/** Rows to write for one parsed budget. */
-function budgetToRows_(budget, property) {
+/**
+ * Rows to write for one parsed budget.
+ * @param {Object=} meta { at, by, file } — who uploaded it, kept with the budget
+ */
+function budgetToRows_(budget, property, meta) {
   const rows = [];
+  const blank11 = ['', '', '', '', '', '', '', '', '', '', ''];
+  if (meta) {
+    const info = { at: meta.at || '', by: meta.by || '', file: meta.file || '',
+      checks: (budget.checks || []).map(function (c) { return { label: c.label, ok: c.ok, detail: c.detail }; }) };
+    rows.push([budget.year, property, 'meta', 'upload', JSON.stringify(info), ''].concat(blank11));
+  }
+  if (budget.forecast) {
+    const f = budget.forecast;
+    Object.keys(f.lines).forEach(function (k) {
+      rows.push([budget.year, property, 'forecast', k, String(f.year), round2_(f.lines[k])].concat(blank11));
+    });
+    if (f.net != null) rows.push([budget.year, property, 'forecast', 'NET_SALES', String(f.year), round2_(f.net)].concat(blank11));
+  }
   Object.keys(budget.lines).forEach(function (k) {
     rows.push([budget.year, property, 'line', k, '', ].concat(budget.lines[k].map(round2_)));
   });
@@ -106,8 +124,17 @@ function rowsToStore_(sheetRows, properties, rules) {
   (sheetRows.budget || []).forEach(function (r) {
     const year = Number(r[0]), prop = String(r[1]), kind = String(r[2]), key = String(r[3]);
     const byProp = store.budgets[prop] = store.budgets[prop] || {};
-    const b = byProp[year] = byProp[year] || { lines: {}, gl: {}, daily: {} };
+    const b = byProp[year] = byProp[year] || { lines: {}, gl: {}, daily: {}, forecast: null, meta: null };
     const months = r.slice(5, 17).map(function (v) { return Number(v) || 0; });
+    if (kind === 'meta') {
+      try { b.meta = JSON.parse(String(r[4] || '{}')); } catch (e) { b.meta = {}; }
+      return;
+    }
+    if (kind === 'forecast') {
+      b.forecast = b.forecast || { year: Number(r[4]) || year - 1, lines: {} };
+      b.forecast.lines[key] = months[0];
+      return;
+    }
     if (kind === 'line') b.lines[key] = months;
     else if (kind === 'gl') b.gl[key] = { name: String(r[4]), months: months };
     else if (kind === 'daily') b.daily[dateText_(r[3])] = { gross: months[0], banquet: months[1] };

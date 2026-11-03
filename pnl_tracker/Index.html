@@ -95,7 +95,27 @@
     .chip-list li{background:#F1F3F4;border-radius:12px;padding:4px 6px 4px 10px;font-size:12px;display:flex;align-items:center;gap:6px;}
     .chip-list li button{background:none;color:var(--danger);min-height:0;padding:0 4px;}
     svg text{font-family:inherit;}
-    @media print{nav.top,.no-print,.toast-stack{display:none !important;} body{background:#fff;} main{padding:0;} .card{break-inside:avoid;}}
+    .review-list{display:flex;flex-direction:column;}
+    .review-item{border-top:1px solid #F0F0EC;padding:10px 0;display:flex;flex-direction:column;gap:4px;font-size:13px;}
+    .review-item:first-child{border-top:none;padding-top:0;}
+    .review-item .track{font-size:12px;color:#3D434B;display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+    .sub-head{font-size:14px;margin:16px 0 4px;}
+    .badge.draft{background:#FFF7D6;color:#5C4400;border:1px solid #D9B648;}
+    .badge.approved{background:var(--brand-soft);color:var(--brand-dark);}
+    /* P&L table: header row and line column stay put while the numbers scroll */
+    .pl-scroll{overflow:auto;max-height:75vh;overscroll-behavior:contain;}
+    .pl-scroll th{z-index:2;box-shadow:inset 0 -1px 0 #E2E2DC;}
+    .pl-scroll td{background:#fff;}
+    .pl-scroll .line-col{position:sticky;left:0;z-index:1;white-space:normal;overflow-wrap:anywhere;box-shadow:inset -1px 0 0 #E2E2DC;}
+    .pl-scroll th.line-col{z-index:3;box-shadow:inset -1px 0 0 #E2E2DC,inset 0 -1px 0 #E2E2DC;}
+    .pl-scroll tr.sec td .sec-label{position:sticky;left:10px;}
+    .col-resize{position:absolute;top:0;right:-5px;bottom:0;width:10px;cursor:col-resize;touch-action:none;z-index:4;display:flex;justify-content:center;}
+    .col-resize::after{content:'';width:3px;margin:6px 0;border-radius:2px;background:#C9CCD1;}
+    .col-resize:hover::after,.col-resize:focus-visible::after,.col-resize.dragging::after{background:var(--brand);}
+    .col-resize:focus-visible{outline:none;}
+    body.resizing{cursor:col-resize;user-select:none;}
+    @media print{nav.top,.no-print,.toast-stack{display:none !important;} body{background:#fff;} main{padding:0;} .card{break-inside:avoid;}
+      .pl-scroll{max-height:none;overflow:visible;} .pl-scroll .line-col,.pl-scroll th{position:static;} .col-resize{display:none;}}
   </style>
 </head>
 <body>
@@ -134,12 +154,16 @@
         <div class="row">
           <div>
             <div class="muted">{{ portfolio ? portfolio.totals.properties + ' properties · ranked by operating income %' : '' }}</div>
-            <h1>Portfolio · {{ monthLabel(period) }} <span v-if="portfolioStage" :class="['badge', portfolioStage]">{{ stageLabel(portfolioStage) }}</span></h1>
+            <h1>Portfolio · {{ groupLabel(period, grouping) }} <span v-if="portfolioStage" :class="['badge', portfolioStage]">{{ stageLabel(portfolioStage) }}</span></h1>
           </div>
           <div class="controls no-print">
-            <div class="field"><label for="pf-period">Month</label>
+            <div class="field"><label for="pf-group">Show</label>
+              <select id="pf-group" v-model="grouping" @change="setGrouping">
+                <option v-for="gr in GROUPINGS" :key="gr.key" :value="gr.key">{{ gr.label }}</option>
+              </select></div>
+            <div class="field"><label for="pf-period">{{ groupingNoun }}</label>
               <select id="pf-period" v-model="period" @change="loadPortfolio">
-                <option v-for="p in periods" :key="p" :value="p">{{ monthLabel(p) }}</option>
+                <option v-for="o in periodOptions(periods)" :key="o.value" :value="o.value">{{ o.label }}</option>
               </select></div>
           </div>
         </div>
@@ -156,15 +180,17 @@
               <div class="sub">{{ portfolio.totals.properties }} properties on file</div></div>
             <div class="card stat"><div class="label">Prime cost %</div><div class="value">{{ pct(portfolio.totals.primePct) }}</div>
               <div class="sub">Labor {{ pct(portfolio.totals.laborPct) }}</div></div>
-            <div class="card stat"><div class="label">Flags</div><div class="value">{{ portfolioFlags }}</div>
+            <div class="card stat" v-if="grouping === 'month'"><div class="label">Flags</div><div class="value">{{ portfolioFlags }}</div>
               <div class="sub">across {{ portfolio.totals.properties }} properties</div></div>
+            <div class="card stat" v-else><div class="label">Months covered</div><div class="value">{{ portfolio.months.length }}</div>
+              <div class="sub">{{ spanLabel(portfolio.months) }} · flags are in each month's report</div></div>
           </div>
           <div class="card flush">
             <div class="head"><h2>Properties side by side</h2><span class="muted">Dashed line = portfolio {{ pct(portfolio.totals.oiPct) }} · select a row for its report</span></div>
             <div class="scroll">
               <table style="min-width:960px">
-                <thead><tr><th>Property</th><th>Net sales</th><th>Operating income</th><th style="text-align:left;width:24%">OI % of sales</th><th>Prior month</th>
-                  <th>Prime %</th><th>Labor %</th><th>vs budget</th><th>vs last year</th><th>Flags</th></tr></thead>
+                <thead><tr><th>Property</th><th>Net sales</th><th>Operating income</th><th style="text-align:left;width:24%">OI % of sales</th><th>{{ priorLabel }}</th>
+                  <th>Prime %</th><th>Labor %</th><th>vs budget</th><th>vs last year</th><th>{{ grouping === 'month' ? 'Flags' : 'Months' }}</th></tr></thead>
                 <tbody>
                   <tr v-for="r in portfolio.rows" :key="r.code" :class="{ clickable: r.onFile }" @click="r.onFile && openReport(r.code, period)">
                     <td><b>{{ r.name }}</b> <span v-if="r.onFile && r.stage !== portfolioStage" :class="['badge', r.stage]">{{ stageLabel(r.stage) }}</span></td>
@@ -180,10 +206,11 @@
                       <td>{{ pct(r.primePct) }}</td><td>{{ pct(r.laborPct) }}</td>
                       <td :class="cls(r.varBudgetOi)">{{ r.budgetOi == null ? '—' : signed(r.varBudgetOi) }}</td>
                       <td :class="cls(r.varLyOi)">{{ r.lyOi == null ? '—' : signed(r.varLyOi) }}</td>
-                      <td><span v-if="r.flags" class="bad"><b>{{ r.flags }}</b></span><span v-else class="muted">0</span>
+                      <td v-if="grouping === 'month'"><span v-if="r.flags" class="bad"><b>{{ r.flags }}</b></span><span v-else class="muted">0</span>
                         <span v-if="r.missing" class="muted"> · {{ r.missing }} missing</span></td>
+                      <td v-else :class="{ muted: r.months === portfolio.months.length }">{{ r.months }} of {{ portfolio.months.length }}</td>
                     </template>
-                    <td v-else colspan="9" class="muted" style="text-align:left">No data for this month</td>
+                    <td v-else colspan="9" class="muted" style="text-align:left">No data for this {{ grouping === 'month' ? 'month' : 'period' }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -200,9 +227,13 @@
               <select id="rp-prop" v-model="property" @change="loadReport">
                 <option v-for="p in activeProperties" :key="p.code" :value="p.code">{{ p.name }}</option>
               </select></div>
-            <div class="field"><label for="rp-period">Month</label>
+            <div class="field"><label for="rp-group">Show</label>
+              <select id="rp-group" v-model="grouping" @change="setGrouping">
+                <option v-for="gr in GROUPINGS" :key="gr.key" :value="gr.key">{{ gr.label }}</option>
+              </select></div>
+            <div class="field"><label for="rp-period">{{ groupingNoun }}</label>
               <select id="rp-period" v-model="period" @change="loadReport">
-                <option v-for="p in periodsFor(property)" :key="p" :value="p">{{ monthLabel(p) }}</option>
+                <option v-for="o in periodOptions(periodsFor(property))" :key="o.value" :value="o.value">{{ o.label }}</option>
               </select></div>
           </div>
           <button class="ghost" @click="printPage" :disabled="!report">Print / save as PDF</button>
@@ -212,10 +243,14 @@
         <template v-if="report && !loading.report">
           <div>
             <div class="muted">{{ stageSentence(report) }}</div>
-            <h1>{{ propertyName(report.property) }} · {{ monthLabel(report.period) }} <span :class="['badge', report.stage]">{{ stageLabel(report.stage) }}</span></h1>
+            <h1>{{ propertyName(report.property) }} · {{ reportGrouped ? groupLabel(report.period, report.grouping) : monthLabel(report.period) }} <span :class="['badge', report.stage]">{{ stageLabel(report.stage) }}</span></h1>
           </div>
 
-          <div class="banner info" v-if="report.stage === 'mtd'">
+          <div class="banner info" v-if="report.stage === 'mtd' && reportGrouped">
+            {{ monthLabel(report.months[report.months.length - 1]) }} is month to date through {{ dayLabel(report.asOf) }}. Its budget and last year
+            are cut to {{ pct(report.fraction * 100) }} of the month, so every column covers the same days.
+          </div>
+          <div class="banner info" v-else-if="report.stage === 'mtd'">
             Month to date through {{ dayLabel(report.asOf) }}. Budget is shown for {{ pct(report.fraction * 100) }} of the month.
             Only food, beverage and hourly labor are judged now; the rest posts at close.
           </div>
@@ -232,7 +267,7 @@
               <div style="display:flex;flex-wrap:wrap;gap:6px 18px">
                 <span v-if="report.headline.budget != null">Budget {{ money(report.headline.budget) }} ({{ pct(report.headline.budgetPct) }}) ·
                   <b :class="report.headline.operatingIncome >= report.headline.budget ? 'good' : 'bad'">{{ signed(report.headline.operatingIncome - report.headline.budget) }}</b></span>
-                <span v-if="report.headline.ly != null">{{ monthLabel(report.lyPeriod) }} {{ money(report.headline.ly) }} ({{ pct(report.headline.lyPct) }}) ·
+                <span v-if="report.headline.ly != null">{{ lyLabel(report) }} {{ money(report.headline.ly) }} ({{ pct(report.headline.lyPct) }}) ·
                   <b :class="report.headline.operatingIncome >= report.headline.ly ? 'good' : 'bad'">{{ signed(report.headline.operatingIncome - report.headline.ly) }}</b></span>
               </div>
               <div class="warn" v-if="report.headline.ifMissingPosted != null">With the missing lines posted: about {{ money(report.headline.ifMissingPosted) }}.</div>
@@ -246,7 +281,7 @@
             </div>
           </div>
 
-          <div class="card" v-if="report.flags.length || report.stage !== 'mtd'">
+          <div class="card" v-if="!reportGrouped && (report.flags.length || report.stage !== 'mtd')">
             <div class="row" style="margin-bottom:12px">
               <h2>Flags · {{ activeFlags.length }}</h2>
               <span class="muted">Worse than budget by {{ money(rules.minDollar) }} and {{ pct(rules.minPct * 100, 0) }}, or above the normal range (last 12 months as % of sales)</span>
@@ -284,15 +319,20 @@
           <div class="card flush">
             <div class="head"><h2>Profit &amp; loss</h2>
               <span class="muted"><span class="good"><b>Blue</b></span> = better · <span class="bad"><b>orange</b></span> = worse · ● flagged · ○ missing</span></div>
-            <div class="scroll">
-              <table style="min-width:980px">
-                <thead><tr><th>Line</th><th>Actual</th><th>% sales</th><th>Budget</th><th>vs budget</th><th>{{ report.hasLastYear ? monthLabel(report.lyPeriod) : 'Last year' }}{{ report.lyProrated ? ' (pro-rated)' : '' }}</th><th>vs LY</th>
-                  <th>3 months vs budget</th><th>Year to date vs budget</th></tr></thead>
+            <div class="pl-scroll">
+              <table :style="{ minWidth: (lineColWidth + (reportGrouped ? 6 : 8) * 100) + 'px' }">
+                <thead><tr>
+                  <th class="line-col" :style="lineColStyle">Line
+                    <span class="col-resize no-print" :class="{ dragging: resizing }" role="separator" aria-orientation="vertical" tabindex="0"
+                      :aria-valuenow="lineColWidth" :aria-valuemin="LINE_COL_MIN" :aria-valuemax="LINE_COL_MAX" aria-label="Resize the line column"
+                      title="Drag to resize · double-click to reset" @pointerdown="startResize" @dblclick="resetLineCol" @keydown="keyResize"></span></th>
+                  <th>Actual</th><th>% sales</th><th>Budget</th><th>vs budget</th><th>{{ lyLabel(report) }}{{ report.lyProrated ? ' (pro-rated)' : '' }}</th><th>vs LY</th>
+                  <template v-if="!reportGrouped"><th>3 months vs budget</th><th>Year to date vs budget</th></template></tr></thead>
                 <tbody>
                   <template v-for="r in reportRows" :key="r.id">
-                    <tr v-if="r.head" class="sec"><td colspan="9">{{ r.head }}</td></tr>
+                    <tr v-if="r.head" class="sec"><td :colspan="reportGrouped ? 7 : 9"><span class="sec-label">{{ r.head }}</span></td></tr>
                     <tr v-else :class="{ total: r.kind === 'sectionTotal' || (r.kind === 'computed' && r.key !== 'OPERATING_INCOME'), key: r.key === 'OPERATING_INCOME' }">
-                      <td :class="{ indent: r.kind === 'line' || r.kind === 'group' }">
+                      <td class="line-col" :style="lineColStyle" :class="{ indent: r.kind === 'line' || r.kind === 'group' }">
                         {{ lineLabel(r) }}<span v-if="r.flag" class="bad"> ●</span><span v-if="r.missing" class="bad"> ○</span>
                       </td>
                       <td>{{ money(r.actual) }}</td>
@@ -301,18 +341,23 @@
                       <td :class="cls(r.varBudget)">{{ r.varBudget == null ? '—' : signed(r.varBudget) }}</td>
                       <td class="muted">{{ r.ly == null ? '—' : money(r.ly) }}</td>
                       <td :class="cls(r.varLy)">{{ r.varLy == null ? '—' : signed(r.varLy) }}</td>
-                      <td :class="cls(r.three && r.three.variance)">{{ r.three && r.three.variance != null ? signed(r.three.variance) : '—' }}</td>
-                      <td :class="cls(r.ytd && r.ytd.variance)">{{ r.ytd && r.ytd.variance != null ? signed(r.ytd.variance) : '—' }}</td>
+                      <template v-if="!reportGrouped">
+                        <td :class="cls(r.three && r.three.variance)">{{ r.three && r.three.variance != null ? signed(r.three.variance) : '—' }}</td>
+                        <td :class="cls(r.ytd && r.ytd.variance)">{{ r.ytd && r.ytd.variance != null ? signed(r.ytd.variance) : '—' }}</td>
+                      </template>
                     </tr>
                   </template>
                 </tbody>
               </table>
             </div>
-            <div class="muted" style="padding:10px 16px">% sales = share of net sales. Cost of sales lines also show R365's own % (of that category's sales) in brackets.
+            <div class="muted" style="padding:10px 16px" v-if="reportGrouped">% sales = share of net sales.
+              Totals add up {{ report.months.length }} month{{ report.months.length === 1 ? '' : 's' }} on file ({{ spanLabel(report.months) }}); budget covers the same months<template v-if="!report.hasBudget"> (not shown: a month has no budget)</template>
+              and last year the same months a year earlier<template v-if="!report.hasLastYear"> (not shown: a month is not on file)</template>. Flags and notes are kept per month.</div>
+            <div class="muted" style="padding:10px 16px" v-else>% sales = share of net sales. Cost of sales lines also show R365's own % (of that category's sales) in brackets.
               Year to date covers {{ report.ytdMonths.length }} month{{ report.ytdMonths.length === 1 ? '' : 's' }} on file<template v-if="!report.threeMonths">; 3-month figures need the two prior months on file</template>.</div>
           </div>
 
-          <div class="card">
+          <div class="card" v-if="!reportGrouped">
             <h2 style="margin-bottom:8px">Manager notes</h2>
             <template v-if="boot.isAdmin">
               <label for="note" class="muted">Saved with this month and printed with the report</label>
@@ -380,6 +425,173 @@
                         <div v-if="c.delta != null" :class="cls(c.delta)" style="font-size:11px">{{ t.isPct ? signedPts(c.delta) : signed(c.delta / 1000) + 'k' }}</div>
                       </template>
                     </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </template>
+      </template>
+
+      <!-- ============================== BUDGET REVIEW ============================== -->
+      <template v-if="view === 'budget'">
+        <div class="row no-print">
+          <div class="controls">
+            <div class="field"><label for="bv-prop">Property</label>
+              <select id="bv-prop" v-model="reviewProperty" @change="reviewYear = null; loadReview()">
+                <option v-for="p in budgetProperties" :key="p.code" :value="p.code">{{ p.name }}</option>
+              </select></div>
+            <div class="field"><label for="bv-year">Budget</label>
+              <select id="bv-year" v-model="reviewYear" @change="loadReview">
+                <option v-for="b in budgetsFor(reviewProperty)" :key="b.year" :value="b.year">{{ b.year }} · {{ b.status === 'draft' ? 'Draft' : 'Approved' }}</option>
+              </select></div>
+          </div>
+          <div class="controls">
+            <button v-if="boot.isAdmin" class="ghost" @click="go('upload')">Upload a new version</button>
+            <button class="ghost" @click="printPage" :disabled="!review">Print / save as PDF</button>
+          </div>
+        </div>
+        <div v-if="!budgetProperties.length" class="empty">No budgets on file yet.<template v-if="boot.isAdmin"> Upload one in <button class="link" @click="go('upload')">Upload &amp; settings</button>.</template></div>
+        <div v-if="loading.review" class="muted"><span class="spin"></span>Loading…</div>
+        <div v-else-if="reviewError" class="banner warn">{{ reviewError }}</div>
+        <template v-if="review && !loading.review">
+          <div>
+            <div class="muted">{{ reviewStatusSentence }}</div>
+            <h1>{{ propertyName(review.property) }} · {{ review.year }} budget <span :class="['badge', review.status]">{{ review.status === 'draft' ? 'Draft' : 'Approved' }}</span></h1>
+            <div class="muted" style="margin-top:4px">
+              Compared with R365 actuals for {{ spanLabel([review.basis.first, review.basis.last]) }}<template v-if="review.basis.covered < 12"> ({{ review.basis.covered }} months on file; budget compared over the same months)</template><template v-if="review.track">
+              · last budget: {{ review.track.year }}, {{ spanLabel([review.track.first, review.track.last]) }} on file</template><template v-else> · no {{ review.year - 1 }} budget on file to check the track record</template>.
+            </div>
+          </div>
+          <div v-if="!review.basis.covered" class="banner warn">No months from {{ review.year - 1 }} or {{ review.year - 2 }} are on file for this property, so there is nothing to compare the budget with.</div>
+
+          <div class="row" style="align-items:stretch">
+            <div class="hero" style="flex:1 1 340px">
+              <div class="label">Budgeted operating income</div>
+              <div><span class="value">{{ money(review.headline.budOi) }}</span> <span style="color:#C9CED6">{{ pct(review.headline.budOiPct) }} of sales</span></div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px 18px" v-if="review.headline.pyOi != null">
+                <span>Last year {{ money(review.headline.pyOi) }} ({{ pct(review.headline.pyOiPct) }}) ·
+                  <b :class="review.headline.compOi >= review.headline.pyOi ? 'good' : 'bad'">{{ signed(review.headline.compOi - review.headline.pyOi) }}</b></span>
+                <span>Net sales {{ money(review.headline.budNet) }}<template v-if="review.headline.growthPct != null"> ·
+                  <b :class="review.headline.growthPct >= 0 ? 'good' : 'bad'">{{ signedPct(review.headline.growthPct) }}</b> on last year</template></span>
+              </div>
+              <div class="warn" v-if="review.headline.trackOi">{{ review.track.year }} budget so far: operating income {{ money(review.headline.trackOi.actual) }} against {{ money(review.headline.trackOi.budget) }} budgeted
+                ({{ signed(review.headline.trackOi.variance) }}); net sales {{ money(review.headline.trackNet.act) }} against {{ money(review.headline.trackNet.bud) }}.</div>
+            </div>
+            <div class="grid" style="flex:999 1 560px">
+              <div class="card stat" v-for="k in review.kpis" :key="k.key">
+                <div class="label">{{ k.label }}</div>
+                <div class="value">{{ pct(k.budget) }}</div>
+                <div class="sub">Last year {{ pct(k.py) }}<template v-if="k.budget != null && k.py != null"> · <b :class="cls(k.py - k.budget)">{{ signedPts(k.budget - k.py) }}</b></template></div>
+                <div class="sub" v-if="k.prevBudget != null">{{ review.track.year }} budget {{ pct(k.prevBudget) }}, actual {{ pct(k.prevActual) }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid wide" style="align-items:start">
+            <div class="card">
+              <div class="row" style="margin-bottom:10px"><h2>Where the budget pushes · {{ review.pushes.length }}</h2>
+                <span class="muted">Costs {{ review.rules.pushPts }} pts of sales or more below last year (worth {{ money(review.rules.minImpact) }}+), and sales growth</span></div>
+              <p v-if="!review.pushes.length" class="muted">Nothing is budgeted much better than last year.</p>
+              <div class="review-list">
+                <div v-for="x in review.pushes" :key="'p' + x.key" class="review-item">
+                  <div class="row" style="align-items:baseline;gap:8px">
+                    <b v-if="x.kind === 'sales'">Net sales {{ signedPct(x.growthPct) }} on last year</b>
+                    <b v-else>{{ lineName(x) }} · {{ pct(x.budgetPct) }} of sales <span class="muted">vs {{ pct(x.pyPct) }} last year</span></b>
+                    <b class="good">{{ signed(x.impact) }}</b>
+                  </div>
+                  <div class="muted" v-if="x.kind === 'sales' && x.months.length">Most of the change: <span v-for="(m, i) in x.months" :key="m.month">{{ i ? ', ' : '' }}{{ monthLabel(m.month, true) }} {{ signed(m.change) }}</span></div>
+                  <div class="muted" v-if="x.kind === 'cost'">{{ money(x.impact) }} less than running at last year's rate on the budgeted sales.</div>
+                  <div v-if="x.track" class="track">
+                    <template v-if="x.kind === 'sales'">{{ review.track.year }} budget assumed {{ signedPct(x.track.assumedPct) }}; {{ x.track.months }} months in, it is {{ signedPct(x.track.deliveredPct) }}.</template>
+                    <template v-else>{{ review.track.year }} budget asked for {{ pct(x.track.budgetPct) }}; it ran {{ pct(x.track.actualPct) }}.</template>
+                    <span v-if="x.repeat" class="badge preliminary">Missed last year</span>
+                  </div>
+                </div>
+              </div>
+              <template v-if="review.room.length">
+                <h3 class="sub-head">Room in the budget · {{ review.room.length }}</h3>
+                <p class="muted" style="margin:0 0 6px">Budgeted worse than last year. Fine if planned (price increases, new staff); otherwise a cushion.</p>
+                <div class="review-list">
+                  <div v-for="x in review.room" :key="'r' + x.key" class="review-item">
+                    <div class="row" style="align-items:baseline;gap:8px">
+                      <b v-if="x.kind === 'sales'">Net sales {{ signedPct(x.growthPct) }} on last year</b>
+                      <b v-else>{{ lineName(x) }} · {{ pct(x.budgetPct) }} of sales <span class="muted">vs {{ pct(x.pyPct) }} last year</span></b>
+                      <b class="bad">{{ signed(x.impact) }}</b>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+            <div class="card">
+              <div class="row" style="margin-bottom:10px"><h2>Looks budgeted incorrectly · {{ review.issues.length }}</h2>
+                <span class="muted"><span class="badge trend">Likely error</span> <span class="badge spike">Check</span></span></div>
+              <p v-if="!review.issues.length" class="muted">Nothing looks out of place.</p>
+              <div class="review-list">
+                <div v-for="(x, i) in review.issues" :key="'i' + i" class="review-item">
+                  <div class="row" style="align-items:baseline;gap:8px">
+                    <span><span :class="['badge', x.severity === 'error' ? 'trend' : 'spike']">{{ x.severity === 'error' ? 'Likely error' : 'Check' }}</span>
+                      <b> {{ x.key && x.name && x.title.indexOf(x.name) === -1 ? lineName(x) + ': ' : '' }}{{ x.title }}</b></span>
+                    <b v-if="x.impact" class="muted" style="font-size:13px">{{ money(x.impact) }}</b>
+                  </div>
+                  <div class="muted">{{ x.detail }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card flush">
+            <div class="head"><h2>Budget against last year</h2>
+              <span class="muted"><span class="good"><b>▲</b></span> push · <span class="bad"><b>▽</b></span> room · <b class="bad">!</b> see "looks budgeted incorrectly"</span></div>
+            <div class="pl-scroll">
+              <table :style="{ minWidth: (lineColWidth + 8 * 100) + 'px' }">
+                <thead><tr>
+                  <th class="line-col" :style="lineColStyle">Line
+                    <span class="col-resize no-print" :class="{ dragging: resizing }" role="separator" aria-orientation="vertical" tabindex="0"
+                      :aria-valuenow="lineColWidth" :aria-valuemin="LINE_COL_MIN" :aria-valuemax="LINE_COL_MAX" aria-label="Resize the line column"
+                      title="Drag to resize · double-click to reset" @pointerdown="startResize" @dblclick="resetLineCol" @keydown="keyResize"></span></th>
+                  <th>{{ review.year }} budget</th><th>% sales</th><th>Last year</th><th>% sales</th><th>Change</th><th>Change %</th><th>% sales change</th>
+                  <th>{{ review.year - 1 }} budget vs actual</th></tr></thead>
+                <tbody>
+                  <template v-for="r in reviewRows" :key="r.id">
+                    <tr v-if="r.head" class="sec"><td colspan="9"><span class="sec-label">{{ r.head }}</span></td></tr>
+                    <tr v-else :class="{ total: r.kind === 'sectionTotal' || (r.kind === 'computed' && r.key !== 'OPERATING_INCOME'), key: r.key === 'OPERATING_INCOME' }">
+                      <td class="line-col" :style="lineColStyle" :class="{ indent: r.kind === 'line' || r.kind === 'group' }">
+                        {{ lineLabel(r) }}<span v-if="r.mark === 'push'" class="good" title="Pushed: better than last year"> ▲</span><span v-if="r.mark === 'room'" class="bad" title="Room: worse than last year"> ▽</span><b v-if="r.issues" class="bad" title="See looks budgeted incorrectly"> !</b>
+                      </td>
+                      <td>{{ money(r.budget) }}</td>
+                      <td class="muted">{{ pct(r.budgetPct) }}</td>
+                      <td class="muted">{{ r.py == null ? '—' : money(r.py) }}</td>
+                      <td class="muted">{{ pct(r.pyPct) }}</td>
+                      <td :class="cls(r.better)">{{ r.change == null ? '—' : signed(r.change) }}</td>
+                      <td :class="cls(r.better)">{{ r.changePct == null ? '—' : signedPct(r.changePct) }}</td>
+                      <td :class="r.pts == null || r.key === 'NET_SALES' ? 'muted' : cls(direction(r) * r.pts * 1000)">{{ r.pts == null || r.key === 'NET_SALES' ? '—' : signedPts(r.pts) }}</td>
+                      <td :class="cls(r.track && r.track.variance)">{{ r.track ? signed(r.track.variance) : '—' }}</td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+            <div class="muted" style="padding:10px 16px">Change compares the budget with last year over the same {{ review.basis.covered }} calendar months<template v-if="review.basis.covered < 12">; the budget column shows the full year</template>.
+              Blue = better for the property. "{{ review.year - 1 }} budget vs actual" covers the months of {{ review.year - 1 }} on file<template v-if="!review.track"> (no {{ review.year - 1 }} budget on file)</template>.</div>
+          </div>
+
+          <div class="card flush">
+            <div class="head"><h2>Month by month</h2><span class="muted">Each month against the same month last year</span></div>
+            <div class="scroll">
+              <table style="min-width:860px">
+                <thead><tr><th>Month</th><th>Budget net sales</th><th>Last year</th><th>Growth</th><th>Budget OI</th><th>OI %</th><th>Last year OI %</th><th>Prime %</th><th>Last year prime %</th></tr></thead>
+                <tbody>
+                  <tr v-for="m in review.monthly" :key="m.month">
+                    <td><b>{{ monthLabel(m.month, true) }}</b> <span class="muted" v-if="m.basis && m.basis.slice(0, 4) != review.year - 1">vs {{ monthLabel(m.basis, true) }}</span></td>
+                    <td>{{ money(m.budNet) }}</td>
+                    <td class="muted">{{ m.pyNet == null ? '—' : money(m.pyNet) }}</td>
+                    <td :class="cls(m.growthPct)">{{ m.growthPct == null ? '—' : signedPct(m.growthPct) }}</td>
+                    <td>{{ money(m.budOi) }}</td>
+                    <td>{{ pct(m.budOiPct) }}</td>
+                    <td class="muted">{{ pct(m.pyOiPct) }}</td>
+                    <td>{{ pct(m.budPrimePct) }}</td>
+                    <td class="muted">{{ pct(m.pyPrimePct) }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -484,6 +696,7 @@
                 </tbody>
               </table></div>
               <div v-if="hasBudget(budget.property, budget.year)" class="banner info">This replaces the {{ budget.year }} budget on file for {{ propertyName(budget.property) }}.</div>
+              <div v-if="budget.year && String(boot.today || '') < budget.year + '-01-01'" class="banner info">Saved as a <b>draft</b>: it counts as approved from Jan 1, {{ budget.year }}. You can upload a new version at any time; it replaces this one.</div>
               <div class="controls">
                 <button @click="commitBudget" :disabled="!budget.property || !budget.year || budget.stage === 'saving'">{{ budget.stage === 'saving' ? 'Saving…' : 'Save budget' }}</button>
                 <button class="ghost" @click="resetBudget">Cancel</button>
@@ -501,7 +714,8 @@
               <tbody>
                 <tr v-for="p in boot.properties" :key="p.code">
                   <td><b>{{ p.name }}</b> <span class="muted">{{ p.code }}</span></td>
-                  <td style="text-align:left"><span v-for="b in budgetsFor(p.code)" :key="b.year" style="margin-right:6px">{{ b.year }}
+                  <td style="text-align:left"><span v-for="b in budgetsFor(p.code)" :key="b.year" style="margin-right:6px;white-space:nowrap">
+                    <button class="link small" @click="openReview(p.code, b.year)" :title="'Review the ' + b.year + ' budget'">{{ b.year }}</button><span v-if="b.status === 'draft'" class="muted"> draft</span>
                     <button class="link small" @click="removeBudget(p.code, b.year)" :aria-label="'Remove ' + b.year + ' budget'">×</button></span>
                     <span v-if="!budgetsFor(p.code).length" class="muted">none</span></td>
                   <td v-for="per in fileGridPeriods" :key="per" style="padding:4px">
@@ -568,6 +782,7 @@
     { key: 'portfolio', label: 'Portfolio' },
     { key: 'report', label: 'Period report' },
     { key: 'trends', label: 'Trends' },
+    { key: 'budget', label: 'Budget review' },
     { key: 'upload', label: 'Upload & settings', admin: true }
   ];
   const TREND_KEYS = [
@@ -587,6 +802,14 @@
   const HIGHER_BETTER = { NET_SALES: 1, OPERATING_INCOME: 1, OI_PCT: 1 };
   const SECTION_NAMES = { '4000': 'Sales', '5000': 'Cost of sales', '6000': 'Labor', '7000': 'Expenses',
     '8000': 'Non-controllable', '9000': 'Below operating income' };
+  const GROUPINGS = [{ key: 'month', label: 'Month' }, { key: 'quarter', label: 'Quarter' }, { key: 'ytd', label: 'Year to date' }];
+  const LINE_COL_MIN = 120, LINE_COL_MAX = 560, LINE_COL_KEY = 'pnl.lineColWidth';
+  const defaultLineCol = () => Math.round(Math.min(280, Math.max(LINE_COL_MIN, window.innerWidth * 0.4)));
+  const storedLineCol = () => {
+    try { const v = Number(localStorage.getItem(LINE_COL_KEY)); if (v >= LINE_COL_MIN && v <= LINE_COL_MAX) return v; } catch (e) { /* storage blocked */ }
+    return defaultLineCol();
+  };
+  const quarterOf = p => Math.floor((+p.slice(5, 7) - 1) / 3) + 1;
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
   const gas = (fn, ...args) => new Promise((resolve, reject) => {
@@ -598,12 +821,14 @@
   Vue.createApp({
     data() {
       return {
-        VIEWS, TREND_KEYS,
+        VIEWS, TREND_KEYS, GROUPINGS, LINE_COL_MIN, LINE_COL_MAX,
+        review: null, reviewError: '', reviewProperty: null, reviewYear: null,
+        grouping: 'month', lineColWidth: storedLineCol(), resizing: false,
         bootLoading: true, boot: { configured: true, role: null, properties: [], months: {}, budgets: [] },
         view: 'portfolio', period: null, property: null,
         portfolio: null, report: null, reportError: '', trends: null, noteDraft: '',
         trendProperty: 'ALL', trendKey: 'OI_PCT',
-        loading: { portfolio: false, report: false, trends: false },
+        loading: { portfolio: false, report: false, trends: false, review: false },
         toasts: [], toastSeq: 0,
         pnl: { stage: null, fileName: '', text: null, asOf: today(), preview: null, error: '' },
         budget: { stage: null, mode: 'xlsx', fileName: '', base64: null, sheetId: '', year: null, property: '', preview: null, error: '' },
@@ -611,6 +836,28 @@
       };
     },
     computed: {
+      budgetProperties() {
+        const has = {}; (this.boot.budgets || []).forEach(b => { has[b.property] = true; });
+        return (this.boot.properties || []).filter(p => has[p.code]);
+      },
+      reviewRows() {
+        if (!this.review) return [];
+        const out = []; let sec = null;
+        this.review.rows.forEach((r, i) => {
+          if (r.section !== sec) { sec = r.section; out.push({ id: 'h' + i, head: SECTION_NAMES[sec] || sec }); }
+          out.push(Object.assign({ id: r.key }, r));
+        });
+        return out;
+      },
+      reviewStatusSentence() {
+        const r = this.review; if (!r) return '';
+        const up = r.upload && r.upload.at ? ' · uploaded ' + this.dayLabel(r.upload.at.slice(0, 10)) + ', ' + r.upload.at.slice(0, 4) + (r.upload.by ? ' by ' + r.upload.by : '') + (r.upload.file ? ' (' + r.upload.file + ')' : '') : '';
+        return (r.status === 'draft' ? 'Draft · counts as approved from Jan 1, ' + r.year + '; a new version can be uploaded any time' : 'Approved (the year has started)') + up;
+      },
+      groupingNoun() { return { month: 'Month', quarter: 'Quarter', ytd: 'Through' }[this.grouping]; },
+      priorLabel() { return { month: 'Prior month', quarter: 'Prior quarter', ytd: 'Last year YTD' }[this.grouping]; },
+      reportGrouped() { return !!this.report && !!this.report.grouping && this.report.grouping !== 'month'; },
+      lineColStyle() { const w = this.lineColWidth + 'px'; return { width: w, minWidth: w, maxWidth: w }; },
       rules() { return this.boot.rules || { minDollar: 2500, minPct: 0.1, settleDays: 15 }; },
       visibleViews() { return VIEWS.filter(v => !v.admin || this.boot.isAdmin); },
       activeProperties() { return (this.boot.properties || []).filter(p => p.active !== false); },
@@ -697,9 +944,86 @@
       stageRank(s) { return { mtd: 0, preliminary: 1, settled: 2 }[s] || 0; },
       flagTypeLabel(t) { return { trend: 'Trend', spike: 'Spike', new: 'New', pace: 'Running high' }[t] || t; },
       barWidth(v) { const max = Math.max(40, ...this.portfolio.rows.filter(r => r.onFile).map(r => r.oiPct || 0)); return Math.max(0, Math.min(100, (v || 0) / max * 100)) + '%'; },
+      groupKey(p, grouping) { return grouping === 'quarter' ? p.slice(0, 4) + 'Q' + quarterOf(p) : p; },
+      groupLabel(p, grouping) {
+        if (!p) return '';
+        if (grouping === 'quarter') return 'Q' + quarterOf(p) + ' ' + p.slice(0, 4);
+        if (grouping === 'ytd') return 'Year to date · ' + (p.slice(5, 7) === '01' ? 'Jan' : 'Jan–' + MONTHS[+p.slice(5, 7) - 1]) + ' ' + p.slice(0, 4);
+        return this.monthLabel(p);
+      },
+      spanLabel(months) {
+        if (!months || !months.length) return '';
+        const a = months[0], b = months[months.length - 1];
+        if (a === b) return this.monthLabel(a);
+        return a.slice(0, 4) === b.slice(0, 4) ? MONTHS[+a.slice(5, 7) - 1] + '–' + this.monthLabel(b) : this.monthLabel(a) + ' – ' + this.monthLabel(b);
+      },
+      lyLabel(r) {
+        if (!r.hasLastYear) return 'Last year';
+        return r.grouping && r.grouping !== 'month' ? 'Last year' : this.monthLabel(r.lyPeriod);
+      },
+      /** Choices for the period dropdown. A quarter's value is its latest month on file. */
+      periodOptions(list) {
+        if (this.grouping === 'month') return list.map(p => ({ value: p, label: this.monthLabel(p) }));
+        if (this.grouping === 'ytd') return list.map(p => ({ value: p, label: this.monthLabel(p) }));
+        const seen = {}, out = [];
+        list.forEach(p => {
+          const k = this.groupKey(p, 'quarter'); if (seen[k]) return; seen[k] = true;
+          const done = +p.slice(5, 7) % 3 === 0;
+          out.push({ value: p, label: this.groupLabel(p, 'quarter') + (done ? '' : ' (through ' + MONTHS[+p.slice(5, 7) - 1] + ')') });
+        });
+        return out;
+      },
+      /** Keep the chosen period valid for the current grouping, staying in the same quarter where possible. */
+      snapPeriod(list) {
+        const opts = this.periodOptions(list);
+        if (!opts.length || opts.some(o => o.value === this.period)) return;
+        const k = this.period ? this.groupKey(this.period, this.grouping) : null;
+        const same = opts.filter(o => this.groupKey(o.value, this.grouping) === k)[0];
+        this.period = (same || opts[0]).value;
+      },
+      setGrouping() {
+        if (this.view === 'report') this.loadReport(); else this.loadPortfolio();
+      },
+
+      /* ---------- line column resize ---------- */
+      setLineCol(w) {
+        this.lineColWidth = Math.round(Math.max(LINE_COL_MIN, Math.min(LINE_COL_MAX, w)));
+        try { localStorage.setItem(LINE_COL_KEY, String(this.lineColWidth)); } catch (e) { /* storage blocked */ }
+      },
+      startResize(e) {
+        e.preventDefault();
+        const handle = e.currentTarget, startX = e.clientX, startW = this.lineColWidth;
+        handle.setPointerCapture(e.pointerId);
+        this.resizing = true; document.body.classList.add('resizing');
+        const move = ev => this.setLineCol(startW + ev.clientX - startX);
+        const up = () => {
+          this.resizing = false; document.body.classList.remove('resizing');
+          handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', up); handle.removeEventListener('pointercancel', up);
+        };
+        handle.addEventListener('pointermove', move); handle.addEventListener('pointerup', up); handle.addEventListener('pointercancel', up);
+      },
+      keyResize(e) {
+        const step = e.shiftKey ? 48 : 16;
+        if (e.key === 'ArrowLeft') { e.preventDefault(); this.setLineCol(this.lineColWidth - step); }
+        if (e.key === 'ArrowRight') { e.preventDefault(); this.setLineCol(this.lineColWidth + step); }
+        if (e.key === 'Home') { e.preventDefault(); this.resetLineCol(); }
+      },
+      resetLineCol() {
+        this.lineColWidth = defaultLineCol();
+        try { localStorage.removeItem(LINE_COL_KEY); } catch (e) { /* storage blocked */ }
+      },
+      signedPct(v) { if (v == null || isNaN(v)) return '—'; return (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1) + '%'; },
+      lineName(x) { return (/^\d/.test(x.key) ? x.key + ' ' : '') + x.name; },
+      direction(r) { return r.section === '4000' || HIGHER_BETTER[r.key] || ['GROSS_PROFIT', 'PROFIT_AFTER_PRIME_COST', 'CONTROLLABLE_PROFIT', 'NET_PROFIT'].indexOf(r.key) !== -1 ? 1 : -1; },
       lineLabel(r) { return (/^\d/.test(r.key) ? r.key + ' ' : '') + r.name; },
       propertyName(code) { const p = (this.boot.properties || []).filter(x => x.code === code)[0]; return p ? p.name : code; },
       stageSentence(r) {
+        if (r.grouping && r.grouping !== 'month') {
+          const parts = [r.months.length + ' of ' + r.expectedMonths + ' months on file (' + this.spanLabel(r.months) + ')',
+            'data through ' + this.dayLabel(r.asOf)];
+          if (r.stage !== 'settled') parts.push(r.stage === 'mtd' ? 'latest month is month to date' : 'includes a preliminary month');
+          return parts.join(' · ');
+        }
         if (r.stage === 'mtd') return 'Month to date · data through ' + this.dayLabel(r.asOf);
         const end = r.period + '-' + String(new Date(+r.period.slice(0, 4), +r.period.slice(5, 7), 0).getDate()).padStart(2, '0');
         if (r.stage === 'preliminary') {
@@ -735,6 +1059,7 @@
           google.script.url.getLocation(loc => {
             const q = (loc && loc.parameter) || {};
             this.period = q.period || this.boot.latestPeriod;
+            if (GROUPINGS.some(gr => gr.key === q.grouping)) this.grouping = q.grouping;
             this.property = q.property || (this.activeProperties[0] && this.activeProperties[0].code);
             this.go(q.view || (this.periods.length ? 'portfolio' : (this.boot.isAdmin ? 'upload' : 'portfolio')));
           });
@@ -747,22 +1072,40 @@
         if (view === 'portfolio') this.loadPortfolio();
         if (view === 'report') this.loadReport();
         if (view === 'trends') this.loadTrends();
+        if (view === 'budget') this.loadReview();
+      },
+      openReview(code, year) { this.reviewProperty = code; this.reviewYear = year; this.go('budget'); },
+      async loadReview() {
+        const props = this.budgetProperties;
+        if (!props.length) { this.review = null; return; }
+        if (!props.some(p => p.code === this.reviewProperty)) {
+          this.reviewProperty = (props.filter(p => p.code === this.property)[0] || props[0]).code;
+          this.reviewYear = null;
+        }
+        const years = this.budgetsFor(this.reviewProperty).map(b => b.year);
+        if (years.indexOf(Number(this.reviewYear)) === -1) this.reviewYear = years[0];
+        this.loading.review = true; this.reviewError = '';
+        try { this.review = await gas('getBudgetReview', this.reviewProperty, this.reviewYear); }
+        catch (err) { this.review = null; this.reviewError = err.message; }
+        this.loading.review = false;
       },
       openReport(code, period) { this.property = code; this.period = period; this.go('report'); },
       async loadPortfolio() {
         if (!this.period) return;
+        this.snapPeriod(this.periods);
         this.loading.portfolio = true;
-        try { this.portfolio = await gas('getPortfolio', this.period); }
+        try { this.portfolio = await gas('getPortfolio', this.period, this.grouping); }
         catch (err) { this.toast(err.message, 'error'); }
         this.loading.portfolio = false;
       },
       async loadReport() {
         if (!this.property) return;
         const list = this.periodsFor(this.property);
-        if (list.length && list.indexOf(this.period) === -1) this.period = list[0];
         if (!list.length) { this.report = null; this.reportError = 'No months on file for ' + this.propertyName(this.property) + '.'; return; }
+        if (this.grouping === 'month' && list.indexOf(this.period) === -1) this.period = list[0];
+        this.snapPeriod(list);
         this.loading.report = true; this.reportError = '';
-        try { this.report = await gas('getPeriodReport', this.property, this.period); this.noteDraft = this.report.note || ''; }
+        try { this.report = await gas('getPeriodReport', this.property, this.period, this.grouping); this.noteDraft = this.report.note || ''; }
         catch (err) { this.report = null; this.reportError = err.message; }
         this.loading.report = false;
       },
@@ -828,8 +1171,9 @@
         this.budget.stage = 'saving';
         try {
           const res = await gas('commitBudgetUpload', this.budget.preview.token, this.budget.property, this.budget.year);
-          this.toast('Saved the ' + res.year + ' budget for ' + this.propertyName(res.property) + '.', 'success');
+          this.toast('Saved the ' + res.year + ' budget for ' + this.propertyName(res.property) + (res.status === 'draft' ? ' as a draft' : '') + '.', 'success');
           this.resetBudget(); await this.loadBoot(false);
+          this.openReview(res.property, res.year);
         } catch (err) { this.budget.stage = 'error'; this.budget.error = err.message; }
       },
       resetBudget() { this.budget = { stage: null, mode: this.budget.mode, fileName: '', base64: null, sheetId: '', year: null, property: '', preview: null, error: '' }; },

@@ -15,6 +15,11 @@
  *     label repeats), then rolled up to the same category lines the P&L uses
  *     (BUDGET_LINE_MAP below). Every GL row is also kept as-is, so the period
  *     report can compare a sub-account (e.g. 7165 Linen) with its own budget.
+ *   Forecast column (2027 template on) — the operator's view of the year
+ *     before, headed e.g. "2026 Forecast" on the month header row. The
+ *     template asks for actuals to date plus a forecast for the rest of the
+ *     year. It is read so the budget review can check it against R365; the
+ *     review itself uses R365 actuals as last year.
  *   JAN … DEC tabs — daily TOTAL GROSS SALES and BANQUET Sales, used to work
  *     out how much of the month's sales budget falls before a given day (the
  *     month-to-date budget). Banquets are entered as one sum on the 1st, so
@@ -83,13 +88,17 @@ function parseBudgetSheets_(sheets, yearHint) {
   if (!grid) throw new Error('The workbook has no "12 MONTH" tab. Is this the annual budget template?');
 
   // Month columns: find the header row naming JANUARY … DECEMBER.
-  let monthCols = null, year = null;
+  let monthCols = null, year = null, forecastCol = -1, forecastYear = null;
   for (let r = 0; r < Math.min(grid.length, 10) && !monthCols; r++) {
     const row = grid[r].map(function (v) { return String(v == null ? '' : v).trim().toUpperCase(); });
     const cols = BUDGET_MONTH_NAMES.map(function (m) { return row.indexOf(m); });
     if (cols.every(function (c) { return c !== -1; })) {
       monthCols = cols;
-      grid[r].forEach(function (v) { const n = Number(v); if (!year && n >= 2000 && n <= 2100) year = n; });
+      grid[r].forEach(function (v, c) {
+        const n = Number(v); if (!year && n >= 2000 && n <= 2100) year = n;
+        const f = String(v == null ? '' : v).trim().match(/^(\d{4})\s+FORECAST$/i);
+        if (f && forecastCol === -1) { forecastCol = c; forecastYear = Number(f[1]); }
+      });
     }
   }
   if (!monthCols) throw new Error('Could not find the JANUARY … DECEMBER columns on the 12 MONTH tab.');
@@ -109,7 +118,8 @@ function parseBudgetSheets_(sheets, yearHint) {
       label: normBudgetLabel_(r[labelCol]),
       rawLabel: String(r[labelCol] == null ? '' : r[labelCol]).trim(),
       gl: normBudgetGl_(r[glCol]),
-      months: monthCols.map(function (c) { const n = Number(r[c]); return isFinite(n) && r[c] !== '' && r[c] != null ? n : null; })
+      months: monthCols.map(function (c) { return budgetNumber_(r[c]); }),
+      forecast: forecastCol === -1 ? null : budgetNumber_(r[forecastCol])
     };
   });
   const hasNumbers = function (row) { return row.months.some(function (v) { return v !== null; }); };
@@ -142,6 +152,23 @@ function parseBudgetSheets_(sheets, yearHint) {
     gl[row.gl] = { name: row.rawLabel, months: zeros(row.months) };
   });
 
+  // The forecast column, rolled up the same way. Only rows that hold a number count.
+  let forecast = null;
+  if (forecastCol !== -1) {
+    const fLines = {};
+    BUDGET_LINE_MAP.forEach(function (spec) {
+      let total = null;
+      spec.labels.forEach(function (label) {
+        const row = findRow(label, spec.gl);
+        if (!row || row.forecast == null) return;
+        total = (total || 0) + row.forecast;
+      });
+      if (total != null) fLines[spec.key] = total;
+    });
+    const fRow = function (label) { const row = findRow(label); return row ? row.forecast : null; };
+    forecast = { year: forecastYear || year - 1, lines: fLines, net: fRow('TOTAL NET'), noi: fRow('NET OPERATING INCOME') };
+  }
+
   const daily = readBudgetDaily_(sheets, year);
 
   // Checks: the roll-up must reproduce the template's own totals.
@@ -170,6 +197,16 @@ function parseBudgetSheets_(sheets, yearHint) {
     checks.push({ label: 'Daily sales tabs add up to the monthly sales budget', ok: worst <= 5,
       detail: worst <= 5 ? 'All months match.' : 'Off by up to ' + Math.round(worst) + ' in a month; month-to-date budget will be approximate.' });
   }
+  // Sales rows (including the meal-period split) should never go below zero; comps and discounts are the exception.
+  const negSales = rows.filter(function (row) {
+    return /SALES/.test(row.label) && !/COMP|DISCOUNT/.test(row.label) && row.months.some(function (v) { return v != null && v < -1; });
+  });
+  if (negSales.length) {
+    checks.push({ label: 'No negative sales rows', ok: false, detail: negSales.slice(0, 4).map(function (row) {
+      const neg = row.months.map(function (v, i) { return v != null && v < -1 ? BUDGET_MONTH_TABS[i].charAt(0) + BUDGET_MONTH_TABS[i].slice(1).toLowerCase() : null; }).filter(Boolean);
+      return row.rawLabel + ' is negative in ' + neg.join(', ');
+    }).join('; ') + '.' });
+  }
   if (missingLines.length) {
     checks.push({ label: 'Every P&L line found', ok: false, detail: 'Not found: ' + missingLines.join(', ') + '.' });
   }
@@ -178,7 +215,8 @@ function parseBudgetSheets_(sheets, yearHint) {
   for (let r = 0; r < 3 && !nameCell; r++) {
     (grid[r] || []).forEach(function (v) { if (!nameCell && typeof v === 'string' && /[A-Za-z]{3,}/.test(v)) nameCell = v.trim(); });
   }
-  return { year: year, nameCell: nameCell, lines: lines, gl: gl, daily: daily, checks: checks, missingLines: missingLines };
+  return { year: year, nameCell: nameCell, lines: lines, gl: gl, daily: daily, forecast: forecast, checks: checks,
+    missingLines: missingLines };
 }
 
 /** Daily gross sales and banquet sales from the JAN … DEC tabs (when present). */
@@ -200,10 +238,15 @@ function readBudgetDaily_(sheets, year) {
       if (Number(grid[r][labelCol + 1]) === 1) dayRow = r;
     }
     if (dayRow === -1) return;
+    // Days run 1, 2, 3 … in order. Stop at the first repeat: the 2027 template's
+    // DEC tab has a column after the 31st also headed 1 (New Year's Day).
     const dim = new Date(year, mi + 1, 0).getDate();
+    let lastDay = 0;
     for (let c = labelCol + 1; c < grid[dayRow].length; c++) {
       const day = Number(grid[dayRow][c]);
       if (!(day >= 1 && day <= dim)) continue;
+      if (day <= lastDay) break;
+      lastDay = day;
       const key = year + '-' + pad2Budget_(mi + 1) + '-' + pad2Budget_(day);
       daily[key] = {
         gross: Number(grid[grossRow][c]) || 0,
@@ -265,6 +308,7 @@ function budgetMonthFraction_(daily, year, month, day) {
   return (toDate + banquet * day / dim) / total;
 }
 
+function budgetNumber_(v) { const n = Number(v); return v !== '' && v != null && typeof v !== 'boolean' && isFinite(n) ? n : null; }
 function normBudgetLabel_(v) { return String(v == null ? '' : v).trim().replace(/\s+/g, ' ').toUpperCase(); }
 function normBudgetGl_(v) {
   if (v == null || v === '') return '';
@@ -283,7 +327,7 @@ function readBudgetSpreadsheet_(ss, yearHint) {
     const sh = ss.getSheetByName(name);
     if (!sh) return;
     const lastRow = Math.min(sh.getLastRow(), name === '12 MONTH' ? 300 : 80);
-    const lastCol = Math.min(sh.getLastColumn(), 40);
+    const lastCol = Math.min(sh.getLastColumn(), 50);
     if (lastRow < 1 || lastCol < 1) return;
     sheets[name] = sh.getRange(1, 1, lastRow, lastCol).getValues();
   });

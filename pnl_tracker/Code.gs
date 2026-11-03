@@ -280,27 +280,43 @@ function getBootstrap() {
   });
   const budgets = [];
   Object.keys(store.budgets).forEach(function (code) {
-    Object.keys(store.budgets[code]).forEach(function (y) { budgets.push({ property: code, year: Number(y) }); });
+    Object.keys(store.budgets[code]).forEach(function (y) {
+      const meta = store.budgets[code][y].meta || {};
+      budgets.push({ property: code, year: Number(y), status: budgetStatus_(Number(y), today_()),
+        uploadedAt: meta.at || null, uploadedBy: meta.by || null });
+    });
   });
   return safe_({
     email: email, configured: true, role: role, isAdmin: role === 'admin',
     properties: store.properties, months: months, latestPeriod: latest, budgets: budgets,
-    rules: config.rules, spreadsheetUrl: role === 'admin' ? ss.getUrl() : null
+    rules: config.rules, spreadsheetUrl: role === 'admin' ? ss.getUrl() : null, today: today_()
   });
 }
 
-/** All properties for one month. */
-function getPortfolio(period) {
-  const ss = dataSpreadsheet_();
-  requireViewer_(ss);
-  return safe_(buildPortfolio_(loadStore_(ss), String(period)));
+/** Today in the script's time zone, 'YYYY-MM-DD'. Budgets turn approved on 1 January of their year. */
+function today_() {
+  return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
 }
 
-/** The period report for one property and month. */
-function getPeriodReport(property, period) {
+/** A property's budget for a year against last year's actuals and last year's budget. */
+function getBudgetReview(property, year) {
   const ss = dataSpreadsheet_();
   requireViewer_(ss);
-  return safe_(buildPeriodReport_(loadStore_(ss), String(property), String(period)));
+  return safe_(buildBudgetReview_(loadStore_(ss), String(property), Number(year), today_()));
+}
+
+/** All properties for one month, or the quarter / year to date that month falls in. */
+function getPortfolio(period, grouping) {
+  const ss = dataSpreadsheet_();
+  requireViewer_(ss);
+  return safe_(buildPortfolio_(loadStore_(ss), String(period), String(grouping || 'month')));
+}
+
+/** The period report for one property: a month, or the quarter / year to date that month falls in. */
+function getPeriodReport(property, period, grouping) {
+  const ss = dataSpreadsheet_();
+  requireViewer_(ss);
+  return safe_(buildGroupedReport_(loadStore_(ss), String(property), String(period), String(grouping || 'month')));
 }
 
 /** Monthly series for a property (or 'ALL') and several lines or ratios. */
