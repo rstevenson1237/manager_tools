@@ -813,7 +813,15 @@
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
   const gas = (fn, ...args) => new Promise((resolve, reject) => {
-    google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn](...args);
+    const runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+    // A function missing here means the page is newer than the server code:
+    // a .gs file was not updated, or the deployment still serves an old version.
+    if (typeof runner[fn] !== 'function') {
+      reject(new Error('The server has no "' + fn + '" function. Update every .gs file in the Apps Script project ' +
+        '(Code.gs, Import.gs, Parse.gs, Budget.gs, Store.gs, Analysis.gs, Review.gs), then Deploy → Manage deployments → edit → Version: New version.'));
+      return;
+    }
+    runner[fn](...args);
   });
   const today = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
   const addMonths = (p, n) => { const y = +p.slice(0, 4), m = +p.slice(5, 7) - 1 + n; const yy = y + Math.floor(m / 12), mm = ((m % 12) + 12) % 12 + 1; return yy + '-' + String(mm).padStart(2, '0'); };
