@@ -125,6 +125,49 @@ function amountOf_(store, prop, period, key) {
   const l = m.lines[key];
   return l ? l.amount : 0;
 }
+/**
+ * Months of a property whose every line matches another property's same
+ * month to the dollar: a file uploaded under the wrong location. Two real
+ * properties never post identical P&Ls.
+ * @return {Array<{period: string, other: string}>}
+ */
+function copiedMonths_(store, prop, periods) {
+  const out = [];
+  (periods || []).forEach(function (period) {
+    const m = monthOnFile_(store, prop, period);
+    if (!m || !amountOf_(store, prop, period, 'NET_SALES')) return;
+    const keys = Object.keys(m.lines);
+    Object.keys(store.actuals).some(function (other) {
+      if (other === prop) return false;
+      const o = monthOnFile_(store, other, period);
+      if (!o || Object.keys(o.lines).length !== keys.length) return false;
+      const same = keys.every(function (k) { return o.lines[k] && Math.abs(o.lines[k].amount - m.lines[k].amount) < 0.5; });
+      if (same) out.push({ period: period, other: other });
+      return same;
+    });
+  });
+  return out;
+}
+/** Months in an upload whose figures are identical to another property's, grouped by property pair. */
+function uploadCopies_(store, months) {
+  const byProp = {};
+  months.forEach(function (m) { (byProp[m.property] = byProp[m.property] || []).push(m.period); });
+  const out = [];
+  Object.keys(byProp).forEach(function (prop) {
+    const hits = copiedMonths_(store, prop, byProp[prop]);
+    const byOther = {};
+    hits.forEach(function (h) { (byOther[h.other] = byOther[h.other] || []).push(h.period); });
+    Object.keys(byOther).forEach(function (other) { out.push({ property: prop, other: other, periods: byOther[other].sort() }); });
+  });
+  return out;
+}
+function copiesText_(copies) {
+  return copies.map(function (c) {
+    return c.property + ' ' + c.periods.length + ' month' + (c.periods.length === 1 ? '' : 's') + ' (' + c.periods[0] +
+      (c.periods.length > 1 ? ' to ' + c.periods[c.periods.length - 1] : '') + ') identical to ' + c.other + ' on file';
+  }).join('; ');
+}
+
 function budgetYear_(store, prop, period) {
   const b = store.budgets[prop];
   return (b && b[Number(period.slice(0, 4))]) || null;

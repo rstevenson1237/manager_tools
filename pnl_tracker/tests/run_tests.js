@@ -155,6 +155,19 @@ test('reads a trailing-12 export, one column per month', () => {
   assert.ok(r.groups.every(x => x.propertyCode === 'TST1' && !x.problems.length));
 });
 
+test('reads a trailing-12 vs prior export: "Prior - Period" columns are the year before', () => {
+  const months = [];
+  for (let m = 1; m <= 12; m++) {
+    months.push(['Period ' + m + ', 2026', amounts(1)]);
+    months.push(['Prior - Period ' + m + ', 2025', amounts(0.9)]);
+  }
+  const text = trailing('12/31/2026', 'TST1 - Sample Grill', months).replace('Trailing 12 Periods', 'Trailing 12 Periods vs Prior');
+  const r = parse(text);
+  assert.strictEqual(r.groups.length, 24);
+  same(r.groups.map(x => x.period).sort().slice(0, 2), ['2025-01', '2025-02']);
+  assert.ok(r.groups.every(x => !x.problems.length));
+});
+
 test('flags totals that do not add up', () => {
   const text = sideBySide('10/31/2026', [['TST1 - Sample Grill', amounts(1)]]).replace('Total 7400 - Utilities,"15,000"', 'Total 7400 - Utilities,"16,000"');
   const r = parse(text);
@@ -523,6 +536,19 @@ test('a line whose spend stopped during last year, budgeted at the new run rate,
   assert.ok(/May 26–Oct 26/.test(u[0].detail) && /Electricity/.test(u[0].detail), u[0].detail);
   assert.ok(!r.pushes.some(x => x.key === '7400'), 'a line that stopped is not a push');
   assert.ok(!r.issues.some(x => /7420|7480/.test(x.title)), 'its sub-accounts are not flagged again');
+});
+
+test('last year copied from another property is found, in the review and on upload', () => {
+  const s = reviewStore();
+  ['2025-11', '2025-12'].forEach(p => { s.actuals.TST2 = s.actuals.TST2 || {}; s.actuals.TST2[p] = JSON.parse(JSON.stringify(s.actuals.TST1[p])); });
+  same(g.copiedMonths_(s, 'TST1', ['2025-10', '2025-11', '2025-12']).map(c => c.period + ' ' + c.other), ['2025-11 TST2', '2025-12 TST2']);
+  s.actuals.TST2['2025-12'].lines.NET_SALES.amount += 1;
+  same(g.copiedMonths_(s, 'TST1', ['2025-11', '2025-12']).map(c => c.period), ['2025-11'], 'a dollar off is not a copy');
+  const r = g.buildBudgetReview_(s, 'TST1', 2027, '2026-11-03');
+  const c = r.issues.filter(x => /copy of TST2 for 1 month/.test(x.title))[0];
+  assert.ok(c && c.severity === 'error', JSON.stringify(r.issues.map(x => x.title)));
+  const up = g.uploadCopies_(s, [{ property: 'TST2', period: '2025-11' }, { property: 'TST2', period: '2025-12' }]);
+  same(up.map(x => x.other + ' ' + x.periods.join(',')), ['TST1 2025-11']);
 });
 
 test('sub-accounts: one budgeted at zero though it ran every month', () => {

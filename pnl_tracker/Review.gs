@@ -204,6 +204,15 @@ function buildBudgetReview_(store, prop, year, today) {
   };
   const coveredLabel = covered.length + ' month' + (covered.length === 1 ? '' : 's');
 
+  // Last year's months stored under this property but copied from another.
+  const copies = copiedMonths_(store, prop, basis.filter(Boolean));
+  if (copies.length) {
+    const others = copies.map(function (c) { return c.other; }).filter(function (o, i, a) { return a.indexOf(o) === i; });
+    add('error', null, '', 'Last year\'s actuals are a copy of ' + others.join(', ') + ' for ' + copies.length + ' month' + (copies.length === 1 ? '' : 's'),
+      copies.map(function (c) { return periodLabel_(c.period); }).join(', ') + ' match ' + others.join(', ') +
+      ' to the dollar on every line, so they were most likely uploaded under the wrong location. Re-upload this property\'s R365 P&L for those months; until then every comparison with last year is off.', 0);
+  }
+
   ((by.meta && by.meta.checks) || []).forEach(function (c) {
     if (!c.ok) add('check', null, '', 'Workbook check failed: ' + c.label, c.detail, 0);
   });

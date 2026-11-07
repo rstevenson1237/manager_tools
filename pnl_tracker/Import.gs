@@ -73,6 +73,7 @@ function previewPnlUpload(csvText, fileName, asOf) {
 
   const props = {};
   built.months.forEach(function (m) { props[m.property] = m.propertyName; });
+  const copies = uploadCopies_(merged, built.months);
   return safe_({
     fileName: fileName || '',
     format: parsed.format,
@@ -91,7 +92,8 @@ function previewPnlUpload(csvText, fileName, asOf) {
     summaryRows: built.actuals.length,
     detailRows: built.detail.length,
     replaces: replaces,
-    missing: missing
+    missing: missing,
+    copies: copies
   });
 }
 
@@ -110,6 +112,11 @@ function commitPnlUpload(csvText, fileName, asOf) {
   const config = readConfig_(ss);
   const uploadId = Utilities.getUuid().slice(0, 8);
   const built = parsedToRows_(parsed, asOf, uploadId, config.rules.settleDays);
+
+  const copies = uploadCopies_(rowsToStore_({
+    actuals: withoutMonths_(readDataRows_(ss, 'actuals'), built.months).concat(built.actuals)
+  }, [], config.rules), built.months);
+  if (copies.length) throw new Error('Not saved: ' + copiesText_(copies) + '. Check that the report was run for the right location.');
 
   const lock = LockService.getScriptLock();
   try { lock.waitLock(30000); }

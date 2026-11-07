@@ -614,7 +614,7 @@
           <!-- P&L upload -->
           <div class="card" style="display:flex;flex-direction:column;gap:12px">
             <h2>P&amp;L from R365</h2>
-            <p class="muted" style="margin:0">Monthly <i>Location Side by Side – Period</i> (detailed preferred) or <i>Trailing 12 Periods</i> for one location. Upload weekly for month to date, and again {{ rules.settleDays }} days after month end to settle the month.</p>
+            <p class="muted" style="margin:0">Monthly <i>Location Side by Side – Period</i> (detailed preferred) or <i>Trailing 12 Periods</i> (or <i>Trailing 12 Periods vs Prior</i>, for 24 months) for one location. Upload weekly for month to date, and again {{ rules.settleDays }} days after month end to settle the month.</p>
             <div class="field"><label for="asof">Data runs through</label><input id="asof" type="date" v-model="pnl.asOf"></div>
             <label class="drop" for="pnl-file">
               <b>Choose a CSV</b><br><span class="muted">{{ pnl.fileName || 'The format is detected automatically' }}</span>
@@ -645,13 +645,18 @@
                   <b v-if="stageRank(r.stageAfter) < stageRank(r.stageBefore)" class="bad"> — older than what is on file</b>
                 </div>
               </div>
+              <div v-if="pnl.preview.copies && pnl.preview.copies.length" class="banner warn">
+                <b>This file cannot be saved: its figures match another property to the dollar.</b>
+                <div v-for="c in pnl.preview.copies" :key="c.property + c.other">{{ propertyName(c.property) }}: {{ c.periods.length }} month{{ c.periods.length === 1 ? '' : 's' }} ({{ c.periods.map(p => monthLabel(p, true)).join(', ') }}) identical to {{ propertyName(c.other) }}.</div>
+                Check that the report was run for the right location in R365.
+              </div>
               <div v-if="pnl.preview.missing.length" class="banner warn">
                 <b>Recurring lines with nothing posted:</b>
                 <span v-for="(m, i) in pnl.preview.missing" :key="m.property + m.key">{{ i ? '; ' : ' ' }}{{ propertyName(m.property) }} {{ m.key }} {{ m.name }}</span>.
                 The month is saved as {{ stageLabel(pnl.preview.months[pnl.preview.months.length - 1].stage).toLowerCase() }} and shows these as not posted yet.
               </div>
               <div class="controls">
-                <button @click="commitPnl" :disabled="pnl.stage === 'saving' || pnl.preview.problems > 0">{{ pnl.stage === 'saving' ? 'Saving…' : 'Save' }}</button>
+                <button @click="commitPnl" :disabled="pnl.stage === 'saving' || pnl.preview.problems > 0 || (pnl.preview.copies && pnl.preview.copies.length > 0)">{{ pnl.stage === 'saving' ? 'Saving…' : 'Save' }}</button>
                 <button class="ghost" @click="resetPnl" :disabled="pnl.stage === 'saving'">Cancel</button>
               </div>
             </template>
