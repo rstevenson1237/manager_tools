@@ -289,22 +289,25 @@ function budgetSubtotals_(lines, monthIndex) {
 /**
  * Share of a month's sales budget that falls on or before `day`: daily
  * restaurant sales to date, plus banquet sales spread evenly over the month.
- * Falls back to days elapsed ÷ days in month when no daily budget exists.
+ * Falls back to days elapsed ÷ days in month when no daily budget exists,
+ * or when it is not really daily: sales on fewer than half the days (a
+ * template with the month's whole total typed on the 1st, for one).
  */
 function budgetMonthFraction_(daily, year, month, day) {
   const dim = new Date(year, month, 0).getDate();
   if (day >= dim) return 1;
-  let total = 0, toDate = 0, banquet = 0, found = false;
+  let total = 0, toDate = 0, banquet = 0, found = false, salesDays = 0;
   for (let d = 1; d <= dim; d++) {
     const e = daily && daily[year + '-' + pad2Budget_(month) + '-' + pad2Budget_(d)];
     if (!e) continue;
     found = true;
+    if (e.gross - e.banquet > 0) salesDays++;
     const restaurant = e.gross - e.banquet;
     total += e.gross;
     banquet += e.banquet;
     if (d <= day) toDate += restaurant;
   }
-  if (!found || total <= 0) return day / dim;
+  if (!found || total <= 0 || salesDays < dim / 2) return day / dim;
   return (toDate + banquet * day / dim) / total;
 }
 

@@ -257,6 +257,9 @@ test('month-to-date budget spreads banquets over the month', () => {
   near(f, (3 * 15000 + 155000 * 3 / 31) / (31 * 15000 + 155000), 1e-9);
   assert.strictEqual(g.budgetMonthFraction_(b.daily, 2026, 10, 31), 1);
   near(g.budgetMonthFraction_(null, 2026, 11, 3), 0.1, 1e-9, 'no daily budget: days elapsed');
+  const lumped = { '2026-11-01': { gross: 431896, banquet: 8592 } };
+  for (let d = 2; d <= 30; d++) lumped['2026-11-' + (d < 10 ? '0' : '') + d] = { gross: 0, banquet: 0 };
+  near(g.budgetMonthFraction_(lumped, 2026, 11, 3), 0.1, 1e-9, 'whole month typed on the 1st: days elapsed');
 });
 
 /* ------------------------------------------------------------------ stages */
