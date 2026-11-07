@@ -179,7 +179,6 @@ function budgetMonth_(store, prop, period) {
   const mi = Number(period.slice(5, 7)) - 1;
   const out = budgetSubtotals_(by.lines, mi);
   Object.keys(by.lines).forEach(function (k) { out[k] = by.lines[k][mi]; });
-  delete out._corp;
   return out;
 }
 function budgetGl_(store, prop, period, code) {

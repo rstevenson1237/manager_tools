@@ -102,6 +102,10 @@ function withoutMonths_(rows, months) {
 }
 
 /** Build the store Analysis.gs reads from the sheets' rows. */
+function addBudgetMonths_(lines, key, months) {
+  lines[key] = lines[key] ? lines[key].map(function (v, i) { return v + months[i]; }) : months;
+}
+
 function rowsToStore_(sheetRows, properties, rules) {
   const store = { properties: properties || [], actuals: {}, detail: {}, budgets: {}, tags: {}, notes: {},
     rules: Object.assign({}, DEFAULT_RULES, rules || {}) };
@@ -135,7 +139,8 @@ function rowsToStore_(sheetRows, properties, rules) {
       b.forecast.lines[key] = months[0];
       return;
     }
-    if (kind === 'line') b.lines[key] = months;
+    if (kind === 'line' && key === '9010') addBudgetMonths_(b.lines, '6110', months);   // saved before corporate allocations moved to 6110
+    else if (kind === 'line') addBudgetMonths_(b.lines, key, months);
     else if (kind === 'gl') b.gl[key] = { name: String(r[4]), months: months };
     else if (kind === 'daily') b.daily[dateText_(r[3])] = { gross: months[0], banquet: months[1] };
   });

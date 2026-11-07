@@ -86,13 +86,14 @@ P&L for Sep–Oct 2026. Notable choices:
 
 - 4100 Gross Sales includes the Facilities Fee (R365 posts it to 4540 Other
   Sales).
-- 6110 Management is management salaries only. Corporate allocations go to
-  9010 Corporate, below operating income.
+- 6110 Management includes the template's CORPORATE ALLOCATIONS row (GL
+  6100, a placeholder for corporate salaries), above the line, as R365 posts
+  it. Budgets saved before this rule had it as 9010; they are read as 6110.
 - 9100 Management Fee sits inside Expenses (7000), as in R365.
 
 On every budget read, the app checks that net sales match the template's
 TOTAL NET row and that operating income matches its NET OPERATING INCOME
-(after corporate allocations) in all 12 months.
+in all 12 months.
 
 ## 4. How flags work
 

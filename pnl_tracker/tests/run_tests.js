@@ -252,14 +252,15 @@ test('rolls the 12 MONTH tab up to P&L lines and checks it against the template 
   const b = g.parseBudgetSheets_(budgetSheets());
   assert.strictEqual(b.year, 2026);
   assert.strictEqual(b.lines['4100'][9], 620000, 'gross sales include the facilities fee');
-  assert.strictEqual(b.lines['6110'][9], 55000, 'management = salaries only');
-  assert.strictEqual(b.lines['9010'][9], 8000, 'corporate allocations sit below operating income');
+  assert.strictEqual(b.lines['6110'][9], 63000, 'management includes corporate allocations (GL 6100)');
+  assert.strictEqual(b.lines['9010'], undefined, 'nothing below operating income');
+  assert.strictEqual(b.gl['6100'].months[9], 63000, 'GL 6100 includes corporate allocations');
   assert.strictEqual(b.lines['6275'][0], 30000, 'repeated label matched by GL code');
   assert.strictEqual(b.gl['7165'].months[9], 5000);
   assert.strictEqual(b.gl['7400'].months[0], 15000, '7400.0 read as 7400');
   const st = g.budgetSubtotals_(b.lines, 9);
   assert.strictEqual(st.NET_SALES, 600000);
-  assert.strictEqual(st.OPERATING_INCOME, 600000 - 169000 - 131000 - 41000 - 9000);
+  assert.strictEqual(st.OPERATING_INCOME, 600000 - 169000 - 139000 - 41000 - 9000);
   assert.ok(b.checks.filter(c => /TOTAL NET/.test(c.label))[0].ok);
   assert.ok(b.checks.filter(c => /NET OPERATING INCOME/.test(c.label))[0].ok);
 });
@@ -319,7 +320,7 @@ test('a normal month has no flags and nothing missing', () => {
   assert.ok(r.hasBudget && r.hasLastYear && r.threeMonths);
   const oi = r.rows.filter(x => x.key === 'OPERATING_INCOME')[0];
   assert.strictEqual(oi.actual, 320600);
-  assert.strictEqual(oi.budget, 600000 - 169000 - 131000 - 41000 - 9000);
+  assert.strictEqual(oi.budget, 600000 - 169000 - 139000 - 41000 - 9000);
 });
 
 test('one bad month is a spike, explained by its sub-accounts against budget', () => {
@@ -485,15 +486,12 @@ test('a budget is a draft until 1 January of its year; upload details are kept',
   assert.strictEqual(r.upload.by, 'gm@example.com');
 });
 
-test('headline shows operating income after corporate allocations when the budget has them', () => {
-  const s = reviewStore();
-  const by = s.budgets.TST1[2027];
-  const r0 = g.buildBudgetReview_(s, 'TST1', 2027, '2026-11-03');
-  by.lines['9010'] = [1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000];
-  const r = g.buildBudgetReview_(s, 'TST1', 2027, '2026-11-03');
-  if (r0.headline.budCorp == null) assert.strictEqual(r0.headline.budOiAfterCorp, null);
-  near(r.headline.budCorp, 12000, 0.01);
-  near(r.headline.budOiAfterCorp, r.headline.budOi - 12000, 0.01);
+test('a budget saved with corporate allocations as 9010 is read as 6110', () => {
+  const st = g.rowsToStore_({ budget: [
+    [2027, 'TST1', 'line', '6110', '', 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [2027, 'TST1', 'line', '9010', '', 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]] }, [], {});
+  assert.strictEqual(st.budgets.TST1[2027].lines['6110'][0], 3);
+  assert.strictEqual(st.budgets.TST1[2027].lines['9010'], undefined);
 });
 
 test('last year takes each month from the latest year on file, never a month-to-date upload', () => {
