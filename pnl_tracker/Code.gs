@@ -13,15 +13,22 @@
  *     Budget.gs    reads the annual budget workbook (Google Sheet or .xlsx)
  *     Store.gs     sheet layouts; parsed upload ⇄ sheet rows ⇄ in-memory store
  *     Analysis.gs  period report, flags, portfolio, trends
+ *     Review.gs    budget review
+ *     Inventory.gs inventory review: count export, triage, inventory report
  *     Import.gs    upload endpoints (preview, then save)
+ *     InventoryApi.gs  inventory endpoints (upload, notes, dashboard, report)
  *     Code.gs      this file: setup, access, settings, read endpoints
- *   Parse/Budget/Store/Analysis use no Apps Script services, so tests/ runs
- *   them in Node against sample exports.
+ *   Parse/Budget/Store/Analysis/Review/Inventory use no Apps Script services,
+ *   so tests/ runs them in Node against sample exports. Index.html pulls in
+ *   InventoryView.html and InventoryScript.html with include().
  *
  * ACCESS
  *   Global admins (Script Properties, same list mechanism as the sibling
  *   apps) can upload, tag, write notes and change settings. Viewers (listed
  *   in the data workbook's _Config sheet) can see everything read-only.
+ *   Inventory reviewers (also in _Config) can upload counts, write review
+ *   notes and save inventory reports. A reviewer who is not also a viewer
+ *   gets the 'inventory' role: the Inventory tab only, with no P&L figures.
  ******************************************************************************/
 
 const DATA_SS_KEY = 'PNL_DATA_SPREADSHEET_ID';
@@ -29,21 +36,28 @@ const GLOBAL_ADMIN_KEY = 'GLOBAL_ADMIN_EMAILS';
 const DEFAULT_GLOBAL_ADMINS = ['robert.stevenson@atlasrestaurantgroup.com'];
 
 /** Columns kept as plain text so Sheets never turns '2026-10' or '7312.1' into a date or number. */
-const TEXT_COLUMNS = { actuals: [1, 2, 3, 10], detail: [1, 2, 3, 4], budget: [2, 4], tags: [1, 2, 3], uploads: [1] };
+const TEXT_COLUMNS = { actuals: [1, 2, 3, 10], detail: [1, 2, 3, 4], budget: [2, 4], tags: [1, 2, 3], uploads: [1],
+  invCounts: [1, 2, 3, 4, 6], invItems: [1, 2, 3, 4, 12, 13, 14], invNotes: [1, 2, 3, 4, 7], invReports: [1, 2, 3, 4, 6, 10] };
 
 const CONFIG_SHEET_NAME = '_Config';
 const CONFIG_ROWS = [
   { key: 'viewers', label: 'Viewers', type: 'list' },
   { key: 'properties', label: 'Properties', type: 'json' },
-  { key: 'rules', label: 'Flag Rules', type: 'json' }
+  { key: 'rules', label: 'Flag Rules', type: 'json' },
+  { key: 'inventory', label: 'Inventory', type: 'json' }
 ];
 
 /** ------------------------------------------------------------ WEB APP ENTRY */
 function doGet() {
-  return HtmlService.createHtmlOutputFromFile('Index')
+  return HtmlService.createTemplateFromFile('Index').evaluate()
     .setTitle('P&L Tracker')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+/** Index.html pulls in the inventory view and script with <?!= include('…') ?>. */
+function include(name) {
+  return HtmlService.createHtmlOutputFromFile(name).getContent();
 }
 
 /** ------------------------------------------------------------------ SETUP
@@ -155,7 +169,10 @@ function appendDataRow_(ss, key, row) {
 
 /** --------------------------------------------------------------- _CONFIG */
 function defaultConfig_() {
-  return { viewers: [], properties: [], rules: JSON.parse(JSON.stringify(DEFAULT_RULES)) };
+  return { viewers: [], properties: [], rules: JSON.parse(JSON.stringify(DEFAULT_RULES)), inventory: defaultInventoryConfig_() };
+}
+function defaultInventoryConfig_() {
+  return { reviewers: [], noteCategories: DEFAULT_INV_NOTES.slice() };
 }
 
 function ensureConfigSheet_(ss) {
@@ -195,6 +212,11 @@ function readConfig_(ss) {
     }
   });
   out.rules = Object.assign({}, DEFAULT_RULES, out.rules || {});
+  const inv = out.inventory && typeof out.inventory === 'object' ? out.inventory : {};
+  out.inventory = {
+    reviewers: Array.isArray(inv.reviewers) ? inv.reviewers.map(String).filter(Boolean) : [],
+    noteCategories: Array.isArray(inv.noteCategories) && inv.noteCategories.length ? inv.noteCategories.map(String) : DEFAULT_INV_NOTES.slice()
+  };
   return out;
 }
 
@@ -214,21 +236,33 @@ function isGlobalAdmin_() {
   if (!email) return false;
   return loadGlobalAdmins_().map(function (e) { return String(e).toLowerCase(); }).indexOf(email) !== -1;
 }
-/** 'admin' | 'viewer' | null */
+/** 'admin' | 'viewer' | 'inventory' (inventory reviewer only) | null */
 function roleOf_(ss) {
   if (isGlobalAdmin_()) return 'admin';
   const email = currentUserEmail_().toLowerCase();
   if (!email) return null;
-  const viewers = readConfig_(ss).viewers.map(function (e) { return String(e).toLowerCase(); });
-  return viewers.indexOf(email) !== -1 ? 'viewer' : null;
+  const config = readConfig_(ss);
+  const lower = function (list) { return list.map(function (e) { return String(e).toLowerCase(); }); };
+  if (lower(config.viewers).indexOf(email) !== -1) return 'viewer';
+  return lower(config.inventory.reviewers).indexOf(email) !== -1 ? 'inventory' : null;
 }
+/** May this account change inventory data (upload counts, notes, reports)? */
+function canEditInventory_(ss, role) {
+  if (role === 'admin' || role === 'inventory') return true;
+  if (role !== 'viewer') return false;
+  const email = currentUserEmail_().toLowerCase();
+  return readConfig_(ss).inventory.reviewers.some(function (e) { return String(e).toLowerCase() === email; });
+}
+function noAccessError_() {
+  const who = currentUserEmail_();
+  return new Error(who ? 'You do not have access to the P&L Tracker. You are signed in as ' + who + '.'
+    : 'Access denied — your account could not be identified.');
+}
+/** Admins and viewers: everything except the inventory-only role. */
 function requireViewer_(ss) {
   const role = roleOf_(ss);
-  if (!role) {
-    const who = currentUserEmail_();
-    throw new Error(who ? 'You do not have access to the P&L Tracker. You are signed in as ' + who + '.'
-      : 'Access denied — your account could not be identified.');
-  }
+  if (!role) throw noAccessError_();
+  if (role === 'inventory') throw new Error('Your account can use the Inventory tab only. You are signed in as ' + currentUserEmail_() + '.');
   return role;
 }
 function requireAdmin_(ss) {
@@ -268,6 +302,11 @@ function getBootstrap() {
   const role = roleOf_(ss);
   if (!role) return safe_({ email: email, configured: true, role: null });
   const config = readConfig_(ss);
+  if (role === 'inventory') {
+    return safe_({ email: email, configured: true, role: role, isAdmin: false, canEditInventory: true, inventoryOnly: true,
+      properties: inventoryProperties_(ss, config), months: {}, latestPeriod: null, budgets: [], rules: config.rules,
+      spreadsheetUrl: null, today: today_() });
+  }
   const store = loadStore_(ss, { skipDetail: true });
 
   const months = {};
@@ -289,7 +328,8 @@ function getBootstrap() {
   return safe_({
     email: email, configured: true, role: role, isAdmin: role === 'admin',
     properties: store.properties, months: months, latestPeriod: latest, budgets: budgets,
-    rules: config.rules, spreadsheetUrl: role === 'admin' ? ss.getUrl() : null, today: today_()
+    rules: config.rules, spreadsheetUrl: role === 'admin' ? ss.getUrl() : null, today: today_(),
+    canEditInventory: canEditInventory_(ss, role), inventoryOnly: false
   });
 }
 
@@ -425,6 +465,20 @@ function saveSettings(payload) {
       mtdPctPoints: num(r.mtdPctPoints, 0, 100, config.rules.mtdPctPoints),
       settleDays: Math.round(num(r.settleDays, 0, 60, config.rules.settleDays))
     });
+  }
+  if (payload.inventory && typeof payload.inventory === 'object') {
+    const inv = payload.inventory;
+    const reviewers = Array.isArray(inv.reviewers) ? inv.reviewers.map(function (e) { return String(e).trim(); }).filter(Boolean) : config.inventory.reviewers;
+    let notes = config.inventory.noteCategories;
+    if (Array.isArray(inv.noteCategories)) {
+      notes = inv.noteCategories.map(function (c) { return String(c).trim().toUpperCase(); }).filter(Boolean)
+        .filter(function (c, i, a) { return a.indexOf(c) === i; });
+      if (!notes.length) throw new Error('At least one inventory note is required.');
+      notes.forEach(function (c) {
+        if (!inventoryStatus_(c) || inventoryStatus_(c) === 'other') throw new Error('Inventory note "' + c + '" must start with CORRECT, REVIEW or ADJUST.');
+      });
+    }
+    config.inventory = { reviewers: reviewers, noteCategories: notes };
   }
   writeConfig_(ss, config);
   return getSettings();

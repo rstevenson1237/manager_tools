@@ -15,7 +15,12 @@
  *            row recording the upload (JSON in the Name column).
  *   Tags     the manager's notes and "timing / accrual" tags on a line.
  *   Uploads  one row per upload: who, when, which file, what it held.
- *   _Config  settings (viewers, properties, flag rule).
+ *   Inventory Counts / Items / Notes / Reports
+ *            the inventory review (Inventory.gs). Only InventoryApi.gs reads
+ *            them, so they never slow the P&L views down. Items of one count
+ *            sit together; the count's row records where (First Row, Row
+ *            Count) so one count is read with a single range.
+ *   _Config  settings (viewers, properties, flag rule, inventory).
  ******************************************************************************/
 
 const SHEETS = {
@@ -26,7 +31,14 @@ const SHEETS = {
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] },
   tags: { name: 'Tags', headers: ['Period', 'Property', 'Key', 'Tag', 'Note', 'By', 'At'] },
   uploads: { name: 'Uploads', headers: ['Upload ID', 'At', 'By', 'File', 'Format', 'Detailed', 'Periods',
-    'Properties', 'Rows', 'Warnings'] }
+    'Properties', 'Rows', 'Warnings'] },
+  invCounts: { name: 'Inventory Counts', headers: ['Count ID', 'Property', 'Period', 'Label', 'File', 'Uploaded At',
+    'Uploaded By', 'Items', 'Current Total', 'Previous Total', 'Review Items', 'First Row', 'Row Count'] },
+  invItems: { name: 'Inventory Items', headers: ['Count ID', 'Key', 'Item', 'UofM', 'Current Qty', 'Current Cost',
+    'Current Total', 'Previous Qty', 'Previous Cost', 'Previous Total', 'Adjustment', 'Cost Acct', 'Inventory Acct', 'Flag'] },
+  invNotes: { name: 'Inventory Notes', headers: ['Count ID', 'Key', 'Note', 'Status', 'Impact', 'By', 'At'] },
+  invReports: { name: 'Inventory Reports', headers: ['Report ID', 'Property', 'Period', 'Saved At', 'Saved By', 'Counts',
+    'Value', 'Action Items', 'Part', 'Report'] }
 };
 
 /** Key used in Tags for the manager's free-text note on a whole month. */
