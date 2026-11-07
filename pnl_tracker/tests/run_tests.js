@@ -504,6 +504,24 @@ test('mistakes: zero, management fee rate, fixed cost drop, blank months', () =>
   assert.ok(/Nothing budgeted in Mar, Jul/.test(by('7005')[0].title));
 });
 
+test('a line whose spend stopped during last year, budgeted at the new run rate, is a check, not an error', () => {
+  const s = reviewStore({ 'Total Utilities': 0, 'Electricity': 0, 'Water and Sewage': 0 });
+  ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10'].forEach(p => {
+    // Electricity and water stop; a little propane keeps posting.
+    s.actuals.TST1[p].lines['7400'].amount = 276;
+    s.detail.TST1[p] = s.detail.TST1[p].filter(d => String(d.category) !== '7400')
+      .concat([{ category: '7400', code: '7450', name: 'Propane', amount: 276 }]);
+  });
+  const r = g.buildBudgetReview_(s, 'TST1', 2027, '2026-11-03');
+  const u = r.issues.filter(x => x.key === '7400');
+  assert.strictEqual(u.length, 1, JSON.stringify(u));
+  assert.strictEqual(u[0].severity, 'check');
+  assert.ok(/lower recent run rate/.test(u[0].title));
+  assert.ok(/May 26–Oct 26/.test(u[0].detail) && /Electricity/.test(u[0].detail), u[0].detail);
+  assert.ok(!r.pushes.some(x => x.key === '7400'), 'a line that stopped is not a push');
+  assert.ok(!r.issues.some(x => /7420|7480/.test(x.title)), 'its sub-accounts are not flagged again');
+});
+
 test('sub-accounts: one budgeted at zero though it ran every month', () => {
   const r = g.buildBudgetReview_(reviewStore({ 'Linen and Linen Rental': 0, 'Total Direct Operating Expenses': 2000 }), 'TST1', 2027, '2026-11-03');
   const linen = r.issues.filter(x => /7165/.test(x.title))[0];
