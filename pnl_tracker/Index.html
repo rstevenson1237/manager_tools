@@ -115,8 +115,41 @@
     .col-resize:hover::after,.col-resize:focus-visible::after,.col-resize.dragging::after{background:var(--brand);}
     .col-resize:focus-visible{outline:none;}
     body.resizing{cursor:col-resize;user-select:none;}
+    /* inventory */
+    .subtabs{display:flex;flex-wrap:wrap;gap:4px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:4px;}
+    .subtab{background:none;color:#3D434B;font-weight:600;min-height:36px;padding:0 14px;border-radius:7px;}
+    .subtab:hover:not(:disabled){background:#F1F2EF;}
+    .subtab.active,.subtab.active:hover:not(:disabled){background:var(--brand-soft);color:var(--brand-dark);}
+    .pending-pill{font-size:12px;font-weight:700;color:var(--brand-dark);background:var(--brand-soft);padding:6px 10px;border-radius:999px;white-space:nowrap;}
+    .check-label{display:flex;gap:6px;align-items:center;font-size:13px;min-height:40px;cursor:pointer;}
+    .check-label input{width:18px;height:18px;}
+    .inv-scroll{max-height:75vh;overflow:auto;overscroll-behavior:contain;}
+    .inv-table{min-width:1080px;}
+    .inv-table td{vertical-align:top;}
+    .inv-table td.inv-item,.inv-table th.inv-item{white-space:normal;min-width:200px;max-width:280px;position:sticky;left:0;}
+    .inv-table td.inv-item{z-index:1;background:#fff;box-shadow:inset -1px 0 0 #E2E2DC;}
+    .inv-table th.inv-item{z-index:3;}
+    .inv-table tr.sec td{position:sticky;top:30px;z-index:2;white-space:normal;}
+    .inv-table tr.sec td .sec-label{position:sticky;left:10px;}
+    .inv-table th{z-index:2;}
+    .inv-table tr.st-row-correct td{background:#F0F7EE;} .inv-table tr.st-row-review td{background:#FFF9E6;} .inv-table tr.st-row-adjust td{background:#FFF1EC;}
+    tr.inv-row.focus td{box-shadow:inset 0 2px 0 var(--brand),inset 0 -2px 0 var(--brand);}
+    .zero-cost{color:var(--danger);font-weight:700;}
+    .cat-btns{display:flex;gap:4px;margin-bottom:6px;}
+    .cat-btn{flex:1;font-size:11px;min-height:30px;padding:0 4px;border-radius:6px;border:1px solid #C9CCD1;background:#fff;color:#3D434B;font-weight:700;letter-spacing:.02em;}
+    .cat-btn:hover:not(:disabled){background:#F6F6F3;}
+    .cat-btn.cat-correct{border-color:#3C7A2E;color:#2F6324;} .cat-btn.cat-review{border-color:#A67C00;color:#7A5B00;} .cat-btn.cat-adjust{border-color:#B3401B;color:#9A3412;}
+    .cat-btn.active.cat-correct,.cat-btn.active.cat-correct:hover:not(:disabled){background:#3C7A2E;color:#fff;}
+    .cat-btn.active.cat-review,.cat-btn.active.cat-review:hover:not(:disabled){background:#A67C00;color:#fff;}
+    .cat-btn.active.cat-adjust,.cat-btn.active.cat-adjust:hover:not(:disabled){background:#B3401B;color:#fff;}
+    .badge.st-correct{background:#E3F1DF;color:#2F6324;} .badge.st-review{background:#FFF3C9;color:#6B5000;} .badge.st-adjust{background:#B3401B;color:#fff;}
+    .badge.st-other{background:#E8E9E6;color:#3D434B;}
+    .flag-card.act-adjust{border-left:4px solid #B3401B;} .flag-card.act-review{border-left:4px solid #A67C00;}
+    .sync{display:inline-flex;min-width:56px;justify-content:flex-end;font-size:12px;}
+    .print-only{display:none;}
     @media print{nav.top,.no-print,.toast-stack{display:none !important;} body{background:#fff;} main{padding:0;} .card{break-inside:avoid;}
-      .pl-scroll{max-height:none;overflow:visible;} .pl-scroll .line-col,.pl-scroll th{position:static;} .col-resize{display:none;}}
+      .pl-scroll{max-height:none;overflow:visible;} .pl-scroll .line-col,.pl-scroll th{position:static;} .col-resize{display:none;}
+      .inv-scroll{max-height:none;overflow:visible;} .inv-table tr.sec td,.inv-table .inv-item{position:static;} #inv-summary{display:none;} .print-only{display:block;white-space:pre-wrap;}}
   </style>
 </head>
 <body>
@@ -145,7 +178,7 @@
     </nav>
 
     <main>
-      <div v-if="!periods.length && view !== 'upload'" class="card empty">
+      <div v-if="!periods.length && view !== 'upload' && view !== 'inventory'" class="card empty">
         Nothing uploaded yet.
         <template v-if="boot.isAdmin"><br><br><button @click="go('upload')">Upload a P&amp;L</button></template>
       </div>
@@ -603,6 +636,8 @@
         </template>
       </template>
 
+<?!= include('InventoryView'); ?>
+
       <!-- ============================== UPLOAD & SETTINGS ============================== -->
       <template v-if="view === 'upload' && boot.isAdmin">
         <div class="row">
@@ -768,6 +803,18 @@
               <div class="field"><label for="r5">Days after month end to settle</label><input id="r5" type="number" v-model.number="settings.draft.rules.settleDays"></div>
             </div>
           </section>
+          <section>
+            <h3 style="margin:0 0 6px;font-size:14px">Inventory reviewers</h3>
+            <p class="muted" style="margin:0 0 6px">Can upload inventory counts, write review notes and save inventory reports. A reviewer who is not also a viewer sees the Inventory tab only, without P&amp;L figures.</p>
+            <ul class="chip-list"><li v-for="e in settings.draft.inventory.reviewers" :key="e">{{ e }}<button @click="settings.draft.inventory.reviewers = settings.draft.inventory.reviewers.filter(x => x !== e)" :aria-label="'Remove ' + e">×</button></li></ul>
+            <div class="controls" style="margin-top:6px"><input type="email" v-model="settings.newReviewer" placeholder="name@company.com" style="flex:1" @keydown.enter.prevent="addReviewer"><button class="ghost" @click="addReviewer">Add</button></div>
+          </section>
+          <section>
+            <h3 style="margin:0 0 6px;font-size:14px">Inventory notes</h3>
+            <p class="muted" style="margin:0 0 6px">The choices for a review note. Each starts with CORRECT, REVIEW or ADJUST, which sets its colour and whether it is an action item.</p>
+            <ul class="chip-list"><li v-for="n in settings.draft.inventory.noteCategories" :key="n">{{ n }}<button @click="removeInvNote(n)" :aria-label="'Remove ' + n">×</button></li></ul>
+            <div class="controls" style="margin-top:6px"><input type="text" v-model="settings.newNote" placeholder="ADJUST - WRONG UNIT OF MEASURE" style="flex:1" @keydown.enter.prevent="addInvNote"><button class="ghost" @click="addInvNote">Add</button></div>
+          </section>
           <section v-if="settings.globalAdmins">
             <h3 style="margin:0 0 6px;font-size:14px">Global admins</h3>
             <ul class="chip-list"><li v-for="e in settings.globalAdmins" :key="e">{{ e }}<button @click="removeGlobalAdmin(e)" :aria-label="'Remove ' + e">×</button></li></ul>
@@ -785,12 +832,14 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/vue@3.4.31/dist/vue.global.prod.js"></script>
+<?!= include('InventoryScript'); ?>
 <script>
   const VIEWS = [
     { key: 'portfolio', label: 'Portfolio' },
     { key: 'report', label: 'Period report' },
     { key: 'trends', label: 'Trends' },
     { key: 'budget', label: 'Budget review' },
+    { key: 'inventory', label: 'Inventory' },
     { key: 'upload', label: 'Upload & settings', admin: true }
   ];
   const TREND_KEYS = [
@@ -827,6 +876,7 @@
   const addMonths = (p, n) => { const y = +p.slice(0, 4), m = +p.slice(5, 7) - 1 + n; const yy = y + Math.floor(m / 12), mm = ((m % 12) + 12) % 12 + 1; return yy + '-' + String(mm).padStart(2, '0'); };
 
   Vue.createApp({
+    mixins: [InventoryMixin],
     data() {
       return {
         VIEWS, TREND_KEYS, GROUPINGS, LINE_COL_MIN, LINE_COL_MAX,
@@ -840,7 +890,7 @@
         toasts: [], toastSeq: 0,
         pnl: { stage: null, fileName: '', text: null, asOf: today(), preview: null, error: '' },
         budget: { stage: null, mode: 'xlsx', fileName: '', base64: null, sheetId: '', year: null, property: '', preview: null, error: '' },
-        settings: { open: false, draft: null, error: '', newViewer: '', newAdmin: '', globalAdmins: null, minPctWhole: 10 }
+        settings: { open: false, draft: null, error: '', newViewer: '', newAdmin: '', newReviewer: '', newNote: '', globalAdmins: null, minPctWhole: 10 }
       };
     },
     computed: {
@@ -867,7 +917,10 @@
       reportGrouped() { return !!this.report && !!this.report.grouping && this.report.grouping !== 'month'; },
       lineColStyle() { const w = this.lineColWidth + 'px'; return { width: w, minWidth: w, maxWidth: w }; },
       rules() { return this.boot.rules || { minDollar: 2500, minPct: 0.1, settleDays: 15 }; },
-      visibleViews() { return VIEWS.filter(v => !v.admin || this.boot.isAdmin); },
+      visibleViews() {
+        if (this.boot.inventoryOnly) return VIEWS.filter(v => v.key === 'inventory');
+        return VIEWS.filter(v => !v.admin || this.boot.isAdmin);
+      },
       activeProperties() { return (this.boot.properties || []).filter(p => p.active !== false); },
       periods() {
         const set = {};
@@ -1069,7 +1122,9 @@
             this.period = q.period || this.boot.latestPeriod;
             if (GROUPINGS.some(gr => gr.key === q.grouping)) this.grouping = q.grouping;
             this.property = q.property || (this.activeProperties[0] && this.activeProperties[0].code);
-            this.go(q.view || (this.periods.length ? 'portfolio' : (this.boot.isAdmin ? 'upload' : 'portfolio')));
+            const views = this.visibleViews.map(v => v.key);
+            const fallback = this.boot.inventoryOnly ? 'inventory' : (this.periods.length ? 'portfolio' : (this.boot.isAdmin ? 'upload' : 'portfolio'));
+            this.go(views.indexOf(q.view) !== -1 ? q.view : fallback);
           });
         } else if (!this.period) {
           this.period = this.boot.latestPeriod;
@@ -1081,6 +1136,7 @@
         if (view === 'report') this.loadReport();
         if (view === 'trends') this.loadTrends();
         if (view === 'budget') this.loadReview();
+        if (view === 'inventory') this.invEnter();
       },
       openReview(code, year) { this.reviewProperty = code; this.reviewYear = year; this.go('budget'); },
       async loadReview() {
@@ -1199,7 +1255,7 @@
 
       /* ---------- settings ---------- */
       async openSettings() {
-        this.settings = { open: true, draft: null, error: '', newViewer: '', newAdmin: '', globalAdmins: null, minPctWhole: 10 };
+        this.settings = { open: true, draft: null, error: '', newViewer: '', newAdmin: '', newReviewer: '', newNote: '', globalAdmins: null, minPctWhole: 10 };
         try {
           const s = await gas('getSettings');
           this.settings.draft = s; this.settings.minPctWhole = Math.round(s.rules.minPct * 100);
@@ -1217,6 +1273,25 @@
         payload.rules.minPct = (Number(this.settings.minPctWhole) || 0) / 100;
         try { await gas('saveSettings', payload); this.settings.open = false; this.toast('Settings saved.', 'success'); await this.loadBoot(false); this.go(this.view); }
         catch (err) { this.settings.error = err.message; }
+      },
+      addReviewer() {
+        const e = this.settings.newReviewer.trim();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { this.settings.error = 'Enter a valid email address.'; return; }
+        const list = this.settings.draft.inventory.reviewers;
+        if (!list.some(x => x.toLowerCase() === e.toLowerCase())) list.push(e);
+        this.settings.newReviewer = ''; this.settings.error = '';
+      },
+      addInvNote() {
+        const n = this.settings.newNote.trim().toUpperCase();
+        if (!/^(CORRECT|REVIEW|ADJUST)/.test(n)) { this.settings.error = 'An inventory note must start with CORRECT, REVIEW or ADJUST.'; return; }
+        const list = this.settings.draft.inventory.noteCategories;
+        if (list.indexOf(n) === -1) list.push(n);
+        this.settings.newNote = ''; this.settings.error = '';
+      },
+      removeInvNote(n) {
+        const list = this.settings.draft.inventory.noteCategories;
+        if (list.length <= 1) { this.settings.error = 'At least one inventory note is required.'; return; }
+        this.settings.draft.inventory.noteCategories = list.filter(x => x !== n);
       },
       addGlobalAdmin() {
         const e = this.settings.newAdmin.trim();

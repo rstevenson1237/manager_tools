@@ -1,6 +1,7 @@
 /*
  * Tests for the plain-JavaScript parts of the P&L Tracker (Parse, Budget,
- * Store, Analysis). Run with:   node pnl_tracker/tests/run_tests.js
+ * Store, Analysis, Review), then the inventory tests (inventory_tests.js).
+ * Run with:   node pnl_tracker/tests/run_tests.js
  *
  * All data here is made up. Real R365 exports contain the company's
  * financials and are never committed; the same checks were run against them
@@ -606,3 +607,6 @@ test('the workbook forecast is checked against R365', () => {
 });
 
 console.log('\n' + passed + ' passed' + (process.exitCode ? ', some FAILED' : ''));
+
+console.log('');
+require('./inventory_tests.js');
