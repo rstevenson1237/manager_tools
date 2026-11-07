@@ -485,6 +485,17 @@ test('a budget is a draft until 1 January of its year; upload details are kept',
   assert.strictEqual(r.upload.by, 'gm@example.com');
 });
 
+test('headline shows operating income after corporate allocations when the budget has them', () => {
+  const s = reviewStore();
+  const by = s.budgets.TST1[2027];
+  const r0 = g.buildBudgetReview_(s, 'TST1', 2027, '2026-11-03');
+  by.lines['9010'] = [1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000];
+  const r = g.buildBudgetReview_(s, 'TST1', 2027, '2026-11-03');
+  if (r0.headline.budCorp == null) assert.strictEqual(r0.headline.budOiAfterCorp, null);
+  near(r.headline.budCorp, 12000, 0.01);
+  near(r.headline.budOiAfterCorp, r.headline.budOi - 12000, 0.01);
+});
+
 test('last year takes each month from the latest year on file, never a month-to-date upload', () => {
   const r = g.buildBudgetReview_(reviewStore(), 'TST1', 2027, '2026-11-03');
   assert.strictEqual(r.basis.covered, 12);

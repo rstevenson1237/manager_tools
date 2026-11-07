@@ -347,6 +347,10 @@ function buildBudgetReview_(store, prop, year, today) {
   });
 
   const oi = row('OPERATING_INCOME');
+  // The budget workbook's NET OPERATING INCOME is after 9010 corporate
+  // allocations, which R365 (and this review) puts below operating income.
+  const corp = row('9010');
+  const budCorp = corp ? corp.budget : 0;
   const basisPeriods = basis.filter(Boolean).sort();
   return {
     property: prop,
@@ -360,6 +364,8 @@ function buildBudgetReview_(store, prop, year, today) {
     track: trackIdx.length ? { year: prevYear, months: trackIdx.length, first: prevPeriod(trackIdx[0]), last: prevPeriod(trackIdx[trackIdx.length - 1]) } : null,
     headline: {
       budNet: budNetAll, budOi: oi ? oi.budget : null, budOiPct: oi ? oi.budgetPct : null,
+      budCorp: budCorp || null, budOiAfterCorp: oi && budCorp ? oi.budget - budCorp : null,
+      budOiAfterCorpPct: oi && budCorp ? pctOf_(oi.budget - budCorp, budNetAll) : null,
       compNet: budNet, compOi: oi ? oi.compBudget : null, compOiPct: oi ? pctOf_(oi.compBudget, budNet) : null,
       pyNet: covered.length ? pyNet : null, pyOi: oi ? oi.py : null, pyOiPct: oi ? oi.pyPct : null,
       growthPct: pyNet ? (budNet - pyNet) / Math.abs(pyNet) * 100 : null,
