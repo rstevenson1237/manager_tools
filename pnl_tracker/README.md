@@ -86,13 +86,30 @@ P&L for Sep–Oct 2026. Notable choices:
 
 - 4100 Gross Sales includes the Facilities Fee (R365 posts it to 4540 Other
   Sales).
-- 6110 Management is management salaries only. Corporate allocations go to
-  9010 Corporate, below operating income.
+- 6110 Management includes the template's CORPORATE ALLOCATIONS row (GL
+  6100, a placeholder for corporate salaries), above the line, as R365 posts
+  it. Budgets saved before this rule had it as 9010; they are read as 6110.
 - 9100 Management Fee sits inside Expenses (7000), as in R365.
+
+### Cost of sales by type
+
+Sales and beverage cost are also shown by type, under their category:
+Food, NA Beverage, Liquor, Beer, Wine and Sake Sales under 4100; Liquor
+(including 5320 Bar Consumables), Beer, Wine and Sake Cost under 5185.
+Actuals come from R365's sub-account detail (a simplified upload has none),
+budgets from the template's GL rows (4110, 4210, 4310, 4410, 4510, 4520,
+5300, 5320, 5400, 5500, 5520).
+
+Each cost of sales line is a % of its own sales, as R365 and company
+reporting show it: 5002 of food sales, 5190 of NA beverage sales, 5300 of
+liquor sales (likewise beer, wine, sake), and 5185 of beer, wine, liquor and
+sake sales together. Total cost of sales and every other line stay a % of
+net sales. Flags, normal ranges, budget pushes and their dollar impacts use
+the same basis.
 
 On every budget read, the app checks that net sales match the template's
 TOTAL NET row and that operating income matches its NET OPERATING INCOME
-(after corporate allocations) in all 12 months.
+in all 12 months.
 
 ## 4. How flags work
 

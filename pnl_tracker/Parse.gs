@@ -15,6 +15,9 @@
  *     Period (simplified or detailed)            "ARG1M - Bygone"
  *   Profit & Loss - Trailing 12 Periods          a month             each "Period 10, 2025" column
  *                                                "Period 10, 2025"   (property from "Location: …")
+ *   Profit & Loss - Trailing 12 Periods vs       a month, plus the   as above; "Prior - Period 10, 2024"
+ *     Prior (24 months)                          same month a year   is read as that month
+ *                                                earlier
  *
  *   A detailed export nests sub-accounts under each category, up to three
  *   levels deep (5185 → 5300 → 5320), each group closed by a "Total …" row.
@@ -35,7 +38,7 @@ const PNL_SECTION_RE = /^[A-Z][A-Z ,&]*\((\d{4})\)$/;
 const PNL_CODE_RE = /^(\d[\w.\-]*) - (.+)$/;
 const PNL_PERIOD_ENDING_RE = /Period Ending (\d{1,2})\/(\d{1,2})\/(\d{4})/;
 const PNL_TRAILING_RE = /Periods? Ending (\d{1,2})\/(\d{1,2})\/(\d{4})/;
-const PNL_PERIOD_COL_RE = /^Period (\d{1,2}), (\d{4})$/;
+const PNL_PERIOD_COL_RE = /^(?:Prior - )?Period (\d{1,2}), (\d{4})$/;
 const PNL_PROPERTY_RE = /^([A-Z0-9]+) - (.+)$/;
 
 /** Subtotal rows that R365 computes and prints without an account code. */

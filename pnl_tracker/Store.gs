@@ -102,6 +102,10 @@ function withoutMonths_(rows, months) {
 }
 
 /** Build the store Analysis.gs reads from the sheets' rows. */
+function addBudgetMonths_(lines, key, months) {
+  lines[key] = lines[key] ? lines[key].map(function (v, i) { return v + months[i]; }) : months;
+}
+
 function rowsToStore_(sheetRows, properties, rules) {
   const store = { properties: properties || [], actuals: {}, detail: {}, budgets: {}, tags: {}, notes: {},
     rules: Object.assign({}, DEFAULT_RULES, rules || {}) };
@@ -135,7 +139,8 @@ function rowsToStore_(sheetRows, properties, rules) {
       b.forecast.lines[key] = months[0];
       return;
     }
-    if (kind === 'line') b.lines[key] = months;
+    if (kind === 'line' && key === '9010') addBudgetMonths_(b.lines, '6110', months);   // saved before corporate allocations moved to 6110
+    else if (kind === 'line') addBudgetMonths_(b.lines, key, months);
     else if (kind === 'gl') b.gl[key] = { name: String(r[4]), months: months };
     else if (kind === 'daily') b.daily[dateText_(r[3])] = { gross: months[0], banquet: months[1] };
   });
@@ -155,6 +160,30 @@ function rowsToStore_(sheetRows, properties, rules) {
   store.properties.forEach(function (p) { known[p.code] = true; });
   Object.keys(store.actuals).forEach(function (code) {
     if (!known[code]) store.properties.push({ code: code, name: code, active: true });
+  });
+  // Sales and beverage cost sub-lines (see COS_SUB_LINES): actuals from the
+  // sub-account detail, budgets from the GL rows.
+  Object.keys(store.actuals).forEach(function (prop) {
+    Object.keys(store.actuals[prop]).forEach(function (period) {
+      const det = store.detail[prop] && store.detail[prop][period];
+      if (!det) return;
+      const byCode = {};
+      det.forEach(function (d) { byCode[d.code] = (byCode[d.code] || 0) + d.amount; });
+      addCosSubLines_(store.actuals[prop][period].lines, function (c) { return byCode[c]; });
+    });
+  });
+  Object.keys(store.budgets).forEach(function (prop) {
+    Object.keys(store.budgets[prop]).forEach(function (year) {
+      const b = store.budgets[prop][year];
+      COS_SUB_LINES.forEach(function (sub) {
+        const rows = sub.codes.map(function (c) { return b.gl[c]; }).filter(Boolean);
+        if (!rows.length) return;
+        const months = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(function (i) {
+          return rows.reduce(function (s, g) { return s + (g.months[i] || 0); }, 0);
+        });
+        if (months.some(function (v) { return v; })) b.lines[sub.key] = months;
+      });
+    });
   });
   return store;
 }

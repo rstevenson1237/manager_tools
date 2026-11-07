@@ -41,7 +41,9 @@ const BUDGET_LINE_MAP = [
   { key: '5002', labels: ['FOOD COST'] },
   { key: '5185', labels: ['BEVERAGE COSTS'] },
   { key: '5190', labels: ['NA Beverage Costs'] },
-  { key: '6110', labels: ['MANAGEMENT SALARIES & WAGES'] },
+  // CORPORATE ALLOCATIONS is a placeholder for corporate salaries, GL 6100,
+  // above the line: R365 posts it to 6100 under 6110 Management - General.
+  { key: '6110', labels: ['MANAGEMENT SALARIES & WAGES', 'CORPORATE ALLOCATIONS'] },
   { key: '6201', labels: ['FOH HOURLY LABOR'] },
   { key: '6209', labels: ['BOH HOURLY LABOR'] },
   { key: '6252', labels: ['Cleaners'] },
@@ -56,8 +58,7 @@ const BUDGET_LINE_MAP = [
   { key: '7500', labels: ['Total General & Administrative'] },
   { key: '7590', labels: ['Total Repairs & Maintenance'] },
   { key: '9100', labels: ['Management Fee'] },
-  { key: '8100', labels: ['Total Occupancy Costs'] },
-  { key: '9010', labels: ['CORPORATE ALLOCATIONS'] }
+  { key: '8100', labels: ['Total Occupancy Costs'] }
 ];
 
 /** Which P&L section each budget line belongs to (matches R365's layout). */
@@ -67,8 +68,7 @@ const BUDGET_LINE_SECTION = {
   '6110': '6000', '6201': '6000', '6209': '6000', '6252': '6000', '6266': '6000', '6267': '6000',
   '6272': '6000', '6275': '6000',
   '7005': '7000', '7202': '7000', '7300': '7000', '7400': '7000', '7500': '7000', '7590': '7000', '9100': '7000',
-  '8100': '8000',
-  '9010': '9000'
+  '8100': '8000'
 };
 
 const BUDGET_MONTH_NAMES = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST',
@@ -145,10 +145,17 @@ function parseBudgetSheets_(sheets, yearHint) {
     else missingLines.push(spec.key + ' (' + spec.labels[0] + ')');
   });
 
-  // Every GL row, first occurrence of each code (later repeats are subtotals).
+  // Every GL row, first occurrence of each code (later repeats are subtotals),
+  // except corporate allocations, which add to their GL code (6100).
   const gl = {};
   rows.forEach(function (row) {
-    if (!row.gl || gl[row.gl] || !hasNumbers(row)) return;
+    if (!row.gl || !hasNumbers(row)) return;
+    if (row.label === 'CORPORATE ALLOCATIONS' && gl[row.gl]) {
+      const m = zeros(row.months);
+      gl[row.gl].months = gl[row.gl].months.map(function (v, i) { return v + m[i]; });
+      return;
+    }
+    if (gl[row.gl]) return;
     gl[row.gl] = { name: row.rawLabel, months: zeros(row.months) };
   });
 
@@ -182,11 +189,9 @@ function parseBudgetSheets_(sheets, yearHint) {
       detail: worst <= 5 ? 'All 12 months match.' : 'Off by up to ' + Math.round(worst) + ' in a month.' });
   }
   if (noi) {
-    // The template's NET OPERATING INCOME is after corporate allocations; R365's
-    // operating income is before them (they sit in 9010, below the line).
-    const ours = subtotals.map(function (s) { return s.OPERATING_INCOME - (lines['9010'] ? s._corp : 0); });
+    const ours = subtotals.map(function (s) { return s.OPERATING_INCOME; });
     const worst = maxBudgetGap_(ours, zeros(noi.months));
-    checks.push({ label: 'Operating income matches NET OPERATING INCOME (after corporate allocations)', ok: worst <= 5,
+    checks.push({ label: 'Operating income matches NET OPERATING INCOME', ok: worst <= 5,
       detail: worst <= 5 ? 'All 12 months match.' : 'Off by up to ' + Math.round(worst) + ' in a month.' });
   }
   const salesRow = findRow('RESTAURANT GROSS F&B SALES');
@@ -282,29 +287,31 @@ function budgetSubtotals_(lines, monthIndex) {
   out.OPERATING_INCOME = out.CONTROLLABLE_PROFIT - out.TOTAL_8000;
   out.TOTAL_9000 = s('9000');
   out.NET_PROFIT = out.OPERATING_INCOME - out.TOTAL_9000;
-  out._corp = v('9010');
   return out;
 }
 
 /**
  * Share of a month's sales budget that falls on or before `day`: daily
  * restaurant sales to date, plus banquet sales spread evenly over the month.
- * Falls back to days elapsed ÷ days in month when no daily budget exists.
+ * Falls back to days elapsed ÷ days in month when no daily budget exists,
+ * or when it is not really daily: sales on fewer than half the days (a
+ * template with the month's whole total typed on the 1st, for one).
  */
 function budgetMonthFraction_(daily, year, month, day) {
   const dim = new Date(year, month, 0).getDate();
   if (day >= dim) return 1;
-  let total = 0, toDate = 0, banquet = 0, found = false;
+  let total = 0, toDate = 0, banquet = 0, found = false, salesDays = 0;
   for (let d = 1; d <= dim; d++) {
     const e = daily && daily[year + '-' + pad2Budget_(month) + '-' + pad2Budget_(d)];
     if (!e) continue;
     found = true;
+    if (e.gross - e.banquet > 0) salesDays++;
     const restaurant = e.gross - e.banquet;
     total += e.gross;
     banquet += e.banquet;
     if (d <= day) toDate += restaurant;
   }
-  if (!found || total <= 0) return day / dim;
+  if (!found || total <= 0 || salesDays < dim / 2) return day / dim;
   return (toDate + banquet * day / dim) / total;
 }
 

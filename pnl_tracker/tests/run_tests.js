@@ -155,6 +155,19 @@ test('reads a trailing-12 export, one column per month', () => {
   assert.ok(r.groups.every(x => x.propertyCode === 'TST1' && !x.problems.length));
 });
 
+test('reads a trailing-12 vs prior export: "Prior - Period" columns are the year before', () => {
+  const months = [];
+  for (let m = 1; m <= 12; m++) {
+    months.push(['Period ' + m + ', 2026', amounts(1)]);
+    months.push(['Prior - Period ' + m + ', 2025', amounts(0.9)]);
+  }
+  const text = trailing('12/31/2026', 'TST1 - Sample Grill', months).replace('Trailing 12 Periods', 'Trailing 12 Periods vs Prior');
+  const r = parse(text);
+  assert.strictEqual(r.groups.length, 24);
+  same(r.groups.map(x => x.period).sort().slice(0, 2), ['2025-01', '2025-02']);
+  assert.ok(r.groups.every(x => !x.problems.length));
+});
+
 test('flags totals that do not add up', () => {
   const text = sideBySide('10/31/2026', [['TST1 - Sample Grill', amounts(1)]]).replace('Total 7400 - Utilities,"15,000"', 'Total 7400 - Utilities,"16,000"');
   const r = parse(text);
@@ -198,10 +211,16 @@ function budgetSheets(opts) {
   };
   const grid = [[null, 'SAMPLE GRILL'], header,
     row('GL CODE', 'RESTAURANT GROSS F&B SALES', 600000),
+    row('4110', 'TOTAL FOOD', 420000),
+    row('4310', 'Liquor Sales', 110000),
+    row('4510', 'Wine Sales', 70000),
     row('4540', 'Facilities Fee', 20000),
     row('4560', 'TOTAL COMPS', -20000),
     row(null, 'TOTAL NET', 600000),
     row('5002', 'FOOD COST', 110000),
+    row('5300', 'Liquor Costs', 25000),
+    row('5320', 'Bar Consumables', 5000),
+    row('5500', 'Wine Costs', 25000),
     row('5185', 'BEVERAGE COSTS', 55000),
     row('5190', 'NA Beverage Costs', 4000),
     row('6100', 'MANAGEMENT SALARIES & WAGES', 55000),
@@ -239,14 +258,15 @@ test('rolls the 12 MONTH tab up to P&L lines and checks it against the template 
   const b = g.parseBudgetSheets_(budgetSheets());
   assert.strictEqual(b.year, 2026);
   assert.strictEqual(b.lines['4100'][9], 620000, 'gross sales include the facilities fee');
-  assert.strictEqual(b.lines['6110'][9], 55000, 'management = salaries only');
-  assert.strictEqual(b.lines['9010'][9], 8000, 'corporate allocations sit below operating income');
+  assert.strictEqual(b.lines['6110'][9], 63000, 'management includes corporate allocations (GL 6100)');
+  assert.strictEqual(b.lines['9010'], undefined, 'nothing below operating income');
+  assert.strictEqual(b.gl['6100'].months[9], 63000, 'GL 6100 includes corporate allocations');
   assert.strictEqual(b.lines['6275'][0], 30000, 'repeated label matched by GL code');
   assert.strictEqual(b.gl['7165'].months[9], 5000);
   assert.strictEqual(b.gl['7400'].months[0], 15000, '7400.0 read as 7400');
   const st = g.budgetSubtotals_(b.lines, 9);
   assert.strictEqual(st.NET_SALES, 600000);
-  assert.strictEqual(st.OPERATING_INCOME, 600000 - 169000 - 131000 - 41000 - 9000);
+  assert.strictEqual(st.OPERATING_INCOME, 600000 - 169000 - 139000 - 41000 - 9000);
   assert.ok(b.checks.filter(c => /TOTAL NET/.test(c.label))[0].ok);
   assert.ok(b.checks.filter(c => /NET OPERATING INCOME/.test(c.label))[0].ok);
 });
@@ -257,6 +277,9 @@ test('month-to-date budget spreads banquets over the month', () => {
   near(f, (3 * 15000 + 155000 * 3 / 31) / (31 * 15000 + 155000), 1e-9);
   assert.strictEqual(g.budgetMonthFraction_(b.daily, 2026, 10, 31), 1);
   near(g.budgetMonthFraction_(null, 2026, 11, 3), 0.1, 1e-9, 'no daily budget: days elapsed');
+  const lumped = { '2026-11-01': { gross: 431896, banquet: 8592 } };
+  for (let d = 2; d <= 30; d++) lumped['2026-11-' + (d < 10 ? '0' : '') + d] = { gross: 0, banquet: 0 };
+  near(g.budgetMonthFraction_(lumped, 2026, 11, 3), 0.1, 1e-9, 'whole month typed on the 1st: days elapsed');
 });
 
 /* ------------------------------------------------------------------ stages */
@@ -303,7 +326,30 @@ test('a normal month has no flags and nothing missing', () => {
   assert.ok(r.hasBudget && r.hasLastYear && r.threeMonths);
   const oi = r.rows.filter(x => x.key === 'OPERATING_INCOME')[0];
   assert.strictEqual(oi.actual, 320600);
-  assert.strictEqual(oi.budget, 600000 - 169000 - 131000 - 41000 - 9000);
+  assert.strictEqual(oi.budget, 600000 - 169000 - 139000 - 41000 - 9000);
+});
+
+test('cost of sales: beer, wine, liquor and NA lines, each a % of its own sales', () => {
+  const s = sampleStore();
+  const r = g.buildPeriodReport_(s, 'TST1', '2026-10');
+  const get = k => r.rows.filter(x => x.key === k)[0];
+  const keys = r.rows.map(x => x.key);
+  assert.ok(keys.indexOf('4110') > keys.indexOf('4100') && keys.indexOf('4510') < keys.indexOf('4560'), 'sales sub-lines under gross sales');
+  assert.ok(keys.indexOf('5300') === keys.indexOf('5185') + 1 && keys.indexOf('5500') > keys.indexOf('5300'), 'beverage costs under 5185');
+  assert.strictEqual(get('5300').actual, 30000, 'liquor cost includes bar consumables');
+  assert.strictEqual(get('5300').kind, 'sub');
+  near(get('5002').pct, 110000 / 400000 * 100, 1e-9, 'food cost of food sales');
+  near(get('5300').pct, 30000 / 150000 * 100, 1e-9, 'liquor cost of liquor sales');
+  near(get('5500').pct, 28000 / 90000 * 100, 1e-9, 'wine cost of wine sales');
+  near(get('5185').pct, 58000 / 240000 * 100, 1e-9, 'beer, wine & liquor of their sales');
+  near(get('TOTAL_5000').pct, 168000 / get('NET_SALES').actual * 100, 1e-9, 'total cost of sales stays a % of net sales');
+  assert.strictEqual(get('5002').pctOf, 'food sales');
+  near(get('5002').budgetPct, 110000 / 420000 * 100, 1e-9, 'budget food cost of budgeted food sales');
+  near(get('5300').budgetPct, 30000 / 110000 * 100, 1e-9);
+  near(get('5002').lyPct, 27.5, 1e-9);
+  const q = g.buildGroupedReport_(s, 'TST1', '2026-09', 'quarter');
+  near(q.rows.filter(x => x.key === '5002')[0].pct, 27.5, 1e-9, 'quarter: food cost of food sales');
+  near(q.rows.filter(x => x.key === '5002')[0].budgetPct, 110000 / 420000 * 100, 1e-9);
 });
 
 test('one bad month is a spike, explained by its sub-accounts against budget', () => {
@@ -469,6 +515,14 @@ test('a budget is a draft until 1 January of its year; upload details are kept',
   assert.strictEqual(r.upload.by, 'gm@example.com');
 });
 
+test('a budget saved with corporate allocations as 9010 is read as 6110', () => {
+  const st = g.rowsToStore_({ budget: [
+    [2027, 'TST1', 'line', '6110', '', 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    [2027, 'TST1', 'line', '9010', '', 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]] }, [], {});
+  assert.strictEqual(st.budgets.TST1[2027].lines['6110'][0], 3);
+  assert.strictEqual(st.budgets.TST1[2027].lines['9010'], undefined);
+});
+
 test('last year takes each month from the latest year on file, never a month-to-date upload', () => {
   const r = g.buildBudgetReview_(reviewStore(), 'TST1', 2027, '2026-11-03');
   assert.strictEqual(r.basis.covered, 12);
@@ -479,15 +533,17 @@ test('last year takes each month from the latest year on file, never a month-to-
 });
 
 test('pushes: sales growth and a lower food cost %, with last budget\'s record', () => {
-  const r = g.buildBudgetReview_(reviewStore({ 'RESTAURANT GROSS F&B SALES': 700000, 'FOOD COST': 100000 }), 'TST1', 2027, '2026-11-03');
+  const r = g.buildBudgetReview_(reviewStore({ 'RESTAURANT GROSS F&B SALES': 700000, 'TOTAL FOOD': 500000, 'FOOD COST': 100000 }), 'TST1', 2027, '2026-11-03');
   same(r.pushes.map(x => x.key).slice(0, 2), ['NET_SALES', '5002']);
   const sales = r.pushes[0];
   near(sales.growthPct, (8400000 / 7616000 - 1) * 100, 0.01);
   near(sales.track.assumedPct, (600000 / 608000 - 1) * 100, 0.01, '2026 budget against 2025 actual');
   near(sales.track.deliveredPct, 5.263, 0.01);
   const food = r.pushes[1];
-  near(food.budgetPct, 100000 / 700000 * 100, 0.01);
-  near(food.pyPct, 110000 / 640000 * 100, 0.01);
+  near(food.budgetPct, 100000 / 500000 * 100, 0.01, 'food cost is a % of food sales');
+  near(food.pyPct, 110000 / 400000 * 100, 0.01);
+  assert.strictEqual(food.pctOf, 'food sales');
+  near(food.impact, (110000 / 400000 - 100000 / 500000) * 500000 * 12, 1, 'impact on the budgeted food sales');
 });
 
 test('mistakes: zero, management fee rate, fixed cost drop, blank months', () => {
@@ -502,6 +558,37 @@ test('mistakes: zero, management fee rate, fixed cost drop, blank months', () =>
   assert.ok(!r.pushes.some(x => x.key === '9100'), 'the management fee is never a push');
   assert.ok(/Fixed cost below last year/.test(by('8100')[0].title));
   assert.ok(/Nothing budgeted in Mar, Jul/.test(by('7005')[0].title));
+});
+
+test('a line whose spend stopped during last year, budgeted at the new run rate, is a check, not an error', () => {
+  const s = reviewStore({ 'Total Utilities': 0, 'Electricity': 0, 'Water and Sewage': 0 });
+  ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10'].forEach(p => {
+    // Electricity and water stop; a little propane keeps posting.
+    s.actuals.TST1[p].lines['7400'].amount = 276;
+    s.detail.TST1[p] = s.detail.TST1[p].filter(d => String(d.category) !== '7400')
+      .concat([{ category: '7400', code: '7450', name: 'Propane', amount: 276 }]);
+  });
+  const r = g.buildBudgetReview_(s, 'TST1', 2027, '2026-11-03');
+  const u = r.issues.filter(x => x.key === '7400');
+  assert.strictEqual(u.length, 1, JSON.stringify(u));
+  assert.strictEqual(u[0].severity, 'check');
+  assert.ok(/lower recent run rate/.test(u[0].title));
+  assert.ok(/May 26–Oct 26/.test(u[0].detail) && /Electricity/.test(u[0].detail), u[0].detail);
+  assert.ok(!r.pushes.some(x => x.key === '7400'), 'a line that stopped is not a push');
+  assert.ok(!r.issues.some(x => /7420|7480/.test(x.title)), 'its sub-accounts are not flagged again');
+});
+
+test('last year copied from another property is found, in the review and on upload', () => {
+  const s = reviewStore();
+  ['2025-11', '2025-12'].forEach(p => { s.actuals.TST2 = s.actuals.TST2 || {}; s.actuals.TST2[p] = JSON.parse(JSON.stringify(s.actuals.TST1[p])); });
+  same(g.copiedMonths_(s, 'TST1', ['2025-10', '2025-11', '2025-12']).map(c => c.period + ' ' + c.other), ['2025-11 TST2', '2025-12 TST2']);
+  s.actuals.TST2['2025-12'].lines.NET_SALES.amount += 1;
+  same(g.copiedMonths_(s, 'TST1', ['2025-11', '2025-12']).map(c => c.period), ['2025-11'], 'a dollar off is not a copy');
+  const r = g.buildBudgetReview_(s, 'TST1', 2027, '2026-11-03');
+  const c = r.issues.filter(x => /copy of TST2 for 1 month/.test(x.title))[0];
+  assert.ok(c && c.severity === 'error', JSON.stringify(r.issues.map(x => x.title)));
+  const up = g.uploadCopies_(s, [{ property: 'TST2', period: '2025-11' }, { property: 'TST2', period: '2025-12' }]);
+  same(up.map(x => x.other + ' ' + x.periods.join(',')), ['TST1 2025-11']);
 });
 
 test('sub-accounts: one budgeted at zero though it ran every month', () => {

@@ -65,6 +65,62 @@ const SUBTOTAL_SECTION = {
 const HIGHER_IS_BETTER = { NET_SALES: 1, GROSS_PROFIT: 1, PROFIT_AFTER_PRIME_COST: 1,
   CONTROLLABLE_PROFIT: 1, OPERATING_INCOME: 1, NET_PROFIT: 1 };
 
+/* ------------------------------------------------- cost of sales by type */
+
+/**
+ * Sales and beverage cost sub-lines, shown under their category. Actuals
+ * come from R365's sub-account detail, budgets from the template's GL rows.
+ * Each cost line is a % of its own sales (food cost of food sales), as R365
+ * and company reporting show it; total cost of sales stays a % of net sales.
+ */
+const COS_SUB_LINES = [
+  { key: '4110', name: 'Food Sales', section: '4000', parent: '4100', codes: ['4110'] },
+  { key: '4210', name: 'NA Beverage Sales', section: '4000', parent: '4100', codes: ['4210'] },
+  { key: '4310', name: 'Liquor Sales', section: '4000', parent: '4100', codes: ['4310', '4300'] },
+  { key: '4410', name: 'Beer Sales', section: '4000', parent: '4100', codes: ['4410'] },
+  { key: '4510', name: 'Wine Sales', section: '4000', parent: '4100', codes: ['4510'] },
+  { key: '4520', name: 'Sake Sales', section: '4000', parent: '4100', codes: ['4520'] },
+  { key: '5300', name: 'Liquor Cost (incl. bar consumables)', section: '5000', parent: '5185', codes: ['5300', '5320'] },
+  { key: '5400', name: 'Beer Cost', section: '5000', parent: '5185', codes: ['5400'] },
+  { key: '5500', name: 'Wine Cost', section: '5000', parent: '5185', codes: ['5500'] },
+  { key: '5520', name: 'Sake Cost', section: '5000', parent: '5185', codes: ['5520'] }
+];
+/** Cost line → the sales lines it is a percentage of, and what to call them. */
+const COS_BASIS = {
+  '5002': { keys: ['4110'], label: 'food sales' },
+  '5185': { keys: ['4310', '4410', '4510', '4520'], label: 'beer, wine & liquor sales' },
+  '5190': { keys: ['4210'], label: 'NA beverage sales' },
+  '5300': { keys: ['4310'], label: 'liquor sales' },
+  '5400': { keys: ['4410'], label: 'beer sales' },
+  '5500': { keys: ['4510'], label: 'wine sales' },
+  '5520': { keys: ['4520'], label: 'sake sales' }
+};
+
+/** What a line's % is of: its own sales for cost of sales lines, otherwise net sales. */
+function pctLabel_(key) { return COS_BASIS[key] ? COS_BASIS[key].label : 'net sales'; }
+
+/**
+ * The amount a line's % is taken of, from `get(key)` (actual, budget or last
+ * year). Null when a cost line's own sales are not available (a simplified
+ * upload has no sub-accounts).
+ */
+function pctBase_(key, get) {
+  const b = COS_BASIS[key];
+  if (!b) return get('NET_SALES');
+  let s = 0, any = false;
+  b.keys.forEach(function (k) { const v = get(k); if (v != null) { s += v; any = true; } });
+  return any && s ? s : null;
+}
+
+/** Add the sub-lines to one month's lines, from its sub-account amounts ({code: amount}). */
+function addCosSubLines_(lines, amountOfCode) {
+  COS_SUB_LINES.forEach(function (sub) {
+    let s = 0, any = false;
+    sub.codes.forEach(function (c) { const v = amountOfCode(c); if (v) { s += v; any = true; } });
+    if (any) lines[sub.key] = { key: sub.key, name: sub.name, section: sub.section, kind: 'sub', parent: sub.parent, amount: s, pct: null };
+  });
+}
+
 /* --------------------------------------------------------------- periods */
 
 function periodAdd_(period, n) {
@@ -102,7 +158,9 @@ function compareLines_(a, b) {
   if (kr(a) === 2) { // GROSS_PROFIT etc. are one per section; NET_SALES alone in 4000
     return 0;
   }
-  return parseFloat(a.key) - parseFloat(b.key) || String(a.key).localeCompare(String(b.key));
+  // A sub-line sits right after its parent category (5300 Liquor Cost under 5185).
+  const ord = function (l) { return l.parent ? parseFloat(l.parent) + parseFloat(l.key) / 1e5 : parseFloat(l.key); };
+  return ord(a) - ord(b) || String(a.key).localeCompare(String(b.key));
 }
 function isCategory_(line) { return line.kind === 'line' || line.kind === 'group'; }
 function direction_(key, section) {
@@ -125,6 +183,49 @@ function amountOf_(store, prop, period, key) {
   const l = m.lines[key];
   return l ? l.amount : 0;
 }
+/**
+ * Months of a property whose every line matches another property's same
+ * month to the dollar: a file uploaded under the wrong location. Two real
+ * properties never post identical P&Ls.
+ * @return {Array<{period: string, other: string}>}
+ */
+function copiedMonths_(store, prop, periods) {
+  const out = [];
+  (periods || []).forEach(function (period) {
+    const m = monthOnFile_(store, prop, period);
+    if (!m || !amountOf_(store, prop, period, 'NET_SALES')) return;
+    const keys = Object.keys(m.lines);
+    Object.keys(store.actuals).some(function (other) {
+      if (other === prop) return false;
+      const o = monthOnFile_(store, other, period);
+      if (!o || Object.keys(o.lines).length !== keys.length) return false;
+      const same = keys.every(function (k) { return o.lines[k] && Math.abs(o.lines[k].amount - m.lines[k].amount) < 0.5; });
+      if (same) out.push({ period: period, other: other });
+      return same;
+    });
+  });
+  return out;
+}
+/** Months in an upload whose figures are identical to another property's, grouped by property pair. */
+function uploadCopies_(store, months) {
+  const byProp = {};
+  months.forEach(function (m) { (byProp[m.property] = byProp[m.property] || []).push(m.period); });
+  const out = [];
+  Object.keys(byProp).forEach(function (prop) {
+    const hits = copiedMonths_(store, prop, byProp[prop]);
+    const byOther = {};
+    hits.forEach(function (h) { (byOther[h.other] = byOther[h.other] || []).push(h.period); });
+    Object.keys(byOther).forEach(function (other) { out.push({ property: prop, other: other, periods: byOther[other].sort() }); });
+  });
+  return out;
+}
+function copiesText_(copies) {
+  return copies.map(function (c) {
+    return c.property + ' ' + c.periods.length + ' month' + (c.periods.length === 1 ? '' : 's') + ' (' + c.periods[0] +
+      (c.periods.length > 1 ? ' to ' + c.periods[c.periods.length - 1] : '') + ') identical to ' + c.other + ' on file';
+  }).join('; ');
+}
+
 function budgetYear_(store, prop, period) {
   const b = store.budgets[prop];
   return (b && b[Number(period.slice(0, 4))]) || null;
@@ -136,7 +237,6 @@ function budgetMonth_(store, prop, period) {
   const mi = Number(period.slice(5, 7)) - 1;
   const out = budgetSubtotals_(by.lines, mi);
   Object.keys(by.lines).forEach(function (k) { out[k] = by.lines[k][mi]; });
-  delete out._corp;
   return out;
 }
 function budgetGl_(store, prop, period, code) {
@@ -171,7 +271,7 @@ function priorMonths_(store, prop, period, n) {
 function lineCatalog_(store, prop, period) {
   const meta = {};
   const add = function (l) {
-    if (!meta[l.key]) meta[l.key] = { key: l.key, name: l.name, section: l.section, kind: l.kind };
+    if (!meta[l.key]) meta[l.key] = { key: l.key, name: l.name, section: l.section, kind: l.kind, parent: l.parent || null };
   };
   const cur = monthOnFile_(store, prop, period);
   if (cur) Object.keys(cur.lines).forEach(function (k) { add(cur.lines[k]); });
@@ -183,6 +283,8 @@ function lineCatalog_(store, prop, period) {
   if (by) {
     Object.keys(by.lines).forEach(function (k) {
       if (meta[k] || !by.lines[k].some(function (v) { return v; })) return;
+      const sub = COS_SUB_LINES.filter(function (s) { return s.key === k; })[0];
+      if (sub) { add({ key: k, name: sub.name, section: sub.section, kind: 'sub', parent: sub.parent }); return; }
       const spec = BUDGET_LINE_MAP.filter(function (s) { return s.key === k; })[0];
       add({ key: k, name: spec ? spec.labels[0] : k, section: BUDGET_LINE_SECTION[k], kind: 'line' });
     });
@@ -254,12 +356,17 @@ function buildPeriodReport_(store, prop, period) {
     // Month to date: last year's full month is cut to the same share of the month as the budget.
     const lyFull = lyMonth ? amountOf_(store, prop, lyPeriod, key) : null;
     const ly = lyFull == null ? null : lyFull * fraction;
+    // % of net sales, or of its own sales for a cost of sales line.
+    const base = pctBase_(key, function (k) { return amountOf_(store, prop, period, k); });
+    const budBase = bud ? pctBase_(key, function (k) { return k in bud ? bud[k] : null; }) : null;
+    const lyBase = lyMonth ? pctBase_(key, function (k) { return amountOf_(store, prop, lyPeriod, k) * fraction; }) : null;
     const row = {
-      key: key, name: meta.name, section: meta.section, kind: meta.kind,
-      actual: act, pct: pctOf_(act, net), reportedPct: line ? line.pct : null, absent: !line,
-      budget: b, budgetPct: b == null ? null : pctOf_(b, budNet),
+      key: key, name: meta.name, section: meta.section, kind: meta.kind, parent: meta.parent, pctOf: pctLabel_(key),
+      actual: act, pct: base ? pctOf_(act, base) : (COS_BASIS[key] && line ? line.pct : null), pctBase: base,
+      reportedPct: line ? line.pct : null, absent: !line,
+      budget: b, budgetPct: b == null ? null : pctOf_(b, budBase),
       varBudget: b == null ? null : dir * (act - b),
-      ly: ly, lyPct: ly == null ? null : pctOf_(ly, lyNet), varLy: ly == null ? null : dir * (act - ly),
+      ly: ly, lyPct: ly == null ? null : pctOf_(ly, lyBase), varLy: ly == null ? null : dir * (act - ly),
       three: null, ytd: null, flag: null, missing: null, tag: tagOf_(store, prop, period, key)
     };
     if (has3) {
@@ -346,7 +453,8 @@ function mtdFlag_(rules, meta, row, net, budNet) {
   if (rules.realTimeLines.indexOf(meta.key) === -1 || row.budgetPct == null || row.pct == null) return null;
   const pts = row.pct - row.budgetPct;
   if (pts < rules.mtdPctPoints) return null;
-  return { type: 'pace', overBy: pts / 100 * net, reason: 'Running ' + pts.toFixed(1) + ' pts of sales above budget so far this month' };
+  return { type: 'pace', overBy: pts / 100 * (row.pctBase || net),
+    reason: 'Running ' + pts.toFixed(1) + ' pts of ' + pctLabel_(meta.key) + ' above budget so far this month' };
 }
 
 function isOver_(rules, actual, budget) {
@@ -362,7 +470,7 @@ function normalRange_(store, prop, period, key, prior12) {
   prior12.forEach(function (p) {
     const t = tagOf_(store, prop, p, key);
     if (t && t.tag === 'timing') return;
-    const n = amountOf_(store, prop, p, 'NET_SALES');
+    const n = pctBase_(key, function (k) { return amountOf_(store, prop, p, k); });
     if (!n) return;
     pcts.push(amountOf_(store, prop, p, key) / n * 100);
   });
@@ -376,8 +484,9 @@ function monthFlag_(store, rules, prop, period, meta, row, net, prior12, has3, p
   const act = row.actual;
   const over = isOver_(rules, act, row.budget);
   const range = normalRange_(store, prop, period, key, prior12);
+  const base = row.pctBase || net;
   const outside = !!(range && row.pct != null && row.pct > range.high + 0.05 &&
-    act - range.high / 100 * net >= rules.minDollar);
+    act - range.high / 100 * base >= rules.minDollar);
 
   const priorVals = prior12.map(function (p) { return amountOf_(store, prop, p, key); });
   const prev = amountOf_(store, prop, periodAdd_(period, -1), key);
@@ -396,21 +505,21 @@ function monthFlag_(store, rules, prop, period, meta, row, net, prior12, has3, p
     const b2 = before.map(function (p) { const b = budgetMonth_(store, prop, p); return b && key in b ? b[key] : null; });
     type = b2.indexOf(null) === -1 && isOver_(rules, a2, b2[0] + b2[1]) ? 'trend' : 'spike';
   } else if (has3 && range) {
-    const n2 = before.reduce(function (s, p) { return s + (amountOf_(store, prop, p, 'NET_SALES') || 0); }, 0);
+    const n2 = before.reduce(function (s, p) { return s + (pctBase_(key, function (k) { return amountOf_(store, prop, p, k); }) || 0); }, 0);
     const a2 = before.reduce(function (s, p) { return s + (amountOf_(store, prop, p, key) || 0); }, 0);
     type = n2 && a2 / n2 * 100 > range.high ? 'trend' : 'spike';
   } else type = 'spike';
 
   const reasons = [];
   if (over) reasons.push('over budget by ' + Math.round(act - row.budget).toLocaleString('en-US'));
-  if (outside) reasons.push(row.pct.toFixed(1) + '% of sales, above the normal ' + range.low.toFixed(1) + '–' + range.high.toFixed(1) + '%');
+  if (outside) reasons.push(row.pct.toFixed(1) + '% of ' + pctLabel_(key) + ', above the normal ' + range.low.toFixed(1) + '–' + range.high.toFixed(1) + '%');
   if (isNew) reasons.push('was near zero for the past year');
   return {
     type: type,
     overBudget: over,
     outsideNormal: outside,
     range: range,
-    overBy: over ? act - row.budget : (range ? act - range.high / 100 * net : 0),
+    overBy: over ? act - row.budget : (range ? act - range.high / 100 * base : 0),
     reason: reasons.join('; ')
   };
 }
@@ -547,12 +656,15 @@ function buildGroupedReport_(store, prop, period, grouping) {
     const act = sumOver(function (p) { return amountOf_(store, prop, p, key); });
     const b = budgetOf(key);
     const ly = lyOf(key);
+    const base = pctBase_(key, function (k) { return k === 'NET_SALES' ? net : sumOver(function (p) { return amountOf_(store, prop, p, k); }); });
+    const budBase = b == null ? null : pctBase_(key, function (k) { return k === 'NET_SALES' ? budNet : budgetOf(k); });
+    const lyBase = ly == null ? null : pctBase_(key, function (k) { return k === 'NET_SALES' ? lyNet : lyOf(k); });
     return {
-      key: key, name: meta.name, section: meta.section, kind: meta.kind,
-      actual: act, pct: pctOf_(act, net), reportedPct: null, absent: false,
-      budget: b, budgetPct: b == null ? null : pctOf_(b, budNet),
+      key: key, name: meta.name, section: meta.section, kind: meta.kind, parent: meta.parent, pctOf: pctLabel_(key),
+      actual: act, pct: pctOf_(act, base), pctBase: base, reportedPct: null, absent: false,
+      budget: b, budgetPct: b == null ? null : pctOf_(b, budBase),
       varBudget: b == null ? null : dir * (act - b),
-      ly: ly, lyPct: ly == null ? null : pctOf_(ly, lyNet), varLy: ly == null ? null : dir * (act - ly),
+      ly: ly, lyPct: ly == null ? null : pctOf_(ly, lyBase), varLy: ly == null ? null : dir * (act - ly),
       three: null, ytd: null, flag: null, missing: null, tag: null
     };
   });

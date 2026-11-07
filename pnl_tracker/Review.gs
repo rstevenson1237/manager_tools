@@ -28,7 +28,10 @@
  *   the budget.
  *
  * LOOKS BUDGETED INCORRECTLY (likely mistakes)
- *   recurring lines or sub-accounts budgeted at zero; sub-accounts several
+ *   recurring lines or sub-accounts budgeted at zero — unless the latest
+ *   months ran at about the budgeted level too, which means the spend stopped
+ *   or moved during last year (listed as a check, naming the sub-accounts that
+ *   stopped, not as an error); sub-accounts several
  *   times last year or new; fixed costs (occupancy, insurance) below last
  *   year; lines set as a rate (management fee, payroll taxes, card fees) off
  *   their usual rate; months left blank; one month's cost % out of pattern;
@@ -44,7 +47,8 @@ const REVIEW_RULES = {
   seasonPts: 1.5,    // a month's share of annual sales moving this many points
   monthPts: 3,       // a month's cost % this far from its PY month, beyond the annual change
   fixedDrop: 0.05,   // fixed costs budgeted this share below PY
-  rateDrift: 0.15    // rate-set lines this share away from their PY rate
+  rateDrift: 0.15,   // rate-set lines this share away from their PY rate
+  recentMonths: 6    // latest months of PY that show the current run rate
 };
 
 /** Cost sections whose lines can be pushed or mis-budgeted. */
@@ -128,9 +132,12 @@ function buildBudgetReview_(store, prop, year, today) {
   const growthIdx = trackIdx.filter(function (i) { return monthOnFile_(store, prop, twoBack(i)); });
   const track = function (key, dir) {
     if (!trackIdx.length) return null;
-    const b = sum(trackIdx, function (i) { const x = budMonth(prevYear, i); return x && key in x ? x[key] : 0; });
-    const a = sum(trackIdx, function (i) { return amountOf_(store, prop, prevPeriod(i), key); });
-    return { budget: b, actual: a, variance: dir * (a - b), budgetPct: pctOf_(b, trackNet.bud), actualPct: pctOf_(a, trackNet.act),
+    const bOf = function (k) { return sum(trackIdx, function (i) { const x = budMonth(prevYear, i); return x && k in x ? x[k] : 0; }); };
+    const aOf = function (k) { return sum(trackIdx, function (i) { return amountOf_(store, prop, prevPeriod(i), k); }); };
+    const b = bOf(key), a = aOf(key);
+    const bBase = pctBase_(key, function (k) { return k === 'NET_SALES' ? trackNet.bud : bOf(k); });
+    const aBase = pctBase_(key, function (k) { return k === 'NET_SALES' ? trackNet.act : aOf(k); });
+    return { budget: b, actual: a, variance: dir * (a - b), budgetPct: pctOf_(b, bBase), actualPct: pctOf_(a, aBase),
       months: trackIdx.length };
   };
 
@@ -141,19 +148,23 @@ function buildBudgetReview_(store, prop, year, today) {
     const months = all12.map(function (i) { return bud(i, key); });
     const b = sum(covered, function (i) { return months[i]; });
     const p = covered.length ? sum(covered, function (i) { return py(i, key); }) : null;
-    const budgetPct = pctOf_(b, budNet), pyPct = p == null ? null : pctOf_(p, pyNet);
+    // % of net sales, or of its own sales for a cost of sales line (food cost of food sales).
+    const compBase = pctBase_(key, function (k) { return k === 'NET_SALES' ? budNet : sum(covered, function (i) { return bud(i, k); }); });
+    const allBase = pctBase_(key, function (k) { return k === 'NET_SALES' ? budNetAll : sum(all12, function (i) { return bud(i, k); }); });
+    const pyBase = p == null ? null : pctBase_(key, function (k) { return k === 'NET_SALES' ? pyNet : sum(covered, function (i) { return py(i, k); }); });
+    const budgetPct = pctOf_(b, compBase), pyPct = p == null ? null : pctOf_(p, pyBase);
     const row = {
-      key: key, name: meta.name, section: meta.section, kind: meta.kind,
+      key: key, name: meta.name, section: meta.section, kind: meta.kind, parent: meta.parent, pctOf: pctLabel_(key),
       budget: months.reduce(function (s, v) { return s + v; }, 0), months: months,
-      budgetPct: pctOf_(months.reduce(function (s, v) { return s + v; }, 0), budNetAll),
-      compBudget: b, py: p, pyPct: pyPct,
+      budgetPct: pctOf_(months.reduce(function (s, v) { return s + v; }, 0), allBase),
+      compBudget: b, compPct: budgetPct, compBase: compBase, py: p, pyPct: pyPct,
       change: p == null ? null : b - p, changePct: p ? (b - p) / Math.abs(p) * 100 : null,
       better: p == null ? null : dir * (b - p),
       pts: budgetPct == null || pyPct == null ? null : budgetPct - pyPct,
       track: track(key, dir), mark: null, issues: 0
     };
-    // Dollars the budget gains (or gives up) by running this cost at a different % of sales than PY.
-    row.rateImpact = row.pts == null || dir > 0 ? null : -row.pts / 100 * budNet;
+    // Dollars the budget gains (or gives up) by running this cost at a different % than PY.
+    row.rateImpact = row.pts == null || dir > 0 || !compBase ? null : -row.pts / 100 * compBase;
     return row;
   });
   const row = function (k) { return rows.filter(function (r) { return r.key === k; })[0] || null; };
@@ -182,7 +193,7 @@ function buildBudgetReview_(store, prop, year, today) {
   rows.forEach(function (r) {
     if (!isReviewCost_(r) || r.rateImpact == null || r.section === '8000' || RATE_SET_LINES[r.key]) return;
     if (Math.abs(r.pts) < R.pushPts || Math.abs(r.rateImpact) < R.minImpact) return;
-    const item = { kind: 'cost', key: r.key, name: r.name, impact: r.rateImpact, budgetPct: pctOf_(r.compBudget, budNet),
+    const item = { kind: 'cost', key: r.key, name: r.name, impact: r.rateImpact, budgetPct: r.compPct, pctOf: r.pctOf,
       pyPct: r.pyPct, pts: r.pts, track: null, repeat: false };
     if (r.track && r.track.budgetPct != null && r.track.actualPct != null) {
       item.track = { budgetPct: r.track.budgetPct, actualPct: r.track.actualPct, variance: r.track.variance, months: r.track.months };
@@ -200,11 +211,20 @@ function buildBudgetReview_(store, prop, year, today) {
   };
   const coveredLabel = covered.length + ' month' + (covered.length === 1 ? '' : 's');
 
+  // Last year's months stored under this property but copied from another.
+  const copies = copiedMonths_(store, prop, basis.filter(Boolean));
+  if (copies.length) {
+    const others = copies.map(function (c) { return c.other; }).filter(function (o, i, a) { return a.indexOf(o) === i; });
+    add('error', null, '', 'Last year\'s actuals are a copy of ' + others.join(', ') + ' for ' + copies.length + ' month' + (copies.length === 1 ? '' : 's'),
+      copies.map(function (c) { return periodLabel_(c.period); }).join(', ') + ' match ' + others.join(', ') +
+      ' to the dollar on every line, so they were most likely uploaded under the wrong location. Re-upload this property\'s R365 P&L for those months; until then every comparison with last year is off.', 0);
+  }
+
   ((by.meta && by.meta.checks) || []).forEach(function (c) {
     if (!c.ok) add('check', null, '', 'Workbook check failed: ' + c.label, c.detail, 0);
   });
 
-  const zeroKeys = {}, newKeys = {};
+  const zeroKeys = {}, newKeys = {}, droppedKeys = {};
   rows.forEach(function (r) {
     if (!isReviewCost_(r) || r.py == null) return;
     const posted = covered.filter(function (i) { return py(i, r.key); }).length;
@@ -217,6 +237,18 @@ function buildBudgetReview_(store, prop, year, today) {
     }
     // Recurring line budgeted at about zero.
     if (r.py >= R.minImpact && posted >= Math.ceil(covered.length * 0.75) && r.compBudget <= R.zeroShare * r.py) {
+      // Not a mistake when the spend already stopped during last year.
+      const recent = recentRun_(basis, covered, function (i) { return py(i, r.key); });
+      if (recent && (recent.annual - r.compBudget < R.minImpact || r.compBudget >= R.zeroShare * recent.annual)) {
+        droppedKeys[r.key] = true;
+        const stopped = stoppedSubAccounts_(store, prop, r.key, basis, covered, recent);
+        add('check', r.key, r.name, 'Budget follows a lower recent run rate',
+          'Last year ' + money_(r.py) + ', but ' + money_(recent.amount) + ' in the latest ' + recent.months.length + ' months (' +
+          recent.label + '), which the budget follows.' +
+          (stopped.length ? ' Stopped posting: ' + stopped.join(', ') + '.' : '') +
+          ' Confirm the cost ended or moved to another line and is not just missing in R365.', 0);
+        return;
+      }
       zeroKeys[r.key] = true;
       add('error', r.key, r.name, 'Budgeted at ' + (r.compBudget ? 'almost nothing' : 'zero'),
         'Last year ' + money_(r.py) + ', posted in ' + posted + ' of ' + covered.length + ' months.', r.py - r.compBudget);
@@ -292,15 +324,16 @@ function buildBudgetReview_(store, prop, year, today) {
     }
   }
 
-  glReviewIssues_(store, prop, year, by, basis, covered, zeroKeys).forEach(function (x) { add(x.severity, x.key, x.name, x.title, x.detail, x.impact); });
+  glReviewIssues_(store, prop, year, by, basis, covered, Object.assign({}, zeroKeys, droppedKeys)).forEach(function (x) { add(x.severity, x.key, x.name, x.title, x.detail, x.impact); });
   const fc = forecastIssue_(store, prop, year, by, basis, covered, py, sum);
   if (fc) add('check', null, '', fc.title, fc.detail, 0);
 
-  // A line that is really a mistake (budgeted at zero, new) is not also a push.
-  const notMistake = function (x) { return !zeroKeys[x.key] && !newKeys[x.key]; };
+  // A line that is really a mistake (budgeted at zero, new), or whose spend
+  // stopped during last year, is not also a push.
+  const notMistake = function (x) { return !zeroKeys[x.key] && !newKeys[x.key] && !droppedKeys[x.key]; };
   const pushList = pushes.filter(notMistake).sort(function (a, b) { return (a.kind === 'sales' ? -1 : 0) - (b.kind === 'sales' ? -1 : 0) || b.impact - a.impact; });
   const roomList = cushions.filter(notMistake).sort(function (a, b) { return a.impact - b.impact; });
-  rows.forEach(function (r) { if (zeroKeys[r.key] || newKeys[r.key]) r.mark = null; });
+  rows.forEach(function (r) { if (zeroKeys[r.key] || newKeys[r.key] || droppedKeys[r.key]) r.mark = null; });
 
   const sevRank = { error: 0, check: 1 };
   issues.sort(function (a, b) { return sevRank[a.severity] - sevRank[b.severity] || b.impact - a.impact; });
@@ -360,6 +393,44 @@ function buildBudgetReview_(store, prop, year, today) {
   };
 }
 
+/**
+ * Last year's latest months (by period, not calendar month), which show what
+ * a line runs at now. Null when too few months are on file to tell.
+ * @param {function(number): number} amount PY amount for a calendar month index
+ */
+function recentRun_(basis, idx, amount) {
+  const n = REVIEW_RULES.recentMonths;
+  if (idx.length < 2 * n) return null;
+  const months = idx.slice().sort(function (a, b) { return basis[a] < basis[b] ? 1 : -1; }).slice(0, n);
+  const total = months.reduce(function (s, i) { return s + (amount(i) || 0); }, 0);
+  const periods = months.map(function (i) { return basis[i]; }).sort();
+  return { months: months, amount: total, annual: total / n * idx.length,
+    label: periodLabel_(periods[0]) + '–' + periodLabel_(periods[periods.length - 1]) };
+}
+
+/** Sub-accounts of a category that posted earlier in PY but not in its latest months, largest first. */
+function stoppedSubAccounts_(store, prop, category, basis, covered, recent) {
+  const det = store.detail[prop] || {};
+  const inRecent = {};
+  recent.months.forEach(function (i) { inRecent[i] = true; });
+  const earlier = {}, later = {};
+  covered.forEach(function (i) {
+    (det[basis[i]] || []).forEach(function (d) {
+      if (String(d.category) !== String(category) || !d.amount) return;
+      const t = inRecent[i] ? later : earlier;
+      t[d.code] = t[d.code] || { label: d.code + ' ' + d.name, amount: 0 };
+      t[d.code].amount += d.amount;
+    });
+  });
+  return Object.keys(earlier).filter(function (c) { return !later[c] && earlier[c].amount >= REVIEW_RULES.minImpact / 5; })
+    .sort(function (a, b) { return earlier[b].amount - earlier[a].amount; })
+    .map(function (c) { return earlier[c].label; });
+}
+
+function periodLabel_(period) {
+  return MONTH_ABBR_[Number(period.slice(5, 7)) - 1] + ' ' + period.slice(2, 4);
+}
+
 function isReviewCost_(r) {
   return (r.kind === 'line' || r.kind === 'group') && REVIEW_COST_SECTIONS.indexOf(r.section) !== -1;
 }
@@ -384,7 +455,7 @@ function glReviewIssues_(store, prop, year, by, basis, covered, zeroKeys) {
       const sec = BUDGET_LINE_SECTION[d.category] || (String(d.category).charAt(0) + '000');
       if (REVIEW_COST_SECTIONS.indexOf(sec) === -1 || categories[d.code] || zeroKeys[d.category]) return;
       const e = pyGl[d.code] = pyGl[d.code] || { code: d.code, name: d.name, category: d.category, amount: 0, months: {} };
-      e.amount += d.amount; e.months[i] = true;
+      e.amount += d.amount; e.months[i] = (e.months[i] || 0) + d.amount;
     });
   });
   // Only categories the budget breaks into sub-accounts (food cost, for one, is a single row).
@@ -401,7 +472,13 @@ function glReviewIssues_(store, prop, year, by, basis, covered, zeroKeys) {
     const e = pyGl[code], p = e.amount, b = budGl(code);
     const name = code + ' ' + e.name;
     const posted = Object.keys(e.months).length;
-    if (p >= R.glMin && b <= R.zeroShare * p && posted >= Math.ceil(idx.length / 2)) {
+    const recent = recentRun_(basis, idx, function (i) { return e.months[i] || 0; });
+    const stopped = recent && (recent.annual - b < R.glMin || b >= R.zeroShare * recent.annual);
+    if (p >= R.glMin && b <= R.zeroShare * p && posted >= Math.ceil(idx.length / 2) && stopped) {
+      out.push({ severity: 'check', key: e.category, name: name, title: name + ' follows a lower recent run rate',
+        detail: 'Last year ' + money_(p) + ' over ' + where + ', but ' + money_(recent.amount) + ' in the latest ' + recent.months.length +
+          ' (' + recent.label + '), which the budget follows. Confirm it ended or moved to another account.', impact: 0 });
+    } else if (p >= R.glMin && b <= R.zeroShare * p && posted >= Math.ceil(idx.length / 2)) {
       out.push({ severity: 'error', key: e.category, name: name, title: name + ' budgeted at ' + (b ? 'almost nothing' : 'zero') + (by.gl[code] ? '' : ' (no budget line)'),
         detail: 'Last year ' + money_(p) + ' over ' + where + ', posted in ' + posted + ' of them.', impact: p - b });
     } else if (FIXED_GL[code] && p - b >= R.minImpact && b < p * (1 - R.fixedDrop)) {
