@@ -132,9 +132,12 @@ function buildBudgetReview_(store, prop, year, today) {
   const growthIdx = trackIdx.filter(function (i) { return monthOnFile_(store, prop, twoBack(i)); });
   const track = function (key, dir) {
     if (!trackIdx.length) return null;
-    const b = sum(trackIdx, function (i) { const x = budMonth(prevYear, i); return x && key in x ? x[key] : 0; });
-    const a = sum(trackIdx, function (i) { return amountOf_(store, prop, prevPeriod(i), key); });
-    return { budget: b, actual: a, variance: dir * (a - b), budgetPct: pctOf_(b, trackNet.bud), actualPct: pctOf_(a, trackNet.act),
+    const bOf = function (k) { return sum(trackIdx, function (i) { const x = budMonth(prevYear, i); return x && k in x ? x[k] : 0; }); };
+    const aOf = function (k) { return sum(trackIdx, function (i) { return amountOf_(store, prop, prevPeriod(i), k); }); };
+    const b = bOf(key), a = aOf(key);
+    const bBase = pctBase_(key, function (k) { return k === 'NET_SALES' ? trackNet.bud : bOf(k); });
+    const aBase = pctBase_(key, function (k) { return k === 'NET_SALES' ? trackNet.act : aOf(k); });
+    return { budget: b, actual: a, variance: dir * (a - b), budgetPct: pctOf_(b, bBase), actualPct: pctOf_(a, aBase),
       months: trackIdx.length };
   };
 
@@ -145,19 +148,23 @@ function buildBudgetReview_(store, prop, year, today) {
     const months = all12.map(function (i) { return bud(i, key); });
     const b = sum(covered, function (i) { return months[i]; });
     const p = covered.length ? sum(covered, function (i) { return py(i, key); }) : null;
-    const budgetPct = pctOf_(b, budNet), pyPct = p == null ? null : pctOf_(p, pyNet);
+    // % of net sales, or of its own sales for a cost of sales line (food cost of food sales).
+    const compBase = pctBase_(key, function (k) { return k === 'NET_SALES' ? budNet : sum(covered, function (i) { return bud(i, k); }); });
+    const allBase = pctBase_(key, function (k) { return k === 'NET_SALES' ? budNetAll : sum(all12, function (i) { return bud(i, k); }); });
+    const pyBase = p == null ? null : pctBase_(key, function (k) { return k === 'NET_SALES' ? pyNet : sum(covered, function (i) { return py(i, k); }); });
+    const budgetPct = pctOf_(b, compBase), pyPct = p == null ? null : pctOf_(p, pyBase);
     const row = {
-      key: key, name: meta.name, section: meta.section, kind: meta.kind,
+      key: key, name: meta.name, section: meta.section, kind: meta.kind, parent: meta.parent, pctOf: pctLabel_(key),
       budget: months.reduce(function (s, v) { return s + v; }, 0), months: months,
-      budgetPct: pctOf_(months.reduce(function (s, v) { return s + v; }, 0), budNetAll),
-      compBudget: b, py: p, pyPct: pyPct,
+      budgetPct: pctOf_(months.reduce(function (s, v) { return s + v; }, 0), allBase),
+      compBudget: b, compPct: budgetPct, compBase: compBase, py: p, pyPct: pyPct,
       change: p == null ? null : b - p, changePct: p ? (b - p) / Math.abs(p) * 100 : null,
       better: p == null ? null : dir * (b - p),
       pts: budgetPct == null || pyPct == null ? null : budgetPct - pyPct,
       track: track(key, dir), mark: null, issues: 0
     };
-    // Dollars the budget gains (or gives up) by running this cost at a different % of sales than PY.
-    row.rateImpact = row.pts == null || dir > 0 ? null : -row.pts / 100 * budNet;
+    // Dollars the budget gains (or gives up) by running this cost at a different % than PY.
+    row.rateImpact = row.pts == null || dir > 0 || !compBase ? null : -row.pts / 100 * compBase;
     return row;
   });
   const row = function (k) { return rows.filter(function (r) { return r.key === k; })[0] || null; };
@@ -186,7 +193,7 @@ function buildBudgetReview_(store, prop, year, today) {
   rows.forEach(function (r) {
     if (!isReviewCost_(r) || r.rateImpact == null || r.section === '8000' || RATE_SET_LINES[r.key]) return;
     if (Math.abs(r.pts) < R.pushPts || Math.abs(r.rateImpact) < R.minImpact) return;
-    const item = { kind: 'cost', key: r.key, name: r.name, impact: r.rateImpact, budgetPct: pctOf_(r.compBudget, budNet),
+    const item = { kind: 'cost', key: r.key, name: r.name, impact: r.rateImpact, budgetPct: r.compPct, pctOf: r.pctOf,
       pyPct: r.pyPct, pts: r.pts, track: null, repeat: false };
     if (r.track && r.track.budgetPct != null && r.track.actualPct != null) {
       item.track = { budgetPct: r.track.budgetPct, actualPct: r.track.actualPct, variance: r.track.variance, months: r.track.months };

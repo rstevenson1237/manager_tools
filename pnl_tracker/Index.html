@@ -66,6 +66,7 @@
     tr.key td{font-weight:800;background:var(--brand-soft);font-size:14px;}
     tr.clickable{cursor:pointer;} tr.clickable:hover td{background:#F7F9FC;}
     td.indent{padding-left:20px;}
+    td.indent2{padding-left:38px;color:#4A5160;}
     .flag-card{border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:8px;background:#fff;}
     .flag-card.tagged{opacity:.65;}
     .flag-card .driver{display:flex;justify-content:space-between;gap:10px;font-size:13px;border-top:1px solid #F0F0EC;padding-top:6px;}
@@ -332,11 +333,11 @@
                   <template v-for="r in reportRows" :key="r.id">
                     <tr v-if="r.head" class="sec"><td :colspan="reportGrouped ? 7 : 9"><span class="sec-label">{{ r.head }}</span></td></tr>
                     <tr v-else :class="{ total: r.kind === 'sectionTotal' || (r.kind === 'computed' && r.key !== 'OPERATING_INCOME'), key: r.key === 'OPERATING_INCOME' }">
-                      <td class="line-col" :style="lineColStyle" :class="{ indent: r.kind === 'line' || r.kind === 'group' }">
+                      <td class="line-col" :style="lineColStyle" :class="{ indent: r.kind === 'line' || r.kind === 'group', indent2: r.kind === 'sub' }">
                         {{ lineLabel(r) }}<span v-if="r.flag" class="bad"> ●</span><span v-if="r.missing" class="bad"> ○</span>
                       </td>
                       <td>{{ money(r.actual) }}</td>
-                      <td class="muted">{{ pct(r.pct) }}<template v-if="r.reportedPct != null && r.section === '5000' && (r.kind === 'line' || r.kind === 'group')"> ({{ pct(r.reportedPct) }})</template></td>
+                      <td class="muted" :title="'% of ' + r.pctOf">{{ pct(r.pct) }}</td>
                       <td>{{ r.budget == null ? '—' : money(r.budget) }}</td>
                       <td :class="cls(r.varBudget)">{{ r.varBudget == null ? '—' : signed(r.varBudget) }}</td>
                       <td class="muted">{{ r.ly == null ? '—' : money(r.ly) }}</td>
@@ -350,10 +351,11 @@
                 </tbody>
               </table>
             </div>
-            <div class="muted" style="padding:10px 16px" v-if="reportGrouped">% sales = share of net sales.
+            <div class="muted" style="padding:10px 16px 0">% sales: cost of sales lines are a % of their own sales, as in R365 (food cost of food sales; liquor, beer, wine and NA beverage cost of theirs; 5185 of beer, wine &amp; liquor sales together). Total cost of sales and every other line are a % of net sales.</div>
+            <div class="muted" style="padding:10px 16px" v-if="reportGrouped">
               Totals add up {{ report.months.length }} month{{ report.months.length === 1 ? '' : 's' }} on file ({{ spanLabel(report.months) }}); budget covers the same months<template v-if="!report.hasBudget"> (not shown: a month has no budget)</template>
               and last year the same months a year earlier<template v-if="!report.hasLastYear"> (not shown: a month is not on file)</template>. Flags and notes are kept per month.</div>
-            <div class="muted" style="padding:10px 16px" v-else>% sales = share of net sales. Cost of sales lines also show R365's own % (of that category's sales) in brackets.
+            <div class="muted" style="padding:10px 16px" v-else>
               Year to date covers {{ report.ytdMonths.length }} month{{ report.ytdMonths.length === 1 ? '' : 's' }} on file<template v-if="!report.threeMonths">; 3-month figures need the two prior months on file</template>.</div>
           </div>
 
@@ -497,7 +499,7 @@
                 <div v-for="x in review.pushes" :key="'p' + x.key" class="review-item">
                   <div class="row" style="align-items:baseline;gap:8px">
                     <b v-if="x.kind === 'sales'">Net sales {{ signedPct(x.growthPct) }} on last year</b>
-                    <b v-else>{{ lineName(x) }} · {{ pct(x.budgetPct) }} of sales <span class="muted">vs {{ pct(x.pyPct) }} last year</span></b>
+                    <b v-else>{{ lineName(x) }} · {{ pct(x.budgetPct) }} of {{ x.pctOf || 'sales' }} <span class="muted">vs {{ pct(x.pyPct) }} last year</span></b>
                     <b class="good">{{ signed(x.impact) }}</b>
                   </div>
                   <div class="muted" v-if="x.kind === 'sales' && x.months.length">Most of the change: <span v-for="(m, i) in x.months" :key="m.month">{{ i ? ', ' : '' }}{{ monthLabel(m.month, true) }} {{ signed(m.change) }}</span></div>
@@ -516,7 +518,7 @@
                   <div v-for="x in review.room" :key="'r' + x.key" class="review-item">
                     <div class="row" style="align-items:baseline;gap:8px">
                       <b v-if="x.kind === 'sales'">Net sales {{ signedPct(x.growthPct) }} on last year</b>
-                      <b v-else>{{ lineName(x) }} · {{ pct(x.budgetPct) }} of sales <span class="muted">vs {{ pct(x.pyPct) }} last year</span></b>
+                      <b v-else>{{ lineName(x) }} · {{ pct(x.budgetPct) }} of {{ x.pctOf || 'sales' }} <span class="muted">vs {{ pct(x.pyPct) }} last year</span></b>
                       <b class="bad">{{ signed(x.impact) }}</b>
                     </div>
                   </div>
@@ -556,13 +558,13 @@
                   <template v-for="r in reviewRows" :key="r.id">
                     <tr v-if="r.head" class="sec"><td colspan="9"><span class="sec-label">{{ r.head }}</span></td></tr>
                     <tr v-else :class="{ total: r.kind === 'sectionTotal' || (r.kind === 'computed' && r.key !== 'OPERATING_INCOME'), key: r.key === 'OPERATING_INCOME' }">
-                      <td class="line-col" :style="lineColStyle" :class="{ indent: r.kind === 'line' || r.kind === 'group' }">
+                      <td class="line-col" :style="lineColStyle" :class="{ indent: r.kind === 'line' || r.kind === 'group', indent2: r.kind === 'sub' }">
                         {{ lineLabel(r) }}<span v-if="r.mark === 'push'" class="good" title="Pushed: better than last year"> ▲</span><span v-if="r.mark === 'room'" class="bad" title="Room: worse than last year"> ▽</span><b v-if="r.issues" class="bad" title="See looks budgeted incorrectly"> !</b>
                       </td>
                       <td>{{ money(r.budget) }}</td>
-                      <td class="muted">{{ pct(r.budgetPct) }}</td>
+                      <td class="muted" :title="'% of ' + r.pctOf">{{ pct(r.budgetPct) }}</td>
                       <td class="muted">{{ r.py == null ? '—' : money(r.py) }}</td>
-                      <td class="muted">{{ pct(r.pyPct) }}</td>
+                      <td class="muted" :title="'% of ' + r.pctOf">{{ pct(r.pyPct) }}</td>
                       <td :class="cls(r.better)">{{ r.change == null ? '—' : signed(r.change) }}</td>
                       <td :class="cls(r.better)">{{ r.changePct == null ? '—' : signedPct(r.changePct) }}</td>
                       <td :class="r.pts == null || r.key === 'NET_SALES' ? 'muted' : cls(direction(r) * r.pts * 1000)">{{ r.pts == null || r.key === 'NET_SALES' ? '—' : signedPts(r.pts) }}</td>
@@ -572,7 +574,8 @@
                 </tbody>
               </table>
             </div>
-            <div class="muted" style="padding:10px 16px">Change compares the budget with last year over the same {{ review.basis.covered }} calendar months<template v-if="review.basis.covered < 12">; the budget column shows the full year</template>.
+            <div class="muted" style="padding:10px 16px">Cost of sales lines are a % of their own sales (food cost of food sales, and so on); total cost of sales and every other line are a % of net sales.
+              Change compares the budget with last year over the same {{ review.basis.covered }} calendar months<template v-if="review.basis.covered < 12">; the budget column shows the full year</template>.
               Blue = better for the property. "{{ review.year - 1 }} budget vs actual" covers the months of {{ review.year - 1 }} on file<template v-if="!review.track"> (no {{ review.year - 1 }} budget on file)</template>.</div>
           </div>
 

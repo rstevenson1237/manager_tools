@@ -161,6 +161,30 @@ function rowsToStore_(sheetRows, properties, rules) {
   Object.keys(store.actuals).forEach(function (code) {
     if (!known[code]) store.properties.push({ code: code, name: code, active: true });
   });
+  // Sales and beverage cost sub-lines (see COS_SUB_LINES): actuals from the
+  // sub-account detail, budgets from the GL rows.
+  Object.keys(store.actuals).forEach(function (prop) {
+    Object.keys(store.actuals[prop]).forEach(function (period) {
+      const det = store.detail[prop] && store.detail[prop][period];
+      if (!det) return;
+      const byCode = {};
+      det.forEach(function (d) { byCode[d.code] = (byCode[d.code] || 0) + d.amount; });
+      addCosSubLines_(store.actuals[prop][period].lines, function (c) { return byCode[c]; });
+    });
+  });
+  Object.keys(store.budgets).forEach(function (prop) {
+    Object.keys(store.budgets[prop]).forEach(function (year) {
+      const b = store.budgets[prop][year];
+      COS_SUB_LINES.forEach(function (sub) {
+        const rows = sub.codes.map(function (c) { return b.gl[c]; }).filter(Boolean);
+        if (!rows.length) return;
+        const months = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(function (i) {
+          return rows.reduce(function (s, g) { return s + (g.months[i] || 0); }, 0);
+        });
+        if (months.some(function (v) { return v; })) b.lines[sub.key] = months;
+      });
+    });
+  });
   return store;
 }
 

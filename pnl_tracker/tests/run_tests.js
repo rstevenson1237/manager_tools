@@ -211,10 +211,16 @@ function budgetSheets(opts) {
   };
   const grid = [[null, 'SAMPLE GRILL'], header,
     row('GL CODE', 'RESTAURANT GROSS F&B SALES', 600000),
+    row('4110', 'TOTAL FOOD', 420000),
+    row('4310', 'Liquor Sales', 110000),
+    row('4510', 'Wine Sales', 70000),
     row('4540', 'Facilities Fee', 20000),
     row('4560', 'TOTAL COMPS', -20000),
     row(null, 'TOTAL NET', 600000),
     row('5002', 'FOOD COST', 110000),
+    row('5300', 'Liquor Costs', 25000),
+    row('5320', 'Bar Consumables', 5000),
+    row('5500', 'Wine Costs', 25000),
     row('5185', 'BEVERAGE COSTS', 55000),
     row('5190', 'NA Beverage Costs', 4000),
     row('6100', 'MANAGEMENT SALARIES & WAGES', 55000),
@@ -321,6 +327,29 @@ test('a normal month has no flags and nothing missing', () => {
   const oi = r.rows.filter(x => x.key === 'OPERATING_INCOME')[0];
   assert.strictEqual(oi.actual, 320600);
   assert.strictEqual(oi.budget, 600000 - 169000 - 139000 - 41000 - 9000);
+});
+
+test('cost of sales: beer, wine, liquor and NA lines, each a % of its own sales', () => {
+  const s = sampleStore();
+  const r = g.buildPeriodReport_(s, 'TST1', '2026-10');
+  const get = k => r.rows.filter(x => x.key === k)[0];
+  const keys = r.rows.map(x => x.key);
+  assert.ok(keys.indexOf('4110') > keys.indexOf('4100') && keys.indexOf('4510') < keys.indexOf('4560'), 'sales sub-lines under gross sales');
+  assert.ok(keys.indexOf('5300') === keys.indexOf('5185') + 1 && keys.indexOf('5500') > keys.indexOf('5300'), 'beverage costs under 5185');
+  assert.strictEqual(get('5300').actual, 30000, 'liquor cost includes bar consumables');
+  assert.strictEqual(get('5300').kind, 'sub');
+  near(get('5002').pct, 110000 / 400000 * 100, 1e-9, 'food cost of food sales');
+  near(get('5300').pct, 30000 / 150000 * 100, 1e-9, 'liquor cost of liquor sales');
+  near(get('5500').pct, 28000 / 90000 * 100, 1e-9, 'wine cost of wine sales');
+  near(get('5185').pct, 58000 / 240000 * 100, 1e-9, 'beer, wine & liquor of their sales');
+  near(get('TOTAL_5000').pct, 168000 / get('NET_SALES').actual * 100, 1e-9, 'total cost of sales stays a % of net sales');
+  assert.strictEqual(get('5002').pctOf, 'food sales');
+  near(get('5002').budgetPct, 110000 / 420000 * 100, 1e-9, 'budget food cost of budgeted food sales');
+  near(get('5300').budgetPct, 30000 / 110000 * 100, 1e-9);
+  near(get('5002').lyPct, 27.5, 1e-9);
+  const q = g.buildGroupedReport_(s, 'TST1', '2026-09', 'quarter');
+  near(q.rows.filter(x => x.key === '5002')[0].pct, 27.5, 1e-9, 'quarter: food cost of food sales');
+  near(q.rows.filter(x => x.key === '5002')[0].budgetPct, 110000 / 420000 * 100, 1e-9);
 });
 
 test('one bad month is a spike, explained by its sub-accounts against budget', () => {
@@ -504,15 +533,17 @@ test('last year takes each month from the latest year on file, never a month-to-
 });
 
 test('pushes: sales growth and a lower food cost %, with last budget\'s record', () => {
-  const r = g.buildBudgetReview_(reviewStore({ 'RESTAURANT GROSS F&B SALES': 700000, 'FOOD COST': 100000 }), 'TST1', 2027, '2026-11-03');
+  const r = g.buildBudgetReview_(reviewStore({ 'RESTAURANT GROSS F&B SALES': 700000, 'TOTAL FOOD': 500000, 'FOOD COST': 100000 }), 'TST1', 2027, '2026-11-03');
   same(r.pushes.map(x => x.key).slice(0, 2), ['NET_SALES', '5002']);
   const sales = r.pushes[0];
   near(sales.growthPct, (8400000 / 7616000 - 1) * 100, 0.01);
   near(sales.track.assumedPct, (600000 / 608000 - 1) * 100, 0.01, '2026 budget against 2025 actual');
   near(sales.track.deliveredPct, 5.263, 0.01);
   const food = r.pushes[1];
-  near(food.budgetPct, 100000 / 700000 * 100, 0.01);
-  near(food.pyPct, 110000 / 640000 * 100, 0.01);
+  near(food.budgetPct, 100000 / 500000 * 100, 0.01, 'food cost is a % of food sales');
+  near(food.pyPct, 110000 / 400000 * 100, 0.01);
+  assert.strictEqual(food.pctOf, 'food sales');
+  near(food.impact, (110000 / 400000 - 100000 / 500000) * 500000 * 12, 1, 'impact on the budgeted food sales');
 });
 
 test('mistakes: zero, management fee rate, fixed cost drop, blank months', () => {
