@@ -1,9 +1,11 @@
 /*
- * Tests for the inventory review: Inventory.gs on its own, then the
+ * Tests for the inventory check: the shared rules (InventoryRules.gs, the
+ * same file as inventory_audit's), InventoryCheck.gs on its own, then the
  * endpoints (InventoryApi.gs with Code.gs, Store.gs …) against the in-memory
  * Apps Script stand-in in gas_mock.js. Run with:
  *   node pnl_tracker/tests/inventory_tests.js
- * (run_tests.js runs it too). All data here is made up.
+ * (run_tests.js runs it too). All data here is made up
+ * (inventory_audit/tests/sample.js).
  */
 const assert = require('assert');
 const fs = require('fs');
@@ -11,6 +13,8 @@ const path = require('path');
 const vm = require('vm');
 const h = require('./harness');
 const mock = require('./gas_mock');
+const sample = require('../../inventory_audit/tests/sample');
+const { countCsv, W, L, F } = sample;
 
 let passed = 0;
 function test(name, fn) {
@@ -20,62 +24,32 @@ function test(name, fn) {
 const same = (a, b, msg) => assert.strictEqual(JSON.stringify(a), JSON.stringify(b), msg);
 const near = (a, b, tol, msg) => assert.ok(Math.abs(a - b) <= (tol == null ? 0.01 : tol), (msg || '') + ' expected ' + b + ', got ' + a);
 
-const g = h.loadGs(['Store.gs', 'Analysis.gs', 'Inventory.gs']);
-
-/* ------------------------------------------------------------ sample exports */
-
-const HEADER = 'Item,UofM,Current Qty,Current $ Cost,Current $ Total,Previous Qty,Prev $ Cost,Prev $ Total,Adjustment,Cost Acct,Inventory Acct,Flag';
-const fmt = v => { const a = Math.abs(v).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ','); return (v < 0 ? '-$' : '$') + a; };
-const q = v => /[",]/.test(v) ? '"' + String(v).replace(/"/g, '""') + '"' : v;
-/** [name, uom, curQty, curCost, prevQty, prevCost, costAcct, invAcct, flag] → CSV in R365's layout. */
-function countCsv(rows) {
-  return [HEADER].concat(rows.map(r => {
-    const [name, uom, cq, cc, pq, pc, ca, ia, flag] = r;
-    const ct = Math.round(cq * cc * 100) / 100, pt = Math.round(pq * pc * 100) / 100;
-    return [name, uom, cq.toFixed(2), String(cc), fmt(ct), pq.toFixed(2), String(pc), fmt(pt), fmt(ct - pt), ca, ia, flag || ''].map(q).join(',');
-  })).join('\n') + '\n';
-}
-const W = (name, cq, cc, pq, pc, flag) => [name, 'BTL (750 ML)', cq, cc, pq, pc, 'Wine Cost', 'Wine', flag];
-const L = (name, cq, cc, pq, pc, flag) => [name, 'BTL (1 L)', cq, cc, pq, pc, 'Liquor Cost', 'Liquor', flag];
-const F = (name, cq, cc, pq, pc, flag, acct) => [name, 'LB', cq, cc, pq, pc, acct || 'Produce', 'Food Inventory', flag];
-
-/** A beverage count with one item of every kind the triage looks for. */
-function bevRows(over) {
-  const rows = [
-    W('CABERNET Steady', 10, 30, 10, 30),                       // nothing to see
-    W('MERLOT Gone Missing', 0, 20, 6, 20, 'Assumed 0'),        // not counted
-    L('VODKA Case Slip', 4, 96, 5, 8),                          // ×12: case price on a bottle
-    L('GIN Odd Price', 3, 50, 3, 10),                           // ×5: unit error, no pack size
-    L('RUM Bottle For Case', 24, 2, 20, 24),                    // ÷12: unit price for a case
-    W('ROSE No Cost', 6, 0, 0, 0),                              // counted, no cost
-    W('PINOT Price Up', 20, 22, 20, 20),                        // +10%: price change, +$40
-    W('SYRAH Price Down', 5, 40, 5, 50, 'Less than Half'),      // −20%: price change, −$50 (flag ignored: qty same)
-    W('CHAMPAGNE Big Drop', 2, 100, 30, 100, 'Less than Half'), // largest decrease
-    W('RIESLING Big Rise', 40, 25, 4, 25, 'More than Twice'),   // largest increase
-    L('AMARO Small Swing', 0.9, 30, 0.3, 30, 'More than Twice'),// +$18: under the $25 count-swing minimum
-    W('ZIN New Arrival', 12, 15, 0, 0),                         // new item
-    W('CHABLIS Sold Out', 0, 35, 4, 35, '0 Quantity'),          // counted as zero
-    W('PORT Never Stocked', 0, 40, 0, 40)                       // zero both times: ignored
-  ];
-  return rows.concat(over || []);
-}
+const g = h.loadGs(['Store.gs', 'InventoryRules.gs', 'InventoryCheck.gs']);
 const parseText = text => g.parseInventoryCsv_(h.parseCsv(text));
+const cur = () => parseText(sample.currentCsv());
+const keysOf = (t, cat) => t.sections.filter(s => s.key === cat)[0].keys;
 
-/* ------------------------------------------------------------------- parsing */
-console.log('Inventory: reading the export');
+/* ------------------------------------------------------------- the shared file */
+console.log('Inventory: the shared rules');
+
+test('InventoryRules.gs is the same file in inventory_audit and pnl_tracker', () => {
+  const a = fs.readFileSync(path.join(h.ROOT, 'InventoryRules.gs'), 'utf8');
+  const b = fs.readFileSync(path.join(h.ROOT, '..', 'inventory_audit', 'InventoryRules.gs'), 'utf8');
+  assert.ok(a === b, 'the two copies differ: change one, copy it over the other');
+});
 
 test('reads R365 money formats and keeps every row', () => {
-  const p = parseText(countCsv(bevRows()));
-  assert.strictEqual(p.rows, 14);
+  const p = cur();
+  assert.strictEqual(p.rows, 49);
   assert.strictEqual(p.tieOuts, 0);
-  const vodka = p.items.filter(i => i.key === 'VODKA Case Slip')[0];
-  same([vodka.curQty, vodka.curCost, vodka.curTotal, vodka.prevTotal, vodka.adjustment], [4, 96, 384, 40, 344]);
-  same([g.parseInvNumber_('$1,799.88'), g.parseInvNumber_('-$2.26'), g.parseInvNumber_('(12.50)'), g.parseInvNumber_(''), g.parseInvNumber_('abc')],
-    [1799.88, -2.26, -12.5, 0, null]);
+  const v = p.items.filter(i => i.key === 'VODKA Case Slip')[0];
+  same([v.curQty, v.curCost, v.curTotal, v.prevTotal, v.adjustment], [37.6, 96, 3609.6, 528, 3081.6]);
+  same([g.parseInvNumber_('$1,799.88'), g.parseInvNumber_('-$2.26'), g.parseInvNumber_('(12.50)'), g.parseInvNumber_(''), g.parseInvNumber_('abc'), g.parseInvNumber_(12)],
+    [1799.88, -2.26, -12.5, 0, null, 12]);
 });
 
 test('quoted names with commas and doubled quotes, a byte-order mark, and blank lines', () => {
-  const text = '﻿' + HEADER + '\n' +
+  const text = '﻿' + sample.HEADER + '\n' +
     '"BIB Coke, Diet",Case,1.00,10,$10.00,1.00,10,$10.00,$0.00,"Soft Beverages (if included in ""Food"")",Soft Beverages,\n\n' +
     'ALTO ADIGE,BTL,12.00,149.99,"$1,799.88",12.00,149.99,"$1,799.88",$0.00,Wine Cost,Wine,\n';
   const p = parseText(text);
@@ -92,201 +66,156 @@ test('a duplicate item name gets a unique key; nothing is merged', () => {
 test('refuses a file that is not a count export, or is missing a column', () => {
   assert.throws(() => parseText('ReportType,DateRange\nProfit & Loss,Period Ending 10/31/2026\n'), /not an R365 Inventory Count/);
   assert.throws(() => parseText('Item,Current Qty,UofM\nA,1,EA\n'), /missing these columns: Current \$ Cost, Previous Qty, Prev \$ Cost/);
-  assert.throws(() => parseText(HEADER + '\n'), /no items/);
+  assert.throws(() => parseText(sample.HEADER + '\n'), /no items/);
 });
 
-test('counts rows where previous value + adjustment ≠ current value', () => {
-  const text = countCsv([W('A', 1, 10, 1, 10)]).replace('$10.00,$0.00', '$10.00,$5.00');
-  assert.strictEqual(parseText(text).tieOuts, 1);
+test('counts rows where previous value + adjustment ≠ current value, not quantity × cost', () => {
+  assert.strictEqual(parseText(countCsv([W('A', 1, 10, 1, 10)]).replace('$10.00,$0.00', '$10.00,$5.00')).tieOuts, 1);
+  // R365 rounds the quantity to 2 decimals: 0.53 × 3659.52 is not $1,924.91, and that is fine.
+  const text = sample.HEADER + '\nCOGNAC Old,BTL (1 L),0.53,3659.5161,"$1,924.91",0.53,3659.5161,"$1,924.91",$0.00,Liquor Cost,Liquor,\n';
+  assert.strictEqual(parseText(text).tieOuts, 0);
 });
 
 test('suggests a count name from the inventory accounts', () => {
-  assert.strictEqual(g.suggestInventoryLabel_(parseText(countCsv(bevRows())).items), 'Beverage');
+  assert.strictEqual(g.suggestInventoryLabel_(cur().items), 'Beverage', 'a food-coded cocktail ingredient does not change that');
   assert.strictEqual(g.suggestInventoryLabel_(parseText(countCsv([F('A', 1, 1, 1, 1), F('B', 1, 1, 1, 1), L('C', 1, 1, 1, 1)])).items), 'Full count');
   assert.strictEqual(g.suggestInventoryLabel_(parseText(countCsv([F('A', 1, 1, 1, 1), F('B', 1, 1, 1, 1), F('C', 1, 1, 1, 1)])).items), 'Food');
-  assert.ok(g.sameInventoryLabel_(' food ', 'Food') && !g.sameInventoryLabel_('Food', 'Beverage'));
 });
 
-/* -------------------------------------------------------------------- triage */
-console.log('Inventory: triage');
+test('every change splits into price and quantity, adding up to the adjustment', () => {
+  cur().items.forEach(it => { const e = g.inventoryEffects_(it); near(e.priceEffect + e.qtyEffect, it.adjustment, 0.011, it.key); });
+  // A case price on a bottle: value up $3,082 although fewer bottles were counted.
+  const v = g.inventoryEffects_(cur().items.filter(i => i.key === 'VODKA Case Slip')[0]);
+  same([v.priceEffect, v.qtyEffect], [3308.8, -227.2]);
+  const t = g.inventoryTotals_(cur().items);
+  same([t.current, t.previous, t.change, t.priceEffect, t.qtyEffect], [17921.5, 14495.5, 3426, 4893.7, -1467.7]);
+});
 
-const tri = rows => g.triageInventory_(parseText(countCsv(rows)).items);
-const keysOf = (t, cat) => t.sections.filter(s => s.key === cat)[0].keys;
-
-test('each kind of problem lands in its section', () => {
-  const t = tri(bevRows());
-  same(keysOf(t, 'notCounted'), ['MERLOT Gone Missing']);
-  same(keysOf(t, 'unitErrors'), ['RUM Bottle For Case', 'VODKA Case Slip', 'GIN Odd Price', 'ROSE No Cost'], 'largest dollar size first');
-  same(keysOf(t, 'priceChanges'), ['SYRAH Price Down', 'PINOT Price Up']);
+test('each kind of problem lands in its section, largest dollar impact first', () => {
+  const t = g.triageInventory_(cur().items);
+  same(keysOf(t, 'notCounted'), ['BORDEAUX Not Counted', 'MERLOT Gone Missing']);
+  same(keysOf(t, 'costErrors'), ['VODKA Case Slip', 'GIN Odd Price', 'RUM Bottle For Case', 'SYRAH Zero Cost Again', 'ROSE No Cost']);
+  same(keysOf(t, 'priceChanges'), ['PINOT Price Up']);
+  same(keysOf(t, 'decreases'), ['CHAMPAGNE Big Drop']);
+  same(keysOf(t, 'increases'), ['RIESLING Big Rise', 'TEQUILA Delivery']);
+  same(keysOf(t, 'wentToZero'), ['BURGUNDY Last Bottle'], 'CHABLIS ($140) is under the $150 line');
   same(keysOf(t, 'newItems'), ['ZIN New Arrival']);
-  same(keysOf(t, 'wentToZero'), ['CHABLIS Sold Out'], 'assumed-zero items are not repeated here');
-  assert.strictEqual(keysOf(t, 'decreases')[0], 'CHAMPAGNE Big Drop');
-  assert.strictEqual(keysOf(t, 'increases')[0], 'RIESLING Big Rise');
-  assert.ok(!t.items['PORT Never Stocked'], 'zero in both counts is never shown');
-  assert.ok(!t.items['CABERNET Steady'], 'an unchanged item is not under review');
+  ['AMARO Small Swing', 'MADEIRA By The Glass', 'LIME JUICE Bar', 'PORT Never Stocked', 'CABERNET Steady', 'CHABLIS Sold Out'].forEach(k =>
+    assert.ok(!t.items[k], k + ' should not be picked'));
+  assert.strictEqual(t.total, 13);
 });
 
-test('a case price on a unit, and the reverse, are named as such', () => {
-  const t = tri(bevRows());
-  const why = k => t.items[k].reasons.filter(r => r.cat === 'unitErrors')[0].text;
-  assert.ok(/×12\), looks like a case price entered for one unit: \+\$352/.test(why('VODKA Case Slip')), why('VODKA Case Slip'));
-  assert.ok(/÷12\), looks like a unit price entered for a case of 12/.test(why('RUM Bottle For Case')), why('RUM Bottle For Case'));
-  assert.ok(/×5\.0\): \+\$120/.test(why('GIN Odd Price')) && !/looks like/.test(why('GIN Odd Price')), why('GIN Odd Price'));
-  assert.ok(/cost is \$0, so it adds nothing/.test(why('ROSE No Cost')));
-  const noCost = tri([W('X', 3, 0, 3, 18)]);
-  assert.ok(/was \$18\.00\): about \$54 missing/.test(noCost.items.X.reasons[0].text), noCost.items.X.reasons[0].text);
-  assert.strictEqual(noCost.items.X.impact, 54, 'dollar size of a missing cost is what it would have been worth');
+test('the reasons are the questions to ask', () => {
+  const t = g.triageInventory_(cur().items);
+  assert.strictEqual(t.items['VODKA Case Slip'].reasons[0].text, 'Cost $8.00 → $96.00 (×12), +$3,309 on this count. Looks like a case price entered for one unit.');
+  assert.ok(/÷12.*unit price entered for a case of 12, or last count's cost was the mistake/.test(t.items['RUM Bottle For Case'].reasons[0].text));
+  assert.ok(/×5\.6.*Which cost is right\?/.test(t.items['GIN Odd Price'].reasons[0].text));
+  assert.strictEqual(t.items['RIESLING Big Rise'].reasons[0].text, 'Up 28.8 BTL (750 ML) (26 → 54.8), +$1,152. Was this much really bought?');
+  assert.ok(/Did this much really sell or get used\?$/.test(t.items['CHAMPAGNE Big Drop'].reasons[0].text));
+  assert.ok(/Sold out, or missed in the count\?$/.test(t.items['BURGUNDY Last Bottle'].reasons[0].text));
+  assert.ok(/Missed in the count, or really out\?$/.test(t.items['BORDEAUX Not Counted'].reasons[0].text));
+  assert.ok(/about \$100 missing from the value/.test(t.items['SYRAH Zero Cost Again'].reasons[0].text));
 });
 
-test('price changes leave out unit errors and rank by dollar effect, top 25', () => {
-  const many = [];
-  for (let i = 0; i < 30; i++) many.push(W('P' + String(i).padStart(2, '0'), 10, 110 + i, 10, 100));
-  const t = tri(many.concat([L('VODKA Case Slip', 4, 96, 5, 8)]));
-  const pc = keysOf(t, 'priceChanges');
-  assert.strictEqual(pc.length, 25);
-  assert.strictEqual(pc[0], 'P29');
-  assert.ok(pc.indexOf('VODKA Case Slip') === -1);
-  assert.ok(pc.indexOf('P00') === -1 && pc.indexOf('P04') === -1, 'the smallest dollar effects fall off the list');
+test('high-impact items are the picked ones of $1,000 or more', () => {
+  same(g.highImpactItems_(g.triageInventory_(cur().items)).map(i => i.key),
+    ['VODKA Case Slip', 'GIN Odd Price', 'RIESLING Big Rise', 'BORDEAUX Not Counted', 'CHAMPAGNE Big Drop', 'BURGUNDY Last Bottle']);
+  assert.strictEqual(g.highImpactItems_(g.triageInventory_(cur().items), { highImpact: 3000 }).length, 1);
 });
 
-test('count swings: R365 flag, $25 or more, beyond the top 10 changes', () => {
+test('section limits and floors come from INV_RULES', () => {
   const rows = [];
-  for (let i = 0; i < 12; i++) rows.push(W('BIG' + i, 40 + i, 25, 4, 25, 'More than Twice'));
-  rows.push(W('MID Swing', 10, 10, 4, 10, 'More than Twice'));   // +$60
-  rows.push(W('TINY Swing', 3, 10, 1, 10, 'More than Twice'));   // +$20
-  const t = tri(rows);
-  same(keysOf(t, 'countSwings'), ['BIG1', 'BIG0', 'MID Swing']);
+  for (let i = 0; i < 14; i++) rows.push(W('UP ' + String(i).padStart(2, '0'), 20 + i, 30, 5, 30));
+  rows.push(W('SMALL MOVE', 12, 20, 4, 20)); // +$160: under $250
+  const t = g.triageInventory_(parseText(countCsv(rows)).items);
   assert.strictEqual(keysOf(t, 'increases').length, 10);
+  assert.ok(!t.items['SMALL MOVE']);
+  assert.strictEqual(keysOf(g.triageInventory_(parseText(countCsv(rows)).items, { moves: 3 }), 'increases').length, 3);
 });
 
-test('one entry per item even when it is in several sections', () => {
-  const t = tri(bevRows());
-  const c = t.items['CHAMPAGNE Big Drop'];
-  assert.ok(c.cats.indexOf('decreases') !== -1);
-  assert.strictEqual(t.total, Object.keys(t.items).length);
-  assert.strictEqual(new Set(t.sections.reduce((a, s) => a.concat(s.keys), [])).size, t.total);
+test('how a new export relates to the count on file: next, recount, unrelated', () => {
+  const prev = parseText(sample.previousCsv()).items, now = cur().items;
+  same([g.inventoryRelation_(prev, now).relation, g.inventoryRelation_(prev, now).differ], ['next', 0]);
+  assert.strictEqual(g.inventoryRelation_(now, now).relation, 'recount');
+  const fixed = parseText(countCsv(sample.currentRows().map(r => r[0] === 'VODKA Case Slip' ? [r[0], r[1], r[2], 8, r[4], r[5], r[6], r[7]] : r))).items;
+  assert.strictEqual(g.inventoryRelation_(now, fixed).relation, 'recount', 'the same count with a cost fixed');
+  const rel = g.inventoryRelation_(now, prev);
+  assert.strictEqual(rel.relation, 'unrelated', 'the months uploaded the wrong way round');
+  assert.ok(rel.differ >= 3 && rel.examples.length);
 });
 
-test('note text sets the status', () => {
-  same(['CORRECT - FIXED', 'review', 'ADJUST - CASE AS BOTTLE PRICE', 'Looks fine', ''].map(g.inventoryStatus_),
-    ['correct', 'review', 'adjust', 'other', '']);
+/* ------------------------------------------------------------- the check */
+console.log('Inventory: the regional check');
+
+const meta = (period, label) => ({ id: 'c-' + period, property: 'TST1', period: period, label: label || 'Beverage', file: 'x.csv', uploadedAt: '2026-11-03T10:00:00Z', uploadedBy: 'rm@example.com' });
+const viaRows = b => ({ check: g.inventoryCheckFromRow_(g.inventoryCheckRow_(b.check)), flags: b.flags.map(f => g.inventoryFlagFromRow_(g.inventoryFlagRow_(b.check.id, f))) });
+
+test('one count: totals, what was picked, and a summary small enough for one row', () => {
+  const b = g.buildInventoryCheck_(cur(), meta('2026-10'));
+  const c = b.check;
+  same([c.items, c.stocked, c.current, c.previous, c.priceEffect, c.qtyEffect, c.picked, c.highImpact], [49, 48, 17921.5, 14495.5, 4893.7, -1467.7, 13, 6]);
+  near(c.highImpactValue, 9888.7);
+  same([c.summary.notCounted, c.summary.zeroCost, c.summary.wentToZero.items], [{ items: 2, value: 1260 }, 2, 2]);
+  same(Object.keys(c.summary.accounts).sort(), ['Food Inventory', 'Liquor', 'Wine']);
+  same(c.summary.pnl['5002'], [27, 22.5], 'the food-coded ingredient feeds food cost');
+  assert.strictEqual(b.flags.length, 13);
+  const row = g.inventoryCheckRow_(c);
+  assert.strictEqual(row.length, 18);
+  assert.ok(row[17].length < 2000, 'the summary JSON fits a cell easily');
+  same(g.inventoryCheckFromRow_(row), JSON.parse(JSON.stringify(c)));
+  const f = g.inventoryFlagFromRow_(g.inventoryFlagRow_(c.id, b.flags[0]));
+  same([f.key, f.cats, f.reasons.length, f.impact], ['VODKA Case Slip', ['costErrors'], 1, 3308.8]);
 });
 
-/* -------------------------------------------------------------------- report */
-console.log('Inventory: report');
-
-function sampleReport(notes, pnl, extraCount) {
-  const bev = parseText(countCsv(bevRows())).items;
-  const counts = [{ id: 'c1', label: 'Beverage', period: '2026-10', items: bev, notes: notes || {} }];
-  if (extraCount) counts.push(extraCount);
-  return g.buildInventoryReport_({ property: 'TST1', period: '2026-10', counts: counts, pnl: pnl || null, summary: 'All good' });
-}
-
-test('value, change, and the price/quantity split add up', () => {
-  const r = sampleReport();
-  const items = parseText(countCsv(bevRows())).items;
-  const cur = items.reduce((s, i) => s + i.curTotal, 0), prev = items.reduce((s, i) => s + i.prevTotal, 0);
-  near(r.headline.value, cur); near(r.headline.prevValue, prev); near(r.headline.change, cur - prev);
-  near(r.headline.priceEffect + r.headline.qtyEffect, r.headline.change, 0.02);
-  near(r.headline.priceEffect, 352 + 120 - 528 + 40 - 50, 0.02, 'price effect = Σ current qty × cost change');
-  const accSum = r.accounts.reduce((s, a) => s + a.value, 0);
-  near(accSum, cur);
-  same(r.accounts.map(a => a.name), ['Wine', 'Liquor']);
-  r.accounts.forEach(a => near(a.lines.reduce((s, l) => s + l.change, 0), a.change));
+test('against last month: follows, small edits since, out of order, a gap, the first count', () => {
+  const before = viaRows(g.buildInventoryCheck_(parseText(sample.previousCsv()), meta('2026-09')));
+  const now = viaRows(g.buildInventoryCheck_(cur(), meta('2026-10')));
+  same(g.compareInventoryChecks_(now, before).follows.status, 'follows');
+  assert.strictEqual(g.compareInventoryChecks_(now, before).follows.changedBy, 0);
+  const edited = JSON.parse(JSON.stringify(before)); edited.check.current -= 23.42;
+  const fe = g.compareInventoryChecks_(now, edited).follows;
+  same([fe.status, fe.changedBy], ['follows', 23.42]);
+  const wrong = JSON.parse(JSON.stringify(before)); wrong.check.current += 5000;
+  same(g.compareInventoryChecks_(now, wrong).follows.status, 'differs');
+  const old = JSON.parse(JSON.stringify(before)); old.check.period = '2026-07';
+  same(g.compareInventoryChecks_(now, old).follows.status, 'gap');
+  same(g.compareInventoryChecks_(now, null).follows.status, 'first');
+  same(g.shiftPeriod_('2026-01', -1), '2025-12');
 });
 
-test('action items: ADJUST first, by dollar size; grouped by note', () => {
-  const r = sampleReport({
-    'VODKA Case Slip': { note: 'ADJUST - CASE AS BOTTLE PRICE', by: 'a@x.com', at: '2026-11-03T10:00:00Z' },
-    'RUM Bottle For Case': { note: 'ADJUST - BOTTLE AS CASE PRICE' },
-    'MERLOT Gone Missing': { note: 'REVIEW - DOUBLE CHECK COUNT' },
-    'CABERNET Steady': { note: 'ADJUST' },                  // not under review: ignored
-    'PINOT Price Up': { note: 'CORRECT' }
-  });
-  same(r.actions.map(a => a.key), ['RUM Bottle For Case', 'VODKA Case Slip', 'MERLOT Gone Missing']);
-  same([r.review.adjust, r.review.review, r.review.noted], [2, 1, 4]);
-  assert.strictEqual(r.review.open, r.review.total - 4);
-  same(r.adjustGroups.map(x => x.note), ['ADJUST - BOTTLE AS CASE PRICE', 'ADJUST - CASE AS BOTTLE PRICE']);
-  const unit = r.triage.filter(t => t.key === 'unitErrors')[0];
-  same([unit.items, unit.noted, unit.adjust], [4, 2, 2]);
-  const liquor = r.accounts.filter(a => a.name === 'Liquor')[0];
-  assert.strictEqual(liquor.actions, 2);
-  assert.strictEqual(r.actions[1].by, 'a@x.com');
-  assert.strictEqual(r.summary, 'All good');
+test('against last month: a swing that reverses, a cost problem twice, picked again', () => {
+  // Last month the riesling jumped 4 → 26 and the vodka's cost was already wrong.
+  const lastRows = [W('RIESLING Big Rise', 26, 40, 4, 40), L('VODKA Case Slip', 66, 8, 70, 0.67), L('GIN Odd Price', 6, 60, 6, 50), W('BORDEAUX Not Counted', 12, 95, 0, 0)];
+  const before = viaRows(g.buildInventoryCheck_(parseText(countCsv(lastRows)), meta('2026-09')));
+  const nowRows = [W('RIESLING Big Rise', 3, 40, 26, 40), L('VODKA Case Slip', 37.6, 96, 66, 8), L('GIN Odd Price', 7.7, 337, 6, 60), W('BORDEAUX Not Counted', 0, 95, 12, 95, 'Assumed 0')];
+  const now = viaRows(g.buildInventoryCheck_(parseText(countCsv(nowRows)), meta('2026-10')));
+  const hist = g.compareInventoryChecks_(now, before).history;
+  assert.strictEqual(hist['RIESLING Big Rise'], 'Reverses September\'s move (+$880). Was one of the two counts wrong?');
+  assert.strictEqual(hist['VODKA Case Slip'], 'A cost problem in September too.');
+  assert.strictEqual(hist['GIN Odd Price'], 'Also picked in September: Cost +20.0% ($50.00 → $60.00): +$60 on this count.', 'the question is left off');
+  assert.ok(/^Reverses September's move \(\+\$1,140\)/.test(hist['BORDEAUX Not Counted']), 'bought last month, not counted now');
 });
 
-test('KPIs: not counted, counted as zero, no cost, progress', () => {
-  const r = sampleReport();
-  const k = {}; r.kpis.forEach(x => { k[x.key] = x; });
-  same([k.notCounted.value, k.zero.value, k.zeroCost.value], [1, 1, 1]);
-  assert.ok(/\$120 at the last count/.test(k.notCounted.sub), k.notCounted.sub);
-  assert.strictEqual(k.progress.value, 0);
-  assert.ok(!k.days, 'no days on hand without a P&L month');
-});
-
-test('against the P&L: own lines when the upload is detailed, 5185 together otherwise', () => {
-  const food = { id: 'c2', label: 'Food', period: '2026-10', notes: {},
-    items: parseText(countCsv([F('BEEF', 10, 31, 10, 31, '', 'Meat'), ['TONGS', 'EA', 2, 5, 2, 5, 'Kitchen Utensils and Supplies', 'Supplies']])).items };
-  const detailed = sampleReport(null, { stage: 'settled', asOf: '2026-11-20', lines: { '5002': 3100, '5300': 6200, '5500': 9300, '5185': 15500 } }, food);
-  same(detailed.pnl.rows.map(x => x.key), ['5002', '5300', '5500']);
-  const f = detailed.pnl.rows[0];
-  near(f.days, 310 / (3100 / 31), 0.001, 'food: inventory ÷ daily food cost');
-  assert.strictEqual(detailed.pnl.unmatched, 10, 'supplies have no cost of sales line');
-  assert.ok(detailed.kpis.some(x => x.key === 'days'));
-  const simple = sampleReport(null, { stage: 'settled', lines: { '5002': 3100, '5185': 15500 } }, food);
-  same(simple.pnl.rows.map(x => x.key), ['5002', '5185']);
-  const bev = simple.pnl.rows[1];
-  near(bev.inventory, simple.headline.value - 310 - 10);
-  near(bev.changeShare, bev.change / 15500 * 100, 1e-9);
-  const mtd = sampleReport(null, { stage: 'mtd', asOf: '2026-10-10', lines: { '5002': 1000 } }, food);
-  assert.strictEqual(mtd.pnl.days, 10, 'month to date: days elapsed');
-  near(mtd.pnl.rows.filter(x => x.key === '5002')[0].days, 310 / 100);
-});
-
-/* -------------------------------------------------------------- re-uploads */
-console.log('Inventory: re-uploads and storage');
-
-test('continuity: the new file\'s previous figures against the count it replaces', () => {
-  const oct = parseText(countCsv([W('A', 5, 10, 4, 10), W('B', 2, 10, 2, 10)])).items;
-  const novOk = parseText(countCsv([W('A', 3, 10, 5, 10), W('B', 1, 10, 2, 10), W('C', 1, 10, 0, 0)])).items;
-  same(g.inventoryContinuity_(oct, novOk), { compared: 2, differ: 0, examples: [], oldTotal: 70, newPrevTotal: 70 });
-  const novBad = parseText(countCsv([W('A', 3, 10, 6, 10), W('B', 1, 10, 2, 10)])).items;
-  const c = g.inventoryContinuity_(oct, novBad);
-  same([c.differ, c.examples], [1, ['A (5 → 6)']]);
-});
-
-test('a recount keeps notes only for items still under review', () => {
-  const t = tri(bevRows());
-  const carry = g.carryInventoryNotes_({ 'VODKA Case Slip': { note: 'ADJUST' }, 'CABERNET Steady': { note: 'CORRECT' } }, t);
-  same(Object.keys(carry.kept), ['VODKA Case Slip']);
-  same(carry.dropped, ['CABERNET Steady']);
-});
-
-test('sheet rows round-trip; each count\'s items are laid out together', () => {
-  const items = parseText(countCsv(bevRows())).items;
-  const back = items.map(i => g.inventoryItemFromRow_(g.inventoryItemRow_('c1', i)));
-  same(back, items.map(i => ({ key: i.key, item: i.item, uom: i.uom, curQty: i.curQty, curCost: i.curCost, curTotal: i.curTotal,
-    prevQty: i.prevQty, prevCost: i.prevCost, prevTotal: i.prevTotal, adjustment: i.adjustment, costAcct: i.costAcct,
-    inventoryAcct: i.inventoryAcct, flag: i.flag })));
-  const a = { id: 'a' }, b = { id: 'b' };
-  const rows = g.layoutInventoryItems_([{ count: a, rows: [[1], [2]] }, { count: b, rows: [[3], [4], [5]] }]);
-  same([a.firstRow, a.rowCount, b.firstRow, b.rowCount, rows.length], [2, 2, 4, 3, 5]);
-  const c = { id: 'x1', property: 'TST1', period: '2026-10', label: 'Food', file: 'f.csv', uploadedAt: '2026-11-01T00:00:00Z', uploadedBy: 'a@x.com',
-    items: 3, current: 10.5, previous: 9, reviewItems: 2, firstRow: 4, rowCount: 3 };
-  same(g.inventoryCountFromRow_(g.inventoryCountRow_(c)), c);
-});
-
-test('a large saved report is split across rows and read back whole', () => {
-  const r = sampleReport();
-  r.summary = 'x'.repeat(95000);
-  const rows = g.inventoryReportRows_('TST1|2026-10', r, { at: '2026-11-05T00:00:00Z', by: 'a@x.com' });
-  assert.strictEqual(rows.length, 3);
-  assert.ok(rows.every(x => x[9].length <= 40000));
-  const back = g.inventoryReportsFromRows_(rows.slice().reverse(), true)['TST1|2026-10'];
-  assert.strictEqual(back.report.summary.length, 95000);
-  same([back.savedBy, back.counts, back.value], ['a@x.com', 'Beverage', r.headline.value]);
-  const meta = g.inventoryReportsFromRows_(rows, false)['TST1|2026-10'];
-  assert.ok(!('report' in meta));
+test('the report: questions of $1,000 or more, the rest below, issues, days on hand', () => {
+  const before = viaRows(g.buildInventoryCheck_(parseText(sample.previousCsv()), meta('2026-09')));
+  const nowB = viaRows(g.buildInventoryCheck_(cur(), meta('2026-10')));
+  nowB.check.tieOuts = 2;
+  const r = g.buildInventoryCheckReport_({ property: 'TST1', period: '2026-10',
+    counts: [{ check: nowB.check, flags: nowB.flags, compare: g.compareInventoryChecks_(nowB, before) }],
+    pnl: { stage: 'settled', asOf: '2026-11-20', lines: { '5002': 62000, '5185': 78000, '5190': 4100 } } });
+  same(r.questions.map(q => q.item), ['VODKA Case Slip', 'GIN Odd Price', 'RIESLING Big Rise', 'BORDEAUX Not Counted', 'CHAMPAGNE Big Drop', 'BURGUNDY Last Bottle']);
+  assert.strictEqual(r.others.length, 7);
+  assert.strictEqual(r.status, 'questions');
+  assert.ok(/2 items do not add up/.test(r.issues[0]));
+  same([r.headline.value, r.headline.priceEffect, r.headline.qtyEffect], [17921.5, 4893.7, -1467.7]);
+  same(r.kpis.map(k => k.key), ['high', 'picked', 'notCounted', 'zero', 'zeroCost', 'days']);
+  same(r.pnl.rows.map(x => x.key), ['5002', '5185']);
+  near(r.pnl.rows[1].days, 17894.5 / (78000 / 31), 0.01);
+  const wine = r.accounts.filter(a => a.name === 'Wine')[0];
+  assert.ok(wine.flagged >= 6 && wine.highImpact === 4);
+  const clean = g.buildInventoryCheckReport_({ property: 'TST1', period: '2026-10',
+    counts: [{ check: before.check, flags: before.flags.filter(f => f.impact < 1000) }] });
+  same([clean.status, clean.questions.length, clean.pnl], ['clean', 0, null]);
 });
 
 /* ---------------------------------------------------------- the endpoints */
@@ -294,229 +223,99 @@ console.log('Inventory: endpoints (against the Apps Script stand-in)');
 
 function app(user) {
   const ctx = vm.createContext({ console: console, Math: Math, JSON: JSON, Date: Date });
-  mock.installGasMock(ctx, { user: user || 'robert.stevenson@atlasrestaurantgroup.com' });
-  ['Parse.gs', 'Budget.gs', 'Analysis.gs', 'Store.gs', 'Review.gs', 'Inventory.gs', 'Code.gs', 'Import.gs', 'InventoryApi.gs'].forEach(f => {
+  mock.installGasMock(ctx, { user: 'robert.stevenson@atlasrestaurantgroup.com' });
+  ['Parse.gs', 'Budget.gs', 'Analysis.gs', 'Store.gs', 'Review.gs', 'InventoryRules.gs', 'InventoryCheck.gs', 'Code.gs', 'Import.gs', 'InventoryApi.gs'].forEach(f => {
     vm.runInContext(fs.readFileSync(path.join(h.ROOT, f), 'utf8'), ctx, { filename: f });
   });
   ctx.setup();
   const ss = ctx.dataSpreadsheet_();
   const cfg = ctx.readConfig_(ss);
   cfg.properties = [{ code: 'TST1', name: 'Sample Grill', active: true }, { code: 'TST2', name: 'Harbor House', active: true }];
+  cfg.viewers = ['viewer@example.com'];
+  cfg.inventory.reviewers = ['rm@example.com'];
   ctx.writeConfig_(ss, cfg);
+  if (user) ctx.__setUser(user);
   return ctx;
 }
-const bevOct = countCsv(bevRows());
-// November: the October current figures become the previous ones.
-const bevNov = countCsv(parseText(bevOct).items.map(i => [i.item, i.uom, i.curQty * 0.5, i.curCost || 10, i.curQty, i.curCost, i.costAcct, i.inventoryAcct, '']));
-const foodOct = countCsv([F('BEEF', 10, 31, 8, 30, '', 'Meat'), F('KALE', 0, 3, 4, 3, '0 Quantity'), F('SALT', 5, 1, 5, 1)]);
+const sep = sample.previousCsv(), oct = sample.currentCsv();
 
-test('upload: preview writes nothing; save stores the count and lays out its items', () => {
+test('setup makes the two inventory tabs and none of the old four', () => {
   const a = app();
-  const pv = a.previewInventoryUpload(bevOct, 'InventoryCountItemDetails_21.csv', 'TST1', '2026-10', '');
-  assert.strictEqual(pv.target.label, 'Beverage', 'blank name → suggested');
-  assert.strictEqual(pv.existing, null);
-  assert.strictEqual(pv.review.total, a.triageInventory_(parseText(bevOct).items).total);
-  assert.strictEqual(a.readInventoryCounts_(a.dataSpreadsheet_()).length, 0);
-  const res = a.commitInventoryUpload(bevOct, 'InventoryCountItemDetails_21.csv', 'TST1', '2026-10', 'Beverage');
-  const f = a.commitInventoryUpload(foodOct, 'food.csv', 'TST1', '2026-10', 'Food');
-  const counts = a.readInventoryCounts_(a.dataSpreadsheet_());
-  same(counts.map(c => [c.label, c.firstRow, c.rowCount]), [['Beverage', 2, 14], ['Food', 16, 3]]);
-  const data = a.getInventoryCount(f.countId);
-  same(Object.keys(data.items).sort(), ['BEEF', 'KALE']);
-  assert.strictEqual(a.getInventoryCount(res.countId).count.label, 'Beverage');
+  const names = a.dataSpreadsheet_().getSheets().map(s => s.getName());
+  assert.ok(names.indexOf('Inventory Checks') !== -1 && names.indexOf('Inventory Flags') !== -1);
+  ['Inventory Counts', 'Inventory Items', 'Inventory Notes', 'Inventory Reports'].forEach(n => assert.ok(names.indexOf(n) === -1, n));
+  same(a.readConfig_(a.dataSpreadsheet_()).inventory, { reviewers: ['rm@example.com'] });
 });
 
-test('notes: saved per item, refused for items not under review, removed when cleared', () => {
-  const a = app();
-  const id = a.commitInventoryUpload(bevOct, 'b.csv', 'TST1', '2026-10', 'Beverage').countId;
-  const r = a.saveInventoryNotes(id, [{ key: 'VODKA Case Slip', note: 'ADJUST - CASE AS BOTTLE PRICE' }, { key: 'CABERNET Steady', note: 'CORRECT' },
-    { key: 'MERLOT Gone Missing', note: 'REVIEW' }]);
-  same(r.results.map(x => x.ok), [true, false, true]);
-  assert.ok(/not under review/.test(r.results[1].error));
-  assert.strictEqual(r.noted, 2);
-  a.saveInventoryNotes(id, [{ key: 'MERLOT Gone Missing', note: '' }, { key: 'VODKA Case Slip', note: 'ADJUST - INCORRECT PRICE IN SYSTEM' }]);
-  const notes = a.getInventoryCount(id).notes;
-  same(Object.keys(notes), ['VODKA Case Slip']);
-  assert.strictEqual(notes['VODKA Case Slip'].note, 'ADJUST - INCORRECT PRICE IN SYSTEM');
-  assert.strictEqual(notes['VODKA Case Slip'].by, 'robert.stevenson@atlasrestaurantgroup.com');
-});
-
-test('a recount (same month) replaces the count and carries its notes', () => {
-  const a = app();
-  const id = a.commitInventoryUpload(bevOct, 'b.csv', 'TST1', '2026-10', 'Beverage').countId;
-  a.saveInventoryNotes(id, [{ key: 'VODKA Case Slip', note: 'ADJUST' }, { key: 'MERLOT Gone Missing', note: 'REVIEW' }]);
-  // The recount fixed the vodka price; Merlot is still not counted.
-  const fixedCsv = countCsv(bevRows().map(r => r[0] === 'VODKA Case Slip' ? L('VODKA Case Slip', 5, 8, 5, 8) : r));
-  const pv = a.previewInventoryUpload(fixedCsv, 'b2.csv', 'TST1', '2026-10', 'beverage ');
-  same([pv.existing.sameMonth, pv.keptNotes, pv.droppedNotes], [true, 1, ['VODKA Case Slip']]);
-  const res = a.commitInventoryUpload(fixedCsv, 'b2.csv', 'TST1', '2026-10', 'beverage ');
-  assert.strictEqual(res.keptNotes, 1);
-  const counts = a.readInventoryCounts_(a.dataSpreadsheet_());
-  assert.strictEqual(counts.length, 1, 'same slot, case and spaces ignored');
-  same(Object.keys(a.getInventoryCount(res.countId).notes), ['MERLOT Gone Missing']);
-});
-
-test('next month replaces the slot; the saved report stays, notes go; continuity is checked', () => {
-  const a = app();
-  const id = a.commitInventoryUpload(bevOct, 'b.csv', 'TST1', '2026-10', 'Beverage').countId;
-  a.commitInventoryUpload(foodOct, 'f.csv', 'TST1', '2026-10', 'Food');
-  a.saveInventoryNotes(id, [{ key: 'VODKA Case Slip', note: 'ADJUST - CASE AS BOTTLE PRICE' }]);
-  let pv = a.previewInventoryUpload(bevNov, 'n.csv', 'TST1', '2026-11', 'Beverage');
-  same([pv.existing.period, pv.reportSaved, pv.droppedCount], ['2026-10', false, 1]);
-  same([pv.continuity.differ, pv.continuity.compared], [0, 14]);
-  const saved = a.saveInventoryReport('TST1', '2026-10', 'Vodka price fixed in R365.');
-  assert.ok(saved.savedAt);
-  pv = a.previewInventoryUpload(bevNov, 'n.csv', 'TST1', '2026-11', 'Beverage');
-  assert.strictEqual(pv.reportSaved, true);
-  const nov = a.commitInventoryUpload(bevNov, 'n.csv', 'TST1', '2026-11', 'Beverage');
-  const counts = a.readInventoryCounts_(a.dataSpreadsheet_());
-  same(counts.map(c => c.label + ' ' + c.period).sort(), ['Beverage 2026-11', 'Food 2026-10']);
-  same(Object.keys(a.getInventoryCount(nov.countId).notes), []);
-  // Items sheet holds exactly the two counts on file, each where its row says.
+test('upload: the preview writes nothing; saving keeps one row plus the picked items only', () => {
+  const a = app('rm@example.com');
   const ss = a.dataSpreadsheet_();
-  counts.forEach(c => assert.strictEqual(a.readInventoryItems_(ss, c).length, c.items));
-  assert.strictEqual(a.readDataRows_(ss, 'invItems').length, 14 + 3);
-  // October's report: the food count is still on file (live); the beverage count is gone.
-  const rep = a.getInventoryReport('TST1', '2026-10');
-  assert.ok(rep.live);
-  same(rep.report.counts.map(c => c.label), ['Food']);
-  assert.strictEqual(rep.saved.summary, 'Vodka price fixed in R365.');
-  assert.strictEqual(rep.report.summary, 'Vodka price fixed in R365.', 'the saved summary is the starting draft');
+  const pv = a.previewInventoryUpload(oct, 'Sample_Grill_October.csv', 'TST1', '2026-10', '');
+  same([pv.target.label, pv.picked, pv.highImpact, pv.follows.status, pv.existing], ['Beverage', 13, 6, 'first', null]);
+  same(pv.top.map(t => t.item).slice(0, 2), ['VODKA Case Slip', 'GIN Odd Price']);
+  assert.strictEqual(a.readDataRows_(ss, 'invChecks').length, 0);
+  a.commitInventoryUpload(sep, 'sep.csv', 'TST1', '2026-09', 'Beverage');
+  const res = a.commitInventoryUpload(oct, 'oct.csv', 'TST1', '2026-10', 'Beverage');
+  same([res.picked, res.highImpact, res.replaced], [13, 6, false]);
+  assert.strictEqual(a.readDataRows_(ss, 'invChecks').length, 2);
+  const flags = a.readDataRows_(ss, 'invFlags');
+  assert.ok(flags.length < 49 * 2 / 2, 'only picked items are kept, not the 98 items of both exports');
+  assert.strictEqual(flags.filter(r => r[0] === res.countId).length, 13);
+  assert.strictEqual(a.previewInventoryUpload(oct, 'oct.csv', 'TST1', '2026-10', 'Beverage').existing.id, res.countId);
 });
 
-test('report: saved copy is served once every count for the month is replaced', () => {
-  const a = app();
-  const id = a.commitInventoryUpload(bevOct, 'b.csv', 'TST1', '2026-10', 'Beverage').countId;
-  a.saveInventoryNotes(id, [{ key: 'VODKA Case Slip', note: 'ADJUST - CASE AS BOTTLE PRICE' }]);
-  a.saveInventoryReport('TST1', '2026-10', 'Summary text');
-  a.commitInventoryUpload(bevNov, 'n.csv', 'TST1', '2026-11', 'Beverage');
-  const rep = a.getInventoryReport('TST1', '2026-10');
-  assert.strictEqual(rep.live, false);
-  same(rep.report.actions.map(x => x.key), ['VODKA Case Slip']);
-  assert.strictEqual(rep.report.summary, 'Summary text');
-  const dash = a.getInventoryDashboard();
-  same(dash.reports.map(r => r.property + ' ' + r.period + ' ' + r.actionItems), ['TST1 2026-10 1']);
-  same(dash.counts.map(c => c.period), ['2026-11']);
-  assert.strictEqual(dash.counts[0].report, null);
-});
-
-test('refuses an older month over a newer count, and the same file under a second name', () => {
-  const a = app();
-  a.commitInventoryUpload(bevNov, 'n.csv', 'TST1', '2026-11', 'Beverage');
-  assert.throws(() => a.commitInventoryUpload(bevOct, 'b.csv', 'TST1', '2026-10', 'Beverage'), /later than 2026-10/);
-  assert.throws(() => a.commitInventoryUpload(bevNov, 'n.csv', 'TST1', '2026-11', 'Bar'), /identical to the Beverage count/);
-  a.commitInventoryUpload(bevNov, 'n.csv', 'TST2', '2026-11', 'Beverage'); // another property is fine
-  assert.throws(() => a.previewInventoryUpload(bevOct, 'b.csv', 'TST1', '2026-13', 'Beverage'), /month/);
-  assert.throws(() => a.previewInventoryUpload(bevOct, 'b.csv', '', '2026-10', 'Beverage'), /property/);
-});
-
-test('dashboard: progress, action items, and a report that changed after saving', () => {
-  const a = app();
-  const id = a.commitInventoryUpload(bevOct, 'b.csv', 'TST1', '2026-10', 'Beverage').countId;
-  a.saveInventoryNotes(id, [{ key: 'VODKA Case Slip', note: 'ADJUST - CASE AS BOTTLE PRICE' }, { key: 'MERLOT Gone Missing', note: 'REVIEW' },
-    { key: 'PINOT Price Up', note: 'CORRECT' }]);
-  let d = a.getInventoryDashboard();
-  const c = d.counts[0];
-  same([c.review.noted, c.review.adjust, c.review.review, c.report], [3, 1, 1, null]);
-  same(d.actions.map(x => x.key), ['VODKA Case Slip', 'MERLOT Gone Missing']);
-  near(c.review.openImpact, 352 + 120);
-  a.saveInventoryReport('TST1', '2026-10', '');
-  d = a.getInventoryDashboard();
-  assert.strictEqual(d.counts[0].report.stale, false);
-  // A later note makes the saved report out of date (note times are compared as ISO text).
-  const ss = a.dataSpreadsheet_();
-  const rows = a.readDataRows_(ss, 'invNotes');
-  rows[0][6] = '2999-01-01T00:00:00.000Z';
-  a.writeDataRows_(ss, 'invNotes', rows);
-  assert.strictEqual(a.getInventoryDashboard().counts[0].report.stale, true);
-});
-
-test('report includes days on hand from the P&L month when on file', () => {
+test('upload: a recount replaces its check; the same file for another property is refused', () => {
   const a = app();
   const ss = a.dataSpreadsheet_();
-  a.writeDataRows_(ss, 'actuals', [['2026-10', 'TST1', '5002', 'Food Cost', '5000', 'group', 6200, '', 'settled', '2026-11-20', 'u1'],
-    ['2026-10', 'TST1', 'NET_SALES', 'Net sales', '4000', 'computed', 50000, '', 'settled', '2026-11-20', 'u1']]);
-  a.commitInventoryUpload(foodOct, 'f.csv', 'TST1', '2026-10', 'Food');
-  const rep = a.getInventoryReport('TST1', '2026-10').report;
-  const food = rep.pnl.rows.filter(r => r.key === '5002')[0];
-  near(food.days, 315 / (6200 / 31), 1e-9);
+  a.commitInventoryUpload(oct, 'oct.csv', 'TST1', '2026-10', 'Beverage');
+  const fixed = countCsv(sample.currentRows().map(r => r[0] === 'VODKA Case Slip' ? [r[0], r[1], r[2], 8, r[4], r[5], r[6], r[7]] : r));
+  const res = a.commitInventoryUpload(fixed, 'oct-fixed.csv', 'TST1', '2026-10', 'beverage');
+  same([res.replaced, res.highImpact], [true, 5]);
+  same(a.readInventoryChecks_(ss).map(c => c.file), ['oct-fixed.csv']);
+  assert.strictEqual(a.readDataRows_(ss, 'invFlags').length, res.picked);
+  assert.throws(() => a.commitInventoryUpload(fixed, 'oops.csv', 'TST2', '2026-10', 'Beverage'), /identical to the beverage count already on file for TST1/i);
 });
 
-test('access: viewers read, reviewers edit, the inventory-only role sees no P&L', () => {
+test('upload: out of order is caught by the preview', () => {
+  const a = app();
+  a.commitInventoryUpload(oct, 'oct.csv', 'TST1', '2026-10', 'Beverage');
+  const pv = a.previewInventoryUpload(sep, 'sep.csv', 'TST1', '2026-11', 'Beverage');
+  same(pv.follows.status, 'differs');
+  assert.throws(() => a.previewInventoryUpload(oct, 'x.csv', '', '2026-10', 'Beverage'), /Choose the property/);
+  assert.throws(() => a.previewInventoryUpload(oct, 'x.csv', 'TST1', '10/2026', 'Beverage'), /Choose the month/);
+});
+
+test('report and dashboard through the endpoints, with days on hand for viewers only', () => {
   const a = app();
   const ss = a.dataSpreadsheet_();
-  const cfg = a.readConfig_(ss);
-  cfg.viewers = ['viewer@x.com', 'both@x.com'];
-  cfg.inventory.reviewers = ['bar@x.com', 'both@x.com'];
-  a.writeConfig_(ss, cfg);
-  a.writeDataRows_(ss, 'actuals', [['2026-10', 'TST1', '5002', 'Food Cost', '5000', 'group', 6200, '', 'settled', '2026-11-20', 'u1']]);
-  const id = a.commitInventoryUpload(foodOct, 'f.csv', 'TST1', '2026-10', 'Food').countId;
+  a.writeDataRows_(ss, 'actuals', [['2026-10', 'TST1', '5185', 'Beer Wine & Liquor Cost', '5000', 'group', 78000, '', 'settled', '2026-11-20', 'seed']]);
+  a.commitInventoryUpload(sep, 'sep.csv', 'TST1', '2026-09', 'Beverage');
+  a.commitInventoryUpload(oct, 'oct.csv', 'TST1', '2026-10', 'Beverage');
+  const d = a.getInventoryDashboard();
+  same(d.checks.map(c => [c.period, c.highImpact]), [['2026-10', 6], ['2026-09', 0]]);
+  assert.ok(!('summary' in d.checks[0]));
+  const r = a.getInventoryReport('TST1', '2026-10').report;
+  same([r.questions.length, r.counts[0].follows.status, r.pnl.rows.map(x => x.key)], [6, 'follows', ['5002', '5185']]);
+  near(r.pnl.rows[1].days, 17894.5 / (78000 / 31), 0.01);
+  a.__setUser('rm@example.com');
+  assert.strictEqual(a.getInventoryReport('TST1', '2026-10').report.pnl, null, 'the inventory-only role sees no P&L');
+  assert.strictEqual(a.getInventoryReport('TST1', '2026-08').report, null);
+});
 
-  a.__setUser('viewer@x.com');
-  assert.strictEqual(a.getBootstrap().canEditInventory, false);
-  assert.ok(a.getInventoryDashboard().counts.length === 1);
-  assert.throws(() => a.saveInventoryNotes(id, [{ key: 'BEEF', note: 'CORRECT' }]), /inventory reviewer/);
-  assert.throws(() => a.commitInventoryUpload(foodOct, 'f.csv', 'TST1', '2026-10', 'Food'), /inventory reviewer/);
-
-  a.__setUser('both@x.com');
-  assert.strictEqual(a.getBootstrap().canEditInventory, true);
-  assert.ok(a.saveInventoryNotes(id, [{ key: 'BEEF', note: 'CORRECT' }]).results[0].ok);
-  assert.ok(a.getInventoryReport('TST1', '2026-10').report.pnl, 'a viewer who reviews sees the P&L comparison');
-
-  a.__setUser('bar@x.com');
-  const boot = a.getBootstrap();
-  same([boot.role, boot.inventoryOnly, boot.canEditInventory, Object.keys(boot.months).length], ['inventory', true, true, 0]);
-  assert.ok(boot.properties.some(p => p.code === 'TST1'));
-  assert.throws(() => a.getPortfolio('2026-10', 'month'), /Inventory tab only/);
-  assert.throws(() => a.getPeriodReport('TST1', '2026-10', 'month'), /Inventory tab only/);
-  assert.strictEqual(a.getInventoryReport('TST1', '2026-10').report.pnl, null, 'no P&L figures for the inventory-only role');
-  assert.throws(() => a.removeInventoryCount(id), /administrator/);
-  assert.throws(() => a.saveSettings({}), /Inventory tab only/);
-
-  a.__setUser('stranger@x.com');
+test('access: viewers read, reviewers upload, only admins remove', () => {
+  const a = app();
+  const id = a.commitInventoryUpload(oct, 'oct.csv', 'TST1', '2026-10', 'Beverage').countId;
+  a.__setUser('viewer@example.com');
+  assert.strictEqual(a.getInventoryDashboard().checks.length, 1);
+  assert.throws(() => a.commitInventoryUpload(sep, 's.csv', 'TST1', '2026-09', 'Beverage'), /administrator or an inventory reviewer/);
+  a.__setUser('rm@example.com');
+  assert.throws(() => a.removeInventoryCount(id), /Only an administrator/);
+  a.__setUser('stranger@example.com');
   assert.throws(() => a.getInventoryDashboard(), /do not have access/);
-});
-
-test('settings: inventory reviewers and notes are validated and kept', () => {
-  const a = app();
-  const s = a.saveSettings({ inventory: { reviewers: [' bar@x.com ', ''], noteCategories: ['correct', 'ADJUST - WRONG UNIT', 'ADJUST - WRONG UNIT'] } });
-  same(s.inventory, { reviewers: ['bar@x.com'], noteCategories: ['CORRECT', 'ADJUST - WRONG UNIT'] });
-  assert.throws(() => a.saveSettings({ inventory: { noteCategories: ['LOOKS FINE'] } }), /must start with CORRECT, REVIEW or ADJUST/);
-  assert.throws(() => a.saveSettings({ inventory: { noteCategories: [] } }), /At least one/);
-  // A workbook set up before the inventory existed has no Inventory row: defaults apply.
-  const ss = a.dataSpreadsheet_();
-  const sheet = ss.getSheetByName('_Config');
-  sheet.getRange(5, 1, 1, 2).clearContent();
-  same(a.readConfig_(ss).inventory.noteCategories, a.defaultInventoryConfig_().noteCategories);
-  assert.strictEqual(a.readConfig_(ss).inventory.noteCategories.length, 11);
-});
-
-test('remove: a count (and its notes) or a saved report, admins only', () => {
-  const a = app();
-  const b = a.commitInventoryUpload(bevOct, 'b.csv', 'TST1', '2026-10', 'Beverage').countId;
-  const f = a.commitInventoryUpload(foodOct, 'f.csv', 'TST1', '2026-10', 'Food').countId;
-  a.saveInventoryNotes(b, [{ key: 'VODKA Case Slip', note: 'ADJUST' }]);
-  a.saveInventoryNotes(f, [{ key: 'BEEF', note: 'CORRECT' }]);
-  a.saveInventoryReport('TST1', '2026-10', '');
-  a.removeInventoryCount(b);
-  const ss = a.dataSpreadsheet_();
-  const counts = a.readInventoryCounts_(ss);
-  same(counts.map(c => [c.label, c.firstRow]), [['Food', 2]], 'the food count moved up and its row says so');
-  assert.strictEqual(a.readInventoryItems_(ss, counts[0]).length, 3);
-  same(a.readDataRows_(ss, 'invNotes').map(r => r[1]), ['BEEF']);
-  a.removeInventoryReport('TST1', '2026-10');
-  assert.strictEqual(a.getInventoryDashboard().reports.length, 0);
-});
-
-test('reading a count falls back to a full scan when its rows moved', () => {
-  const a = app();
-  const id = a.commitInventoryUpload(foodOct, 'f.csv', 'TST1', '2026-10', 'Food').countId;
-  const ss = a.dataSpreadsheet_();
-  const c = a.readInventoryCounts_(ss)[0];
-  c.firstRow = 3; // stale index
-  assert.strictEqual(a.readInventoryItems_(ss, c).length, 3);
-  assert.strictEqual(a.findInventoryCount_(ss, id).id, id);
-  assert.throws(() => a.findInventoryCount_(ss, 'nope'), /no longer on file/);
+  a.__setUser('robert.stevenson@atlasrestaurantgroup.com');
+  same(a.removeInventoryCount(id), { removed: true });
+  same([a.readDataRows_(a.dataSpreadsheet_(), 'invChecks').length, a.readDataRows_(a.dataSpreadsheet_(), 'invFlags').length], [0, 0]);
+  same(a.removeInventoryCount(id), { removed: false });
 });
 
 console.log('\n' + passed + ' inventory tests passed' + (process.exitCode ? ', some FAILED' : ''));

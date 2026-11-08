@@ -5,7 +5,8 @@ Restaurant 365 P&L each week and again once the month settles. The app keeps
 every month in one Google Sheet. For each property and month it builds a
 report against budget and last year, flags what moved and why, and shows the
 whole portfolio side by side. **Operating income is the headline number.**
-The **Inventory** tab reviews the month-end inventory counts (section 6).
+The **Inventory** tab is the regional check of each property's month-end
+inventory count (section 6).
 
 It is built the same way as `inventory_audit` and `payroll_audit`: a
 standalone Apps Script project, Vue 3 from a CDN, no build step, and
@@ -17,7 +18,8 @@ embeddable in Google Sites.
 
 1. Create a standalone Apps Script project and add these files from this
    folder: `Code.gs`, `Import.gs`, `Parse.gs`, `Budget.gs`, `Store.gs`,
-   `Analysis.gs`, `Review.gs`, `Inventory.gs`, `InventoryApi.gs`, and the HTML
+   `Analysis.gs`, `Review.gs`, `InventoryRules.gs`, `InventoryCheck.gs`,
+   `InventoryApi.gs`, and the HTML
    files `Index`, `InventoryView` and `InventoryScript` (named exactly so,
    without `.html`). Replace `appsscript.json` with the one here
    (Project Settings → "Show appsscript.json"). It turns on the **Drive**
@@ -30,9 +32,12 @@ embeddable in Google Sites.
    Embed the `/exec` URL in Google Sites like the other apps.
 4. Administrators are the global admin list (Script Properties, same as the
    other apps). Add read-only viewers in **Upload & settings → Settings**.
-5. Updating an existing install: add the new files, then run **`setup()`**
-   once more. It adds the four inventory tabs to the data workbook and
-   changes nothing else.
+5. Updating an existing install: add the new files, remove `Inventory.gs`,
+   then run **`setup()`** once more. It adds the *Inventory Checks* and
+   *Inventory Flags* tabs and changes nothing else. The four tabs of the
+   earlier inventory review (*Inventory Counts*, *Items*, *Notes*,
+   *Reports*) are no longer read. Delete them from the data workbook once
+   you no longer need what is in them.
 
 Properties register themselves the first time an upload contains them
 (code and name come from R365, e.g. `ARG1M - Bygone`). Rename or hide them
@@ -82,8 +87,8 @@ app rewrites them.
 | `Budget` | Per property and year: the rolled-up lines, every GL row from the 12 MONTH tab, and the daily sales budget. |
 | `Tags` | Manager notes on a month, and "timing / accrual" tags on a line. |
 | `Uploads` | Who uploaded what and when. |
-| `Inventory Counts`, `Inventory Items`, `Inventory Notes`, `Inventory Reports` | The inventory review (section 6). |
-| `_Config` (hidden) | Viewers, properties, flag rule, inventory reviewers and notes. |
+| `Inventory Checks`, `Inventory Flags` | The inventory check: one row per count, plus the items the rules picked (section 6). |
+| `_Config` (hidden) | Viewers, properties, flag rule, inventory reviewers. |
 
 ### Budget mapping
 
@@ -205,118 +210,109 @@ single row. The thresholds are at the top of `Review.gs`.
   fail a workbook check. The Bygone's 2027 draft has BAR Beverage Sales
   negative in every month.
 
-## 6. Inventory review
+## 6. Inventory check
 
-The **Inventory** tab is for the month-end inventory audit. You upload each
-count, work through the items most likely to be wrong, mark each one, and
-save a report. It follows the steps of `inventory_audit`.
+The month-end inventory review happens in two places:
+
+1. **The store team** reviews its count in **Inventory Audit**
+   (`inventory_audit`), notes each item, and fixes what is wrong in R365.
+2. **The regional manager** exports the same **Inventory Count Item
+   Details** from R365 and uploads it here, without the store's notes. This
+   is a blind recheck: the same rules pick the items again, and anything
+   still worth **$1,000 or more** becomes a question for the store manager.
+   On a properly audited count, fewer than 10 should be left.
+
+Both apps use one rules file, `InventoryRules.gs`, copied byte for byte into
+each project. The tests fail when the two copies differ. The rules, what is
+deliberately not flagged, and why are in `inventory_audit/README.md`
+section 4. In short:
+
+- every change splits into a price effect and a quantity effect;
+- items are picked and ranked by dollar impact;
+- R365's "More than Twice" / "Less than Half" flags are ignored as noise;
+- fractional counts and food-coded cocktail ingredients are expected.
 
 ### Upload
 
-In R365, export the count's **Inventory Count Item Details** as CSV. In
-**Inventory → Upload**, choose the property and the month the count closes.
-Give the count a name. The name is suggested from the file's inventory
-accounts: Food, Beverage or Full count.
+In **Inventory → Upload**, choose the month the counts close, then choose
+several CSV files at once, one per property and count. For each file:
 
-A property can have several counts a month, each with its own name (for
-example Food and Beverage). Property + count name is a **slot**:
+- the **property** is guessed from the file name (a property name or code
+  in it); check it;
+- the **count name** is suggested from the accounts: Food, Beverage or Full
+  count.
 
-- **Same month again (a recount):** replaces the count. A note carries over
-  when its item is still under review. Items the recount fixed drop out of
-  review and lose their note; the preview lists them.
-- **A later month:** replaces the count and its notes. Only the saved report
-  is kept, on the assumption that action items were fixed once reported.
-  When the old count's report was never saved, the preview warns you first.
-- **An earlier month** than the count on file is refused.
+Each file is checked as soon as it is chosen, and nothing is saved until you
+press **Save**. The check shows:
 
-The preview writes nothing. It checks the following:
+- how many high-impact items there are, their dollar impact, and the largest;
+- whether previous value plus adjustment equals current value on every row;
+- **whether it follows last month's check** for the same property and count:
+  the file's previous total should be last month's total. A small difference
+  means last month's count was edited in R365 after it was checked. A large
+  one usually means the months are out of order or the property is wrong;
+- whether it replaces a check already on file (same property, count name and
+  month). A recount after the store's fixes replaces it;
+- a file identical to one already on file for another property or count
+  name is refused.
 
-- Every item's previous value plus its adjustment equals its current value.
-- The file's previous quantities match the count it replaces. A difference
-  means that count was changed in R365 after it was reviewed.
-- The file is not identical to another count of the same property and month.
+### What is kept
 
-### What is picked for review
+Per count, one row in *Inventory Checks* and the items the rules picked
+(about 50) in *Inventory Flags*:
 
-An item can appear in several sections. It has one note, shown in each.
-Items at zero in both counts are not stocked, and are never shown.
-Thresholds are in `INV_RULES` (`Inventory.gs`).
+- the row holds totals, the price and quantity split, the checks, and value
+  by account and by P&L line;
+- each picked item keeps its figures and its questions.
 
-| Section | Rule |
-|---|---|
-| Not counted | R365 flag *Assumed 0*: nothing was entered |
-| Possible unit or cost errors | Cost per unit 3× or more (or a third or less) of the last count. Within 3% of a pack size (6, 12, 24 …), it is named "case price entered for one unit" or the reverse. Also any item with a quantity but $0 cost. |
-| Price changes | Cost moved 10%+; top 25 by dollar effect (current qty × cost change) |
-| Largest decreases / increases | Top 10 each by adjustment |
-| Count swings | R365 flag *More than Twice* / *Less than Half*, $25+, beyond the top 10 changes; top 15 |
-| New items | No cost at the last count; top 15 by value |
-| Counted as zero | Zero now, stocked at the last count |
-
-### Review
-
-The **Report** menu offers four views of the same items:
-
-- **By section** (as above).
-- **Largest dollar size first:** each item once.
-- **By account:** grouped by inventory and cost account, so the work can be
-  split between people.
-- **Action items:** items marked ADJUST or REVIEW.
-
-Each item gets a note. The **CORRECT / REVIEW / ADJUST** buttons narrow the
-note list; the notes themselves can be edited in Settings. Notes are kept in
-the page and saved every 20 seconds, with **Save now**, and before a report
-is saved. A note that fails to save stays queued and is marked *retry*.
+The other items of the export, about 1,450 of a 1,500-item beverage count,
+are read, checked and dropped. Uploads add rows at the end; only a
+replacement rewrites the tabs.
 
 ### Dashboard
 
-The dashboard shows:
-
-- every count on file, with review progress;
-- the number of ADJUST and REVIEW items, and their dollar size;
-- whether its month's report is saved, or has changed since it was saved;
-- open action items across all properties, largest first;
-- the saved reports.
+One row per property and month: value, change, how many items were picked,
+the high-impact items and their dollar impact, and a status (*Clean*,
+*N questions*, or *Export does not add up*). The cards show the latest
+month across properties.
 
 ### Report
 
-One report per property and month covers every count for that month. It is
-laid out like the Period report:
+One report per property and month covers every count for that month:
 
-- inventory value against the last count, with the change split into price
-  (cost changes on what was counted) and quantity;
-- KPIs: items counted, not counted, counted as zero, counted with no cost,
-  review progress;
-- action-item cards, ADJUST first;
-- inventory by account;
-- review progress by section;
-- a manager summary.
-
-When the P&L month is on file, the report also shows **days on hand**
-(inventory ÷ daily cost of sales) and the inventory change as a share of the
-month's cost. Food uses 5002 and NA beverage 5190. Liquor, wine and beer use
-5300 / 5500 / 5400 from a detailed upload, or 5185 together otherwise.
-
-**Save report** keeps a copy. That copy is what remains once next month's
-counts replace these.
+- **Questions for the store:** the high-impact items, largest first, each
+  with its question(s) and figures. **Last month's flags** add context:
+  - *Reverses September's move (+$1,200). Was one of the two counts wrong?*
+  - *A cost problem in September too.*
+  - *Also picked in September: …*
+- **Copy the questions:** the list as plain text, ready to paste into an
+  email to the store manager. Also **Print / save as PDF**.
+- **Problems with the file:** totals that do not add up, or a count that
+  does not follow last month's.
+- Inventory value against the last count, split into price and quantity,
+  and the KPIs: high-impact items, items picked, not counted, gone to zero,
+  counted with no cost, and days on hand.
+- The **smaller items** the rules picked (the store reviewed them), shown
+  on request.
+- **Inventory by account**, with items picked and high impact per line.
+- **Against the P&L**, when the month is on file. This covers days on hand
+  (inventory ÷ daily cost of sales) and the inventory change as a share of
+  the month's cost:
+  - food uses 5002 and NA beverage uses 5190;
+  - liquor, wine and beer use 5300 / 5500 / 5400 from a detailed upload,
+    or 5185 together otherwise.
 
 ### Access
 
 | Who | Can |
 |---|---|
-| Admins | Everything, including removing a count or a saved report |
-| Viewers | Read the inventory review and reports |
-| Inventory reviewers (Settings) | Upload counts, write notes, save reports |
+| Admins | Everything, including removing a check |
+| Viewers | Read the dashboard and reports |
+| Inventory reviewers (Settings) | Upload counts |
 
 An inventory reviewer who is also a viewer sees everything. One who is not a
 viewer sees only the Inventory tab, and the report's P&L comparison is left
 out for them.
-
-### Performance
-
-Only the inventory endpoints read the inventory tabs, so the P&L views are
-unaffected. Each count's items are stored together, and the count's row
-records where they start, so opening a count reads one range. If that range
-no longer matches the count, the app falls back to a full scan.
 
 ## 7. Code layout
 
@@ -327,8 +323,9 @@ no longer matches the count, the app falls back to a full scan.
 | `Store.gs` | Sheet layouts; upload ⇄ sheet rows ⇄ in-memory store | No |
 | `Analysis.gs` | Period report, flags, portfolio, trends | No |
 | `Review.gs` | Budget review | No |
-| `Inventory.gs` | Inventory: reads the count export, triage, inventory report, sheet rows | No |
-| `InventoryApi.gs` | Inventory endpoints: upload, notes, dashboard, report | Yes |
+| `InventoryRules.gs` | Reads the inventory count export and picks what to question. **The same file as inventory_audit's** | No |
+| `InventoryCheck.gs` | The regional check: summary per count, comparison with last month, report, sheet rows | No |
+| `InventoryApi.gs` | Inventory endpoints: upload, dashboard, report | Yes |
 | `Import.gs` | Upload endpoints (preview / commit) | Yes |
 | `Code.gs` | Setup, access, settings, read endpoints | Yes |
 | `Index.html` | Portfolio, Period report, Trends, Budget review, Upload & settings | — |
@@ -346,8 +343,10 @@ three-level nesting, and blank amounts. Real exports hold the company's
 financials, so they are kept out of the repository.
 
 The inventory tests (`tests/inventory_tests.js`, run by the same command)
-also run the endpoint files against `tests/gas_mock.js`, an in-memory
-stand-in for SpreadsheetApp, LockService and the other services.
+test the shared rules, check that the two copies of `InventoryRules.gs`
+match, and run the endpoint files against `tests/gas_mock.js`. That file is
+an in-memory stand-in for SpreadsheetApp, LockService and the other
+services. The made-up count exports are in `inventory_audit/tests/sample.js`.
 
 To click through the app without deploying, build a preview page. It runs
 every `.gs` file in the browser against the same stand-in:
@@ -356,5 +355,6 @@ every `.gs` file in the browser against the same stand-in:
 node pnl_tracker/tests/preview.js /tmp/preview.html --pnl
 ```
 
-Add `--user bar@example.com` to see the inventory-only role. Add
+Add `--user bar@example.com` to see the inventory-only role, and
+`--prop CODE:Name` to add a property, for example to upload real exports. Add
 `--vue <file>` to inline Vue when offline.

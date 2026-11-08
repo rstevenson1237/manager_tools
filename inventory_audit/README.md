@@ -9,6 +9,13 @@ property the signed-in user is working in. All interface and logic — the
 sheet-side actions are the one-time setup tasks (run from the Apps Script
 editor) and the CSV import (done from inside the app).
 
+**Where this fits.** The store team reviews its month-end count here and
+fixes what is wrong in R365. The regional manager then uploads the same R365
+export to the P&L Tracker's Inventory tab, which re-runs the same rules
+blind and lists what is still worth asking about. Both apps use one rules
+file, `InventoryRules.gs`, copied byte for byte into each project. The look
+matches the P&L Tracker.
+
 ---
 
 ## 1. Frontend: why Vue, and what it cost
@@ -57,7 +64,7 @@ single Sheet), so it can open any property's workbook by ID on demand.
 2. **Property admin** — per property. Can upload/replace/remove data and edit
    settings for *that property only*. Lets an owner delegate configuration to
    a property manager without handing them reach into every other property.
-3. **Property user** — per property. View-only access to that property.
+3. **Property user** — per property. Can work through the review and write notes for that property.
 
 Property admin/user lists are **not** stored in Script Properties or Document
 Properties — they live in a hidden **`_Config`** sheet inside each property's
@@ -101,7 +108,7 @@ signed-in user can access, each tagged with their role (`admin`/`user`).
 
 ## 3. Per-property configuration — the `_Config` sheet
 
-Each property's admins, users, visible columns, and note categories are
+Each property's admins, users, note categories and last uploads are
 stored as plain rows in a **hidden sheet named `_Config`** inside that
 property's own workbook — not JSON in a properties blob.
 
@@ -110,9 +117,13 @@ Setting          | Value
 -----------------|---------------------------------------------
 Property Admins  | alice@company.com, bob@company.com
 Property Users   | carol@company.com, dave@company.com
-Visible Columns  | uom, currentQty, currentCost, ...
 Note Categories  | CORRECT, CORRECT - ISSUE HAS BEEN RESOLVED, ...
+Last Upload: Beverage | oct.csv | 2026-11-03T14:02:00Z | gm@company.com
 ```
+
+Rows are found by their label, so their order does not matter. A
+`Visible Columns` row from an older version is ignored and dropped the next
+time settings are saved.
 
 This is deliberate, not incidental:
 
@@ -132,55 +143,68 @@ This is deliberate, not incidental:
 
 ---
 
-## 4. The review table — full report columns
+## 4. What gets picked for review — `InventoryRules.gs`
 
-The table shows the full range of reported data, not just Item/UofM/Qty/Flag/
-Notes: **Item, UofM, Current Qty, Current $ Cost, Current $ Total, Previous
-Qty, Prev $ Cost, Prev $ Total, Adjustment, Cost Acct, Inventory Acct, Flag,
-Price Variance** — plus Notes. Price Variance (`|ΔCost / PrevCost|`) is
-computed and shown for *every* row, not just the Price Changes category.
-Which of these columns are visible, and in what order and width, is
-controllable per property:
+The rules are the same file the P&L Tracker uses for the regional check, so
+the store reviews with exactly the rules it will be checked with. **Do not
+edit one copy only**: change `InventoryRules.gs`, copy it over the other
+project's, and run the tests (they fail when the copies differ).
 
-- **Visible columns** — admin-configurable in Settings (persisted per
-  property in `_Config`).
-- **Column order and width** — drag a column header to reorder it, or its
-  right edge to resize it. This is a **session-only view preference**: it
-  resets to the configured default on page reload, by design, so it never
-  drifts from what Settings defines.
-- **Density** — the table uses a compact row/cell padding so more rows and
-  columns fit on screen.
+Every item's change since the last count splits in two, and the two add up
+to R365's adjustment:
 
----
+- **price effect** = current qty × (current cost − previous cost): what the
+  cost change did to what was counted;
+- **quantity effect** = everything else.
 
-## 5. In-memory edits + background sync
+Ranking by the raw adjustment mixes the two. A case price keyed on a bottle
+shows up as a large "increase" even when fewer bottles were counted.
 
-- **Edits are instant and client-side.** Picking a note from the dropdown
-  updates the in-memory table immediately (row recolours, progress bar moves)
-  with **zero network round trip**. The full data set loaded once on page load
-  is the client's working copy for the session.
-- **Sync is a background batch**, either automatic (every 20 seconds, if there
-  are pending edits and Auto-sync is on) or on demand via **Sync now**. Every
-  entry in a batch gets an individual pass/fail result: a row that fails
-  (e.g. the sheet was re-imported underneath it) stays flagged **⚠ retry** and
-  pending — it is never silently dropped.
-- Each row shows a small sync badge: **● pending**, spinner while syncing,
-  **✓ synced** (fades after a moment), or **⚠ retry** on failure with the error
-  in a tooltip.
-- A pending-change counter appears in the header, and leaving the page with
-  unsynced changes triggers the browser's native "are you sure?" warning.
-- **Legacy notes are preserved.** Free-text notes saved before this dropdown
-  existed (or a category an admin has since removed) are shown as-is in the
-  `<select>` instead of being silently blanked.
+| Section | Rule |
+|---|---|
+| Not counted | R365 flag *Assumed 0*: nothing was entered. Missed, or really out? |
+| Possible cost or unit errors | Cost ×2.5 or more (or ÷2.5) since the last count. Within 3% of a pack size (6, 12, 24 …) it is named as a case price on a unit, or the reverse. Also a quantity with $0 cost. |
+| Price changes | Cost moved 10%+ and the price effect is $50+; top 25 |
+| Large decreases / increases | Quantity effect $250+ either way; top 10 each. Often right (it sold, a delivery came in), but worth a question: "did you really buy 3 cases?" |
+| Gone to zero | Zero now, $150+ at the last count. Sold out, or missed? |
+| New items | No cost at the last count; top 10 by value |
 
----
+An item can sit in several sections; it has one note, shown in each. Items
+at zero in both counts are never shown. Thresholds are in `INV_RULES`.
 
-## 6. Notes UI — category buttons above a filtered dropdown
+Deliberately **not** flagged:
 
-The old free-text `<input>` is a `<select>`. Above it, three buttons —
-**CORRECT / REVIEW / ADJUST** — set the row's category; picking one both fills
-in the bare category value and **filters the dropdown to only that category's
-options**. Default list (per property, editable in Settings):
+- **R365's "More than Twice" / "Less than Half" flags.** They have no dollar
+  floor, so they flag $3 moves. The quantity effect, with a dollar floor,
+  replaces them.
+- **Fractional counts.** Wines sold by the glass, and liquor R365 converts
+  between 750 ml and 1 L, are counted in fractions on purpose.
+- **Food-coded items in a beverage count.** Accounts are company-wide, so a
+  bar's cocktail ingredients are coded to food.
+
+On real beverage counts (about 1,500 items) this picks about 50 items a
+month. Items whose dollar impact is **$1,000 or more** (`INV_RULES.highImpact`)
+carry a *High impact* badge. These are what the regional check lists. On a
+properly audited count, fewer than 10 should be left.
+
+## 5. The review page
+
+The page follows the P&L Tracker's Inventory review:
+
+- **Header:** the count, when it was uploaded and by whom, and review
+  progress. Below it, cards for inventory value, the price and quantity
+  split, and high-impact items without a note.
+- **Show:** *Largest dollar impact first* (the default), *By section*,
+  *By account* (to split the work: wine, liquor …), or *Action items*
+  (ADJUST / REVIEW). Also **Find an item** and **Only items without a note**.
+- **Table:** item, quantity and cost (last count → now), value, dollar
+  impact (with the price and quantity parts), why it is here (the question to
+  answer), and the note.
+
+## 6. Notes, saved in the background
+
+Each item gets a note. The **CORRECT / REVIEW / ADJUST** buttons pick the
+type and narrow the list. Default list (per property, editable in Settings):
 
 ```
 CORRECT
@@ -196,53 +220,58 @@ ADJUST - INCORRECT PRICE IN SYSTEM
 ADJUST - PRODUCT NEEDS TO BE RECOSTED
 ```
 
-Row colouring (green/yellow/red) is unchanged — still driven by the CORRECT/
-REVIEW/ADJUST prefix of the saved note, computed server-side in
-`statusForNote_`.
+- Edits are instant: the row recolours (green, yellow, red) with no network
+  round trip.
+- Notes are saved in one batch every 20 seconds, or with **Save now**. Each
+  entry gets its own result. One that fails (for example, the sheet was
+  re-imported underneath it) stays queued, marked *retry* with the reason.
+- Leaving the page with unsaved notes triggers the browser's warning.
+- A note no longer in the list (a legacy free-text note, or one removed in
+  Settings) still shows as-is.
+- Writes are keyed by row number, with an item-name check.
 
----
+## 7. Settings
 
-## 7. Settings panel
+Property admins get a **Settings** button in the top bar:
 
-Property admins get a **⚙ Settings** button (next to Refresh) opening a panel
-scoped to the active property:
+- **Property admins:** can upload and remove counts and change settings
+  for this property.
+- **Property users:** can work through the review and write notes.
+- **Notes:** add or remove options. Each must start with `CORRECT`,
+  `REVIEW` or `ADJUST`.
+- **Reset to defaults.**
+- **Global admins** *(global admins only):* the list with access to every
+  property.
 
-- **Property admins** — accounts that can upload/replace data, remove data,
-  and change settings for this property.
-- **Property users** — accounts with view-only access to this property.
-- **Visible columns** — checkboxes for which report columns show (Item and
-  Notes are always shown).
-- **Note categories** — add/remove dropdown options; each must start with
-  `CORRECT`, `REVIEW`, or `ADJUST`.
-- **Reset to defaults** — restores this property's admins, users, columns,
-  and categories to the hardcoded defaults (the same recovery path as
-  hand-editing `_Config`, but from inside the app).
-- **Global admins** *(visible only to global admins)* — a separate section
-  for managing the account list with access to every property. Property
-  admins never see or can edit this.
+## 8. Uploading a count
 
----
+An admin opens **Upload** and chooses R365's **Inventory Count Item Details**
+CSV. The preview writes nothing. It shows:
 
-## 8. The category rules (unchanged, still in code)
+- whether every item's previous value plus its adjustment equals its
+  current value (quantity × cost is not checked: R365 rounds the quantity,
+  so it misses by a few dollars on expensive bottles);
+- value, the price and quantity split, and how many items are picked
+  (and how many are high impact);
+- **how the file relates to the count on file:**
+  - *Follows it:* the file's previous figures are the count on file's
+    current figures. This is next month's count. It replaces the old one,
+    notes and all.
+  - *The same count again:* same previous figures, for example after fixing
+    costs in R365 and exporting again. Notes carry over for items still
+    picked.
+  - *Does not follow:* a warning with examples. The months may be out of
+    order, or it may be the wrong property.
 
-Count Details columns used: Current Qty, Current $ Cost, Prev $ Cost, Adjustment.
+**One file, one tab.** A beverage count goes to the Beverage tab whole,
+food-coded cocktail ingredients included, and a food count goes to the Food
+tab. Only a full count (no clear majority of accounts) is split by
+inventory account. A tab the file does not cover is left alone.
 
-| Category | Rule | Limit |
-|---|---|---|
-| Price Changes | Qty > 0 and a valid variance; sort by `\|ΔCost / PrevCost\|` desc | 25 |
-| Decreases | all rows sorted by Adjustment ascending (most negative first) | 10 |
-| Increases | all rows sorted by Adjustment descending | 10 |
-| New Items | Prev Cost = 0 and Qty > 0 and Cur Cost > 0 | 10 |
-| $0 Cost | Qty > 0 and Cur Cost = 0 | 10 |
-| Uncounted | Qty = 0 | all |
+**Remove all data** (admin) empties both tabs, notes included.
 
-Variance is `-1` when current cost is 0 (shown as "Zero $ cost"), and treated
-as *not applicable* when previous cost is 0 (a new item — it belongs under New
-Items, not Price Changes). Limits are in `CONFIG.CATEGORY_LIMITS`. Flags (`More
-than Twice`, `Less than Half`, …) come from the source system in the CSV and
-are displayed as-is.
-
----
+Every upload and settings function re-checks admin rights for the active
+property on the server.
 
 ## 9. Per-property workbook schema
 
@@ -257,10 +286,11 @@ Row 2+ : data (one row per unique item)
 
 _Config (hidden)
 Row 1 (header, frozen): Setting | Value
-Row 2+ : Property Admins | Property Users | Visible Columns | Note Categories
+Row 2+ : Property Admins | Property Users | Note Categories | Last Upload: <tab>
 ```
 
-Columns 1–12 of the Count Details tabs come from the CSV import; `Notes` /
+Columns 1–12 of the Count Details tabs come from the CSV import (stored as
+numbers); `Notes` /
 `Reviewed By` / `Reviewed At` are written by the app. The item name (column 1)
 is unique, so it's the stable identity used to preserve notes across
 re-imports.
@@ -271,52 +301,39 @@ re-imports.
 
 | File | Role |
 |---|---|
-| `Code.gs` | Backend: `doGet`, global store + registry (Script Properties), `_Config` sheet helpers, three-tier auth, property-aware `getInventoryData`/`saveNote`/`saveNotesBatch`/`getSettings`/`saveSettings`/`resetSettings`, `getBootstrap`, global-admin management, property-management functions (`addProperty`, `addExistingProperty`, `removeProperty`, `listProperties`). |
-| `Index.html` | The entire interface served into the web app — a Vue 3 app: bootstrap/property picker, review table with drag-reorder/resizable columns, notes dropdown, sync queue, admin CSV upload/remove, and the Settings panel. |
-| `Import.gs` | Admin-gated, property-aware server functions the web app calls: `getExistingDataSummary`, `processCSVData`, `removeAllCountData`. No spreadsheet menu. |
-| `appsscript.json` | Manifest: web-app deployment + scopes. Uses the full `spreadsheets` scope (not `.currentonly`) since the script opens many workbooks by ID. |
+| `InventoryRules.gs` | **Shared with the P&L Tracker.** Reads the R365 export, splits each change into price and quantity, picks the items to review, and compares a new export with the count on file. No Apps Script services. |
+| `Code.gs` | Backend: `doGet`, global store and registry (Script Properties), `_Config` sheet, three-tier access, `getInventoryData`, `saveNotesBatch`, settings, `getBootstrap`, global admins, and the property-management functions. |
+| `Import.gs` | Admin upload functions the page calls: `previewUpload`, `commitUpload`, `removeAllCountData`. |
+| `Index.html` | The whole interface (Vue 3): property picker, review table, notes and saving, upload with preview, and Settings. |
+| `appsscript.json` | Manifest: web-app deployment and scopes. |
+| `tests/` | Dev-only, not deployed: `run_tests.js` (endpoint tests against the Apps Script stand-in), `sample.js` (made-up exports), and `preview.js` (builds a clickable page without deploying). |
 
-Everything — review, note-taking, monthly upload, settings, and reset —
-happens inside the web app. **No one ever opens a property's spreadsheet**
-day-to-day (setup/property-management runs from the Apps Script editor once
-per property).
+```bash
+node inventory_audit/tests/run_tests.js
+```
 
----
+The shared rules are tested with the P&L Tracker:
 
-## 10a. Monthly upload behaviour (from inside the web app)
+```bash
+node pnl_tracker/tests/run_tests.js
+```
 
-An **Admin** bar appears at the top of the app only for accounts with admin
-rights (global or property) on the currently active property. Everyone else
-sees just the review UI. The upload is a clean slate each month — last
-month's data and notes are replaced, not merged:
+To click through the app without deploying:
 
-1. Admin clicks **Upload monthly counts (CSV)** and picks the file. The browser
-   reads it and sends the text to the server.
-2. The CSV is **parsed and validated first**. A missing column or malformed file
-   stops the import and **nothing existing is touched**.
-3. If the sheets already hold data, a modal shows a **warning listing exactly how
-   many rows will be erased** and requires confirmation.
-4. On confirm, each sheet is **deleted and recreated pristine** with the correct
-   header row, then the new data is written, split Beverage/Food by
-   `Inventory Acct`. The review UI reloads automatically.
-5. Managers add notes for the month (kept in memory, synced in the background).
-6. Next month: repeat. **Remove all data** (admin only) is available for a hard
-   reset between cycles.
+```bash
+node inventory_audit/tests/preview.js /tmp/audit.html --csv last-month.csv --csv this-month.csv
+```
 
-Every one of these server functions re-checks admin status for the active
-property independently, so a non-admin — or an admin of a *different*
-property — can't trigger a wipe (or a settings change) even by bypassing the
-hidden buttons.
-
----
+Add `--vue <file>` to inline Vue when offline, and `--user bar@example.com`
+to see the page as a property user.
 
 ## 11. Step-by-step implementation
 
 ### A. Install the code
 1. Go to [script.google.com](https://script.google.com) → **New project**
    (this is a **standalone** script — do not create it from within a Sheet).
-2. Add the files: `Code.gs`, `Import.gs` (script); `Index.html` (HTML, named
-   exactly `Index`). In **Project Settings**, show and replace
+2. Add the files: `InventoryRules.gs`, `Code.gs`, `Import.gs` (script);
+   `Index.html` (HTML, named exactly `Index`). In **Project Settings**, show and replace
    `appsscript.json` with the provided manifest.
 3. The seed global admin (`robert.stevenson@atlasrestaurantgroup.com`) lives in
    `DEFAULT_GLOBAL_ADMINS` in `Code.gs`. Change it there before first deploy
@@ -339,10 +356,15 @@ hidden buttons.
    temporary line calling it) and **Run**. Check **Executions** (or
    **View → Logs**) for the returned `{ id, name, spreadsheetId, url }`.
 6. Open the `/exec` URL. Since you're a global admin and there's now exactly
-   one property, the app loads straight into it — no picker. The **Admin**
-   bar appears → **Upload monthly counts (CSV)** → pick the export. Smoke-test
-   a note: pick a category + dropdown value, wait for auto-sync (or click Sync
-   now), and confirm it sticks after a Refresh.
+   one property, the app loads straight into it — no picker. Open **Upload**,
+   choose the export, check the preview and **Save count**. Smoke-test a
+   note: pick a type and a note, wait 20 seconds (or click **Save now**), and
+   confirm it sticks after a Refresh.
+
+**Updating an existing install:** add `InventoryRules.gs`, replace `Code.gs`,
+`Import.gs` and `Index.html`, and deploy a new version. Existing workbooks
+keep working: the Count Details tabs and notes are read as they are, and
+`_Config` is tidied the next time settings are saved.
 
 ### D. Add more properties
 7. Repeat step 5 with `addProperty("Second Property")` for each additional
@@ -376,18 +398,18 @@ hidden buttons.
   deploy as *User accessing* and grant managers edit access to each
   property's workbook — then the stamp is accurate. You can't have both.
   `CONFIG.ENABLE_AUDIT` toggles the stamp either way.
-- **Tuning categories (computed sections, not notes):** change counts in
-  `CONFIG.CATEGORY_LIMITS` or labels/order in `CONFIG.CATEGORY_ORDER` — these
-  apply to every property. To add a datastore (e.g. a third table per
+- **Tuning the rules:** change `INV_RULES` in `InventoryRules.gs`. They
+  apply to every property, and to the P&L Tracker's check once the file is
+  copied over. To add a datastore (e.g. a third table per
   property), add an entry to `CONFIG.DATASTORES`. Note-category *dropdown
-  options*, visible columns, and admins/users are per-property and
+  options* and admins/users are per-property and
   admin-editable at runtime from the Settings panel — no redeploy needed.
 - **Concurrency:** writes are `LockService`-guarded (per property) with an
   item-name safety check; if a re-import shifts a row under an open page, the
   affected sync entries come back as per-row failures (flagged **⚠ retry**)
   rather than corrupting other rows in the same batch, and the user is asked
   to refresh.
-- **Auto-sync interval:** 20 seconds, set via `AUTO_SYNC_MS` in `Index.html`.
+- **Save interval:** 20 seconds, set via `SYNC_SECONDS` in `Index.html`.
 - **Recovering from a corrupted `_Config` sheet.** Because it's a plain
   sheet, not an opaque properties blob, the workbook owner can open it
   directly (**View → Hidden sheets** to unhide it) and hand-fix a `Setting |
