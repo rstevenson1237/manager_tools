@@ -10,6 +10,13 @@ Status legend: 🔲 Not started · 🟡 In progress · ✅ Done · ⏭️ Skippe
 | [Phase 4](#phase-4-composition-api-evaluation) | Composition API rewrite (#2b) | 🔲 Not started — original trigger premise found invalid, awaiting user decision |
 | Phase 5+ | *(not yet defined — see "Growing this plan")* | — |
 
+> **2026-11-08 — `inventory_audit` rebuilt.** Its `Index.html` was rewritten to match the P&L
+> Tracker's look and review workflow, and its review rules now come from the shared
+> `InventoryRules.gs` (see `inventory_audit/README.md`). Column drag-reorder/resize, the
+> visible-columns setting and the auto-sync toggle are gone. Notes still save in batches
+> every 20 seconds. The inventory-specific rows below (drag/resize, `tr.section` sticky
+> offset, `applyEdit`) describe the old page. Phases 1–3 still hold for `payroll_audit`.
+
 ---
 
 ## How to use this doc (read this first if you're a new session)

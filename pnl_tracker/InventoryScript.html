@@ -1,159 +1,80 @@
 <script>
-  /* Inventory review (included by Index.html before the main script). The
-   * main app mixes this in: it shares boot, go(), toast() and the number
-   * formatting. Notes are edited in memory and saved in batches, as in
-   * inventory_audit: every INV_SYNC_SECONDS, with "Save now", and before a
-   * report is saved. An entry that fails stays in the queue, marked retry. */
-  const INV_MODES = [
-    { key: 'category', label: 'By section', hint: '' },
-    { key: 'impact', label: 'Largest dollar size first', hint: 'Every item under review once, largest dollar size first. Work down from the top.' },
-    { key: 'account', label: 'By account', hint: 'Items under review grouped by inventory and cost account, so the work can be split (wine, liquor, food …).' },
-    { key: 'actions', label: 'Action items (ADJUST / REVIEW)', hint: 'Items marked ADJUST or REVIEW: what to fix in R365 or count again.' }
-  ];
-  const INV_PREFIXES = [{ key: 'correct', prefix: 'CORRECT' }, { key: 'review', prefix: 'REVIEW' }, { key: 'adjust', prefix: 'ADJUST' }];
-  const INV_SYNC_SECONDS = 20;
+  /* Regional inventory check (included by Index.html before the main script).
+   * The main app mixes this in: it shares boot, go(), toast() and the number
+   * formatting. The regional manager uploads each property's count export
+   * (several at once); the report lists what is still worth asking the store
+   * about. There are no notes here: the store teams review in inventory_audit. */
   /** The month a count closes: last month until the 20th, then this month. */
   const invDefaultPeriod = () => {
     const d = new Date();
     if (d.getDate() <= 20) d.setDate(0);
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
   };
-  const invStatusOf = note => {
-    const n = String(note || '').trim().toUpperCase();
-    if (!n) return '';
-    const p = INV_PREFIXES.filter(x => n.indexOf(x.prefix) === 0)[0];
-    return p ? p.key : 'other';
-  };
   const invByName = (a, b) => String(a.name).localeCompare(String(b.name));
+  const invNorm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
   const InventoryMixin = {
     data() {
       return {
-        INV_MODES, INV_PREFIXES, INV_SYNC_SECONDS,
         inv: {
-          sub: 'dashboard', dash: null, dashLoading: false, dashError: '', showAllActions: false,
-          countId: null, data: null, loading: false, error: '', mode: 'category', onlyOpen: false, search: '', focus: null, sticky: {},
-          pending: {}, status: {}, errors: {}, cats: {}, syncing: false,
-          repKey: null, rep: null, repLoading: false, repError: '', repSaving: false, summaryDraft: '',
-          up: { stage: null, fileName: '', text: null, property: '', period: invDefaultPeriod(), label: '', preview: null, error: '' }
+          sub: 'dashboard', dash: null, dashLoading: false, dashError: '',
+          repKey: null, rep: null, repLoading: false, repError: '', showOthers: false, copyText: '',
+          up: { period: invDefaultPeriod(), files: [], saving: false, seq: 0 }
         }
       };
     },
     computed: {
       invCanEdit() { return !!this.boot.canEditInventory; },
       invSubViews() {
-        const v = [{ key: 'dashboard', label: 'Dashboard' }, { key: 'review', label: 'Review' }, { key: 'report', label: 'Report' }];
+        const v = [{ key: 'dashboard', label: 'Dashboard' }, { key: 'report', label: 'Report' }];
         return this.invCanEdit ? v.concat([{ key: 'upload', label: 'Upload' }]) : v;
       },
-      invPendingCount() { return Object.keys(this.inv.pending).length; },
       invProperties() {
         const by = {};
         (this.boot.properties || []).concat(this.inv.dash ? this.inv.dash.properties : []).forEach(p => { if (!by[p.code]) by[p.code] = p; });
         return Object.values(by).filter(p => p.active !== false).sort(invByName);
       },
-      invDashRows() {
-        if (!this.inv.dash) return [];
-        return this.inv.dash.counts.slice().sort((a, b) => b.period.localeCompare(a.period) ||
-          this.propertyName(a.property).localeCompare(this.propertyName(b.property)) || a.label.localeCompare(b.label));
-      },
-      invCountOptions() { return this.invDashRows; },
-      invDashTotals() {
-        const t = { counts: 0, total: 0, open: 0, adjust: 0, review: 0, impact: 0 };
-        this.invDashRows.forEach(c => {
-          t.counts++; t.total += c.reviewItems; t.open += Math.max(0, c.reviewItems - c.review.noted);
-          t.adjust += c.review.adjust; t.review += c.review.review; t.impact += c.review.openImpact;
-        });
-        return t;
-      },
-      invLabelChoices() {
-        const out = ['Food', 'Beverage', 'Full count'];
-        (this.inv.dash ? this.inv.dash.counts : []).filter(c => c.property === this.inv.up.property).forEach(c => {
-          if (!out.some(l => l.toLowerCase() === c.label.toLowerCase())) out.push(c.label);
-        });
-        return out;
-      },
-      invNoted() { const d = this.inv.data; return d ? Object.keys(d.items).filter(k => this.invNote(k)).length : 0; },
-      invStatusCounts() {
-        const s = { correct: 0, review: 0, adjust: 0, other: 0 };
-        const d = this.inv.data;
-        if (d) Object.keys(d.items).forEach(k => { const st = this.invStatus(k); if (st) s[st]++; });
-        return s;
-      },
-      invModeHint() { const m = INV_MODES.filter(x => x.key === this.inv.mode)[0]; return m ? m.hint : ''; },
-      invRows() {
-        const d = this.inv.data;
-        if (!d) return [];
-        const q = this.inv.search.trim().toLowerCase();
-        const keep = key => {
-          const it = d.items[key];
-          if (!it) return false;
-          if (q && it.item.toLowerCase().indexOf(q) === -1) return false;
-          if (this.inv.onlyOpen && this.invNote(key) && !this.inv.sticky[key]) return false;
-          return true;
-        };
-        const byImpact = (a, b) => d.items[b].impact - d.items[a].impact || a.localeCompare(b);
-        const row = (key, cat) => ({ id: (cat || '') + ':' + key, key: key, it: d.items[key], cat: cat || null });
-        const out = [];
-        if (this.inv.mode === 'category') {
-          d.sections.forEach(s => {
-            const keys = s.keys.filter(keep);
-            if (!keys.length) return;
-            out.push({ id: 'h-' + s.key, head: s.label + ' · ' + (keys.length === s.keys.length ? s.keys.length : keys.length + ' of ' + s.keys.length), sub: s.hint });
-            keys.forEach(k => out.push(row(k, s.key)));
-          });
-        } else if (this.inv.mode === 'impact') {
-          Object.keys(d.items).filter(keep).sort(byImpact).forEach(k => out.push(row(k)));
-        } else if (this.inv.mode === 'account') {
-          const groups = {};
-          Object.keys(d.items).filter(keep).forEach(k => {
-            const it = d.items[k];
-            const g = (it.inventoryAcct || 'No inventory account') + ' · ' + (it.costAcct || 'No cost account');
-            (groups[g] = groups[g] || { name: g, keys: [], impact: 0 }).keys.push(k);
-            groups[g].impact += it.impact;
-          });
-          Object.values(groups).sort((a, b) => b.impact - a.impact).forEach(g => {
-            out.push({ id: 'h-' + g.name, head: g.name + ' · ' + g.keys.length, sub: this.money(g.impact) + ' dollar size' });
-            g.keys.sort(byImpact).forEach(k => out.push(row(k)));
-          });
-        } else {
-          const rank = { adjust: 0, review: 1 };
-          Object.keys(d.items).filter(k => keep(k) && rank[this.invStatus(k)] != null)
-            .sort((a, b) => rank[this.invStatus(a)] - rank[this.invStatus(b)] || byImpact(a, b)).forEach(k => out.push(row(k)));
-        }
-        return out;
-      },
-      invReportOptions() {
+      invChecks() { return this.inv.dash ? this.inv.dash.checks : []; },
+      /** One row per property and month, newest month first. */
+      invMonths() {
         const by = {};
-        if (this.inv.dash) {
-          this.inv.dash.counts.forEach(c => { by[c.property + '|' + c.period] = { key: c.property + '|' + c.period, property: c.property, period: c.period, live: true }; });
-          this.inv.dash.reports.forEach(r => { const k = r.property + '|' + r.period; if (!by[k]) by[k] = { key: k, property: r.property, period: r.period, live: false }; });
-        }
+        this.invChecks.forEach(c => {
+          const k = c.property + '|' + c.period;
+          const m = by[k] = by[k] || { key: k, property: c.property, period: c.period, counts: [], value: 0, prev: 0, picked: 0, high: 0, highValue: 0, tieOuts: 0, notCounted: 0 };
+          m.counts.push(c); m.value += c.current; m.prev += c.previous; m.picked += c.picked;
+          m.high += c.highImpact; m.highValue += c.highImpactValue; m.tieOuts += c.tieOuts; m.notCounted += c.notCounted;
+        });
         return Object.values(by).sort((a, b) => b.period.localeCompare(a.period) || this.propertyName(a.property).localeCompare(this.propertyName(b.property)));
       },
+      invLatest() {
+        const latest = this.invMonths.length ? this.invMonths[0].period : null;
+        const rows = this.invMonths.filter(m => m.period === latest);
+        return { period: latest, rows: rows, high: rows.reduce((s, m) => s + m.high, 0), highValue: rows.reduce((s, m) => s + m.highValue, 0),
+          clean: rows.filter(m => !m.high && !m.tieOuts).length };
+      },
+      invReportOptions() { return this.invMonths.map(m => ({ key: m.key, property: m.property, period: m.period })); },
       invRep() { return this.inv.rep && this.inv.rep.report; },
-      invReportSentence() {
-        const r = this.inv.rep;
-        if (!r || !r.report) return '';
-        const counts = r.report.counts.map(c => c.label + ' (uploaded ' + this.dayLabel(c.uploadedAt) + ')').join(' + ');
-        if (!r.live) return counts + ' · saved ' + this.dayLabel(r.saved.savedAt) + (r.saved.savedBy ? ' by ' + r.saved.savedBy : '');
-        return counts + ' · ' + (r.saved ? 'report saved ' + this.dayLabel(r.saved.savedAt) + (r.saved.savedBy ? ' by ' + r.saved.savedBy : '') +
-          '; this page shows the counts as they are now' : 'report not saved yet');
+      invUpReady() { return this.inv.up.files.filter(f => f.stage === 'preview' && !f.preview.duplicateOf); },
+      invLabelChoices() {
+        const out = ['Food', 'Beverage', 'Full count'];
+        this.invChecks.forEach(c => { if (!out.some(l => l.toLowerCase() === c.label.toLowerCase())) out.push(c.label); });
+        return out;
       }
     },
-    mounted() {
-      this._invTimer = setInterval(() => { if (this.invPendingCount && !this.inv.syncing) this.invSync(false); }, INV_SYNC_SECONDS * 1000);
-      window.addEventListener('beforeunload', e => { if (this.invPendingCount) { e.preventDefault(); e.returnValue = ''; } });
-    },
     methods: {
-      /* ---------- formatting ---------- */
       qty(v) { if (v == null || v === '' || isNaN(v)) return '—'; const n = Number(v); return Math.abs(n - Math.round(n)) < 0.005 ? String(Math.round(n)) : n.toFixed(2).replace(/0$/, ''); },
       cost(v) { if (v == null || v === '' || isNaN(v)) return '—'; return '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); },
-      invPct(n, d) { return d ? Math.min(100, n / d * 100) : 100; },
       invKpi(k) {
         if (k.kind === 'money') return k.signed ? this.signed(k.value) : this.money(k.value);
-        if (k.kind === 'pct') return this.pct(k.value, 0);
         if (k.kind === 'days') return Math.round(k.value);
         return String(k.value);
+      },
+      invFollowsText(f) {
+        if (!f || f.status === 'first') return 'First count on file';
+        if (f.status === 'gap') return 'Last count on file is ' + this.monthLabel(f.period);
+        if (f.status === 'differs') return 'Does not follow ' + this.monthLabel(f.period, true);
+        const since = [f.changedBy ? this.signed(f.changedBy) + ' on its total' : '', f.items ? f.items + ' picked item' + (f.items === 1 ? '' : 's') : ''].filter(Boolean);
+        return 'Follows ' + this.monthLabel(f.period, true) + (since.length ? ' (changed since: ' + since.join(', ') + ')' : '');
       },
 
       /* ---------- navigation ---------- */
@@ -161,12 +82,7 @@
       async invGo(sub) {
         this.inv.sub = sub;
         if (sub === 'dashboard' || !this.inv.dash) await this.loadInvDash();
-        if (sub === 'review') this.loadInvCount();
         if (sub === 'report') this.loadInvReport();
-        if (sub === 'upload' && !this.inv.up.property) {
-          const p = this.invProperties.filter(x => x.code === this.property)[0] || this.invProperties[0];
-          this.inv.up.property = p ? p.code : '';
-        }
       },
       async loadInvDash() {
         this.inv.dashLoading = true; this.inv.dashError = '';
@@ -174,119 +90,10 @@
         catch (err) { this.inv.dashError = err.message; }
         this.inv.dashLoading = false;
       },
-      openInvCount(id, focusKey) {
-        this.inv.countId = id;
-        this.inv.focus = focusKey || null;
-        if (focusKey) { this.inv.mode = 'actions'; this.inv.search = ''; this.inv.onlyOpen = false; }
-        if (this.view !== 'inventory') this.view = 'inventory';
-        this.invGo('review');
-      },
       openInvReport(property, period) {
         this.inv.repKey = property + '|' + period;
         if (this.view !== 'inventory') this.view = 'inventory';
         this.invGo('report');
-      },
-
-      /* ---------- review ---------- */
-      async loadInvCount() {
-        const opts = this.invCountOptions;
-        if (!opts.length) { this.inv.data = null; return; }
-        if (!opts.some(c => c.id === this.inv.countId)) this.inv.countId = opts[0].id;
-        this.inv.loading = true; this.inv.error = ''; this.inv.cats = {}; this.inv.sticky = {};
-        try { this.inv.data = await gas('getInventoryCount', this.inv.countId); }
-        catch (err) { this.inv.data = null; this.inv.error = err.message; this.loadInvDash(); }
-        this.inv.loading = false;
-        if (this.inv.focus) {
-          const key = this.inv.focus;
-          this.$nextTick(() => {
-            const el = Array.from(document.querySelectorAll('tr.inv-row')).filter(tr => tr.getAttribute('data-key') === key)[0];
-            if (el) el.scrollIntoView({ block: 'center' });
-          });
-        }
-      },
-      invKey(key) { return this.inv.countId + '|' + key; },
-      invNote(key) {
-        const p = this.inv.pending[this.invKey(key)];
-        if (p) return p.note;
-        const n = this.inv.data && this.inv.data.notes[key];
-        return n ? n.note : '';
-      },
-      invStatus(key) { return invStatusOf(this.invNote(key)); },
-      invNoteMeta(key) {
-        if (this.inv.pending[this.invKey(key)]) return '';
-        const n = this.inv.data && this.inv.data.notes[key];
-        return n && n.by ? n.by + ' · ' + this.dayLabel(n.at) : '';
-      },
-      invCategory(key) {
-        const c = this.inv.cats[this.invKey(key)];
-        if (c != null) return c;
-        const st = this.invStatus(key);
-        const p = INV_PREFIXES.filter(x => x.key === st)[0];
-        return p ? p.prefix : '';
-      },
-      /** A note-type button: filters the list, and picks the bare type (e.g. "CORRECT") when it is one of the notes. */
-      invSetCategory(key, prefix) {
-        this.inv.cats[this.invKey(key)] = prefix;
-        const cur = this.invNote(key);
-        if (cur && cur.toUpperCase().indexOf(prefix) === 0) return;
-        if ((this.inv.data.noteCategories || []).indexOf(prefix) !== -1) this.invApply(key, prefix);
-      },
-      invOptions(key) {
-        const cat = this.invCategory(key);
-        const list = (this.inv.data.noteCategories || []).filter(o => !cat || o.toUpperCase().indexOf(cat) === 0);
-        const cur = this.invNote(key);
-        if (cur && list.indexOf(cur) === -1) list.unshift(cur); // a note since removed from Settings stays visible
-        return list;
-      },
-      invApply(key, value) {
-        const k = this.invKey(key);
-        const saved = this.inv.data.notes[key] ? this.inv.data.notes[key].note : '';
-        if (this.inv.onlyOpen) this.inv.sticky[key] = true;
-        if (value === saved) { delete this.inv.pending[k]; delete this.inv.status[k]; delete this.inv.errors[k]; }
-        else { this.inv.pending[k] = { countId: this.inv.countId, key: key, note: value }; this.inv.status[k] = 'pending'; delete this.inv.errors[k]; }
-        if (value) { const st = invStatusOf(value); const p = INV_PREFIXES.filter(x => x.key === st)[0]; if (p) this.inv.cats[k] = p.prefix; }
-      },
-      /** Save queued notes, one call per count. Automatic saves skip entries that already failed; "Save now" retries them. */
-      async invSync(manual) {
-        if (this.inv.syncing) return;
-        const entries = Object.keys(this.inv.pending)
-          .filter(k => manual !== false || this.inv.status[k] !== 'error')
-          .map(k => Object.assign({ k: k }, this.inv.pending[k]));
-        if (!entries.length) return;
-        this.inv.syncing = true;
-        const byCount = {};
-        entries.forEach(e => { (byCount[e.countId] = byCount[e.countId] || []).push(e); });
-        let failed = 0, firstError = '';
-        for (const countId of Object.keys(byCount)) {
-          const list = byCount[countId];
-          list.forEach(e => { this.inv.status[e.k] = 'syncing'; });
-          try {
-            const res = await gas('saveInventoryNotes', countId, list.map(e => ({ key: e.key, note: e.note })));
-            res.results.forEach((r, i) => {
-              const e = list[i];
-              if (!r.ok) { failed++; firstError = firstError || r.error; this.inv.status[e.k] = 'error'; this.inv.errors[e.k] = r.error; return; }
-              const changedSince = this.inv.pending[e.k] && this.inv.pending[e.k].note !== e.note;
-              if (!changedSince) delete this.inv.pending[e.k];
-              if (this.inv.data && this.inv.data.count.id === countId) {
-                if (e.note) this.inv.data.notes[e.key] = { note: e.note, status: r.status, by: r.by, at: r.at };
-                else delete this.inv.data.notes[e.key];
-              }
-              delete this.inv.errors[e.k];
-              this.inv.status[e.k] = changedSince ? 'pending' : 'synced';
-              if (!changedSince) setTimeout(() => { if (this.inv.status[e.k] === 'synced') delete this.inv.status[e.k]; }, 2500);
-            });
-          } catch (err) {
-            failed += list.length; firstError = firstError || err.message;
-            list.forEach(e => { this.inv.status[e.k] = 'error'; this.inv.errors[e.k] = err.message; });
-          }
-        }
-        this.inv.syncing = false;
-        if (failed) this.toast(failed + ' note' + (failed === 1 ? '' : 's') + ' could not be saved: ' + firstError, 'error');
-      },
-      invReasons(r) {
-        const rs = r.it.reasons || [];
-        if (!r.cat) return rs.map(x => x.text);
-        return rs.filter(x => x.cat === r.cat).concat(rs.filter(x => x.cat !== r.cat)).map(x => x.text);
       },
 
       /* ---------- report ---------- */
@@ -295,79 +102,87 @@
         if (!opts.length) { this.inv.rep = null; return; }
         if (!opts.some(o => o.key === this.inv.repKey)) this.inv.repKey = opts[0].key;
         const i = this.inv.repKey.lastIndexOf('|');
-        this.inv.repLoading = true; this.inv.repError = '';
-        try {
-          this.inv.rep = await gas('getInventoryReport', this.inv.repKey.slice(0, i), this.inv.repKey.slice(i + 1));
-          this.inv.summaryDraft = this.inv.rep.saved ? this.inv.rep.saved.summary : ((this.inv.rep.report && this.inv.rep.report.summary) || '');
-        } catch (err) { this.inv.rep = null; this.inv.repError = err.message; }
+        this.inv.repLoading = true; this.inv.repError = ''; this.inv.showOthers = false; this.inv.copyText = '';
+        try { this.inv.rep = await gas('getInventoryReport', this.inv.repKey.slice(0, i), this.inv.repKey.slice(i + 1)); }
+        catch (err) { this.inv.rep = null; this.inv.repError = err.message; }
         this.inv.repLoading = false;
       },
-      async saveInvReport() {
-        const r = this.inv.rep.report;
-        this.inv.repSaving = true;
-        try {
-          if (this.invPendingCount) await this.invSync(true);
-          if (this.invPendingCount) throw new Error('Some notes could not be saved. Fix them (marked retry) before saving the report.');
-          const res = await gas('saveInventoryReport', r.property, r.period, this.inv.summaryDraft);
-          this.toast('Report saved.', 'success');
-          await this.loadInvReport();
-          this.loadInvDash();
-          return res;
-        } catch (err) { this.toast(err.message, 'error'); }
-        finally { this.inv.repSaving = false; }
+      /** The questions as plain text, to paste into an email to the store manager. */
+      invQuestionsText() {
+        const r = this.invRep;
+        const lines = [this.propertyName(r.property) + ' · ' + this.monthLabel(r.period) + ' inventory: questions', ''];
+        r.issues.forEach(x => lines.push('! ' + x));
+        if (r.issues.length) lines.push('');
+        r.questions.forEach((q, i) => {
+          lines.push((i + 1) + '. ' + q.item + (r.counts.length > 1 ? ' (' + q.countLabel + ')' : '') + ': $' + this.money(q.impact));
+          q.reasons.forEach(x => lines.push('   ' + x));
+          if (q.history) lines.push('   ' + q.history);
+        });
+        if (!r.questions.length) lines.push('No items of $' + this.money(r.highImpact) + ' or more to ask about.');
+        return lines.join('\n');
+      },
+      async invCopy() {
+        const text = this.invQuestionsText();
+        this.inv.copyText = text;
+        try { await navigator.clipboard.writeText(text); this.toast('Questions copied. Paste them into an email to the store.', 'success'); }
+        catch (e) { this.$nextTick(() => { const el = document.getElementById('inv-copy'); if (el) { el.focus(); el.select(); } }); }
       },
 
-      /* ---------- upload ---------- */
-      onInvFile(e) {
-        const f = e.target.files[0]; if (!f) return;
-        const reader = new FileReader();
-        reader.onload = ev => { e.target.value = ''; this.inv.up.fileName = f.name; this.inv.up.text = ev.target.result; this.previewInv(); };
-        reader.readAsText(f);
+      /* ---------- upload (several files at once) ---------- */
+      /** The property a file name points to: a property name or code inside it, longest match first. */
+      invGuessProperty(fileName) {
+        const name = ' ' + invNorm(fileName) + ' ';
+        const hits = this.invProperties.map(p => {
+          const words = [invNorm(p.name), invNorm(p.code)].filter(Boolean);
+          const w = words.filter(x => name.indexOf(' ' + x + ' ') !== -1).sort((a, b) => b.length - a.length)[0];
+          return w ? { code: p.code, len: w.length } : null;
+        }).filter(Boolean).sort((a, b) => b.len - a.len);
+        return hits.length ? hits[0].code : '';
       },
-      invRepreview() { if (this.inv.up.text && this.inv.up.stage !== 'saving') this.previewInv(); },
-      /** The count name re-checks as you type (after a pause), so leaving the box never swallows a click on Save. */
-      invRepreviewSoon() { clearTimeout(this._invTyping); this._invTyping = setTimeout(() => this.invRepreview(), 500); },
-      async previewInv() {
-        const u = this.inv.up;
-        const seq = this._invPreviewSeq = (this._invPreviewSeq || 0) + 1;
-        u.error = '';
-        if (!u.property) { u.preview = null; u.stage = 'error'; u.error = 'Choose the property first.'; return; }
-        if (!/^\d{4}-\d{2}$/.test(u.period || '')) { u.preview = null; u.stage = 'error'; u.error = 'Enter the month the count closes, as YYYY-MM.'; return; }
-        u.stage = 'reading';
+      onInvFiles(e) {
+        Array.from(e.target.files || []).forEach(f => {
+          const reader = new FileReader();
+          const entry = { id: ++this.inv.up.seq, fileName: f.name, text: null, property: this.invGuessProperty(f.name), label: '', stage: 'reading', preview: null, error: '', result: null, previewSeq: 0 };
+          this.inv.up.files.push(entry);
+          reader.onload = ev => { const x = this.inv.up.files.filter(y => y.id === entry.id)[0]; if (x) { x.text = ev.target.result; this.previewInvFile(x); } };
+          reader.readAsText(f);
+        });
+        e.target.value = '';
+      },
+      invRepreviewAll() { this.inv.up.files.forEach(f => { if (f.text && f.stage !== 'saved') this.previewInvFile(f); }); },
+      invRepreviewSoon(f) { clearTimeout(f._t); f._t = setTimeout(() => this.previewInvFile(f), 500); },
+      async previewInvFile(f) {
+        const seq = ++f.previewSeq;
+        f.error = ''; f.result = null;
+        if (!f.property) { f.stage = 'error'; f.preview = null; f.error = 'Choose the property.'; return; }
+        if (!/^\d{4}-\d{2}$/.test(this.inv.up.period || '')) { f.stage = 'error'; f.preview = null; f.error = 'Enter the month the counts close, as YYYY-MM.'; return; }
+        f.stage = 'reading';
         try {
-          const p = await gas('previewInventoryUpload', u.text, u.fileName, u.property, u.period, u.label);
-          if (seq !== this._invPreviewSeq) return; // a newer check has started
-          if (!u.label) u.label = p.target.label;
-          u.preview = p; u.stage = 'preview';
-        } catch (err) {
-          if (seq !== this._invPreviewSeq) return;
-          u.preview = null; u.stage = 'error'; u.error = err.message;
+          const p = await gas('previewInventoryUpload', f.text, f.fileName, f.property, this.inv.up.period, f.label);
+          if (seq !== f.previewSeq) return;
+          if (!f.label) f.label = p.target.label;
+          f.preview = p; f.stage = 'preview';
+        } catch (err) { if (seq !== f.previewSeq) return; f.preview = null; f.stage = 'error'; f.error = err.message; }
+      },
+      invDropFile(f) { this.inv.up.files = this.inv.up.files.filter(x => x !== f); },
+      async commitInvAll() {
+        this.inv.up.saving = true;
+        let saved = 0;
+        for (const f of this.invUpReady) {
+          f.stage = 'saving';
+          try {
+            f.result = await gas('commitInventoryUpload', f.text, f.fileName, f.property, this.inv.up.period, f.label || f.preview.target.label);
+            f.stage = 'saved'; saved++;
+          } catch (err) { f.stage = 'error'; f.error = err.message; }
         }
+        this.inv.up.saving = false;
+        if (saved) this.toast('Saved ' + saved + ' count' + (saved === 1 ? '' : 's') + '.', 'success');
+        await this.loadInvDash();
       },
-      async commitInv() {
-        const u = this.inv.up;
-        clearTimeout(this._invTyping);
-        u.stage = 'saving';
-        try {
-          const res = await gas('commitInventoryUpload', u.text, u.fileName, u.property, u.period, u.label || u.preview.target.label);
-          this.toast('Saved the ' + res.label + ' count: ' + res.reviewItems + ' items to review' + (res.keptNotes ? ', ' + res.keptNotes + ' notes kept' : '') + '.', 'success');
-          this.resetInvUpload();
-          await this.loadInvDash();
-          this.openInvCount(res.countId);
-        } catch (err) { u.stage = 'error'; u.error = err.message; }
-      },
-      resetInvUpload() {
-        const u = this.inv.up;
-        this.inv.up = { stage: null, fileName: '', text: null, property: u.property, period: u.period, label: '', preview: null, error: '' };
-      },
+      invClearSaved() { this.inv.up.files = this.inv.up.files.filter(f => f.stage !== 'saved'); },
       async removeInvCount(c) {
-        if (!confirm('Remove the ' + c.label + ' count for ' + this.propertyName(c.property) + ', ' + this.monthLabel(c.period) + ', and its notes? A saved report stays.')) return;
-        try { await gas('removeInventoryCount', c.id); this.toast('Count removed.', 'success'); await this.loadInvDash(); }
-        catch (err) { this.toast(err.message, 'error'); }
-      },
-      async removeInvReport(r) {
-        if (!confirm('Delete the saved inventory report for ' + this.propertyName(r.property) + ', ' + this.monthLabel(r.period) + '?')) return;
-        try { await gas('removeInventoryReport', r.property, r.period); this.toast('Report deleted.', 'success'); await this.loadInvDash(); }
+        if (!confirm('Remove the ' + c.label + ' check for ' + this.propertyName(c.property) + ', ' + this.monthLabel(c.period) + '?')) return;
+        try { await gas('removeInventoryCount', c.id); this.toast('Check removed.', 'success'); await this.loadInvDash(); }
         catch (err) { this.toast(err.message, 'error'); }
       }
     }

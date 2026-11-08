@@ -4,936 +4,678 @@
   <base target="_top">
   <meta charset="utf-8">
   <style>
-    :root{--brand:#1a73e8;--brand-dark:#1557b0;--green:#ecfdf5;--green-b:#38761d;
-      --yellow:#fffbeb;--yellow-b:#bf9000;--red:#fff1f2;--red-b:#cc0000;--grey-b:#5f6368;--danger:#d93025;
-      --table-header-height:29px;}
+    /* Same look as the P&L Tracker (pnl_tracker/Index.html). */
+    :root{--brand:#1F5FAD;--brand-dark:#163F73;--brand-soft:#E8EFF8;--ink:#1A1D21;--muted:#5A6069;--line:#E2E2DC;
+      --ground:#F6F6F3;--good:#1F5FAD;--bad:#9A4508;--bad-soft:#FFF4E8;--bad-line:#EBC9A3;--danger:#b3271b;}
     *{box-sizing:border-box;}
     [v-cloak]{display:none;}
-    body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;margin:0;padding:8px;background:#f8f9fa;color:#202124;}
-    .header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:8px;}
-    h2{margin:0;color:var(--brand);font-size:20px;}
-    .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
-    button{background:var(--brand);color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;transition:background-color .15s ease;}
+    body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;margin:0;background:var(--ground);color:var(--ink);font-size:14px;}
+    nav.top{background:#fff;border-bottom:1px solid var(--line);padding:10px 16px;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;}
+    nav.top .title{font-weight:700;font-size:16px;}
+    nav.top .tabs{display:flex;flex-wrap:wrap;gap:4px;}
+    nav.top .tab{background:none;border:none;padding:10px 14px;border-radius:8px;font-size:14px;color:#3D434B;cursor:pointer;min-height:40px;font-weight:400;}
+    nav.top .tab:hover:not(:disabled){background:#F1F2EF;}
+    nav.top .tab.active,nav.top .tab.active:hover:not(:disabled){background:var(--brand-soft);color:var(--brand-dark);font-weight:600;}
+    nav.top .tab .count{font-size:12px;color:var(--muted);margin-left:6px;font-weight:400;}
+    nav.top .who{margin-left:auto;font-size:12px;color:var(--muted);display:flex;gap:10px;align-items:center;}
+    main{max-width:1200px;margin:0 auto;padding:20px 16px 60px;display:flex;flex-direction:column;gap:16px;}
+    h1{margin:0;font-size:24px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;}
+    h2{margin:0;font-size:16px;}
+    h3{margin:0 0 6px;font-size:14px;}
+    .row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between;}
+    .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;}
+    .field{display:flex;flex-direction:column;gap:4px;}
+    .field label{font-size:12px;color:var(--muted);}
+    select,input[type=text],input[type=email]{font:inherit;min-height:40px;padding:0 10px;border:1px solid #C9CCD1;border-radius:8px;background:#fff;color:var(--ink);}
+    button{font:inherit;font-weight:600;background:var(--brand);color:#fff;border:none;padding:0 16px;min-height:40px;border-radius:8px;cursor:pointer;}
     button:hover:not(:disabled){background:var(--brand-dark);}
-    button:disabled{background:#ccc;cursor:not-allowed;}
-    button.ghost{background:#e8eaed;color:#3c4043;}
-    button.ghost:hover:not(:disabled){background:#dadce0;}
+    button:disabled{background:#C9CCD1;cursor:not-allowed;}
+    button.ghost{background:#fff;color:var(--ink);border:1px solid #C9CCD1;}
+    button.ghost:hover:not(:disabled){background:#F1F2EF;}
     button.danger{background:var(--danger);}
-    button.danger:hover:not(:disabled){background:#b3271b;}
-    .toggle{display:flex;align-items:center;gap:5px;font-size:13px;color:var(--grey-b);cursor:pointer;user-select:none;}
-    .pending-indicator{font-size:12px;font-weight:700;color:var(--brand);background:#eef3fe;padding:5px 10px;border-radius:10px;white-space:nowrap;}
-    .property-select{width:auto;padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;background:#fff;color:#202124;font-weight:600;}
-    /* admin bar */
-    #adminBar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#eef3fe;border:1px solid #cfe0ff;
-      border-radius:8px;padding:10px 12px;margin-bottom:10px;}
-    #adminBar .who{font-size:12px;color:var(--grey-b);margin-left:auto;}
-    #adminBar label.upload{background:var(--brand);color:#fff;padding:8px 14px;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;}
-    #adminBar label.upload:hover{background:var(--brand-dark);}
-    #adminBar input[type=file]{display:none;}
-    .admin-title{font-weight:700;color:#3c4043;}
-    .tabs{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;}
-    .tab{background:#e8eaed;color:#3c4043;padding:8px 14px;border-radius:6px 6px 0 0;cursor:pointer;font-weight:600;border:none;}
-    .tab.active{background:var(--brand);color:#fff;}
-    .tab .count{font-weight:400;opacity:.85;margin-left:6px;font-size:12px;}
-    .toast-stack{position:fixed;top:16px;right:16px;z-index:60;display:flex;flex-direction:column;gap:8px;max-width:320px;}
-    .toast{padding:10px 36px 10px 12px;border-radius:6px;font-weight:600;font-size:13px;box-shadow:0 2px 10px rgba(0,0,0,.18);position:relative;animation:toast-in .15s ease;}
-    .icon{display:inline-block;vertical-align:-2px;flex-shrink:0;}
-    .toast-close{position:absolute;top:6px;right:6px;background:none;border:none;padding:2px 6px;line-height:1;cursor:pointer;color:inherit;opacity:.6;display:inline-flex;align-items:center;}
-    .toast-close:hover{opacity:1;}
-    @keyframes toast-in{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:translateY(0);}}
-    .s-loading{background:#e8f0fe;color:var(--brand);}
-    .s-success{background:#d4edda;color:#155724;}
-    .s-error{background:#f8d7da;color:#721c24;}
-    .progress-wrap{min-width:220px;}
-    .progress-bar{height:8px;background:#e0e0e0;border-radius:4px;overflow:hidden;}
-    .progress-fill{height:100%;background:var(--green-b);width:0%;transition:width .3s;}
-    .progress-label{font-size:12px;color:var(--grey-b);margin-top:2px;}
-    .table-container{width:100%;max-height:680px;overflow:auto;border:1px solid #ddd;background:#fff;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,.05);}
-    table{width:100%;border-collapse:collapse;}
-    th{background:#f1f3f4;padding:4px 8px;text-align:left;position:sticky;top:0;z-index:2;box-shadow:0 1px 0 #ddd;font-size:12px;white-space:nowrap;position:relative;height:var(--table-header-height);}
-    th[draggable=true]{cursor:grab;}
-    .col-resize{position:absolute;right:0;top:0;bottom:0;width:6px;cursor:col-resize;user-select:none;}
-    .col-resize:hover{background:rgba(0,0,0,.15);}
-    td{padding:4px 8px;border-bottom:1px solid #eee;font-size:13px;vertical-align:middle;white-space:nowrap;}
-    tr{transition:background-color .25s ease;}
-    tr.section td{background:#eef1f5;font-weight:700;color:#3c4043;text-transform:uppercase;letter-spacing:.03em;font-size:12px;position:sticky;top:var(--table-header-height);z-index:1;white-space:normal;}
-    tr.empty td{color:var(--grey-b);font-style:italic;font-size:12px;white-space:normal;}
-    tr.row-correct{background:var(--green);}
-    tr.row-review{background:var(--yellow);}
-    tr.row-adjust{background:var(--red);}
-    .dup-badge{display:inline-flex;align-items:center;gap:3px;margin-left:6px;font-size:10px;font-weight:700;color:#fff;background:var(--grey-b);border-radius:8px;padding:1px 6px;vertical-align:middle;}
-    .flag{font-weight:600;color:var(--red-b);}
-    .qty{text-align:right;font-variant-numeric:tabular-nums;}
-    .variance-high{color:var(--red-b);font-weight:700;}
-    .variance-mid{color:var(--yellow-b);font-weight:700;}
-    .note-cell{min-width:280px;white-space:normal;}
-    .cat-btns{display:flex;gap:4px;margin-bottom:6px;}
-    .cat-btn{flex:1;font-size:11px;padding:5px 4px;border-radius:6px;border:1px solid #ccc;background:#fff;color:#444;cursor:pointer;font-weight:700;letter-spacing:.02em;}
-    .cat-btn.cat-correct{border-color:var(--green-b);color:var(--green-b);}
-    .cat-btn.cat-review{border-color:var(--yellow-b);color:var(--yellow-b);}
-    .cat-btn.cat-adjust{border-color:var(--red-b);color:var(--red-b);}
-    .cat-btn.active.cat-correct{background:var(--green-b);color:#fff;}
-    .cat-btn.active.cat-review{background:var(--yellow-b);color:#fff;}
-    .cat-btn.active.cat-adjust{background:var(--red-b);color:#fff;}
-    .cat-btn:hover{filter:brightness(.97);}
-    .note-cell select{width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:5px;font-size:12px;background:#fff;color:#202124;}
-    .sync-cell{font-size:11px;}
-    .badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:3px 7px;border-radius:8px;white-space:nowrap;}
-    .badge-pending{background:#fff2cc;color:var(--yellow-b);}
-    .badge-syncing{background:#e8f0fe;color:var(--brand);}
-    .badge-synced{background:#d4edda;color:#155724;}
-    .badge-error{background:#f8d7da;color:#721c24;cursor:help;}
-    .muted{color:var(--grey-b);font-size:12px;}
-    .empty-state{padding:60px 20px;text-align:center;color:var(--grey-b);}
-    /* modal */
-    .overlay{position:fixed;inset:0;background:rgba(15,23,42,.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:50;display:flex;align-items:center;justify-content:center;}
-    .modal{background:#fff;border-radius:10px;max-width:460px;width:92%;padding:20px;box-shadow:0 8px 30px rgba(0,0,0,.3);}
-    .modal h3{margin:0 0 10px;color:var(--brand);}
-    .modal .warn{background:#fff3cd;border:1px solid #ffe08a;color:#7a5b00;border-radius:6px;padding:12px;}
-    .modal ul{margin:8px 0 0 18px;padding:0;}
-    .modal .row{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;}
+    button.small{min-height:30px;padding:0 10px;font-size:12px;}
+    button.link{background:none;color:var(--brand);padding:0;min-height:0;font-weight:600;}
+    button.link:hover:not(:disabled){background:none;text-decoration:underline;}
+    .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;}
+    .card.flush{padding:0;overflow:hidden;}
+    .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));}
+    .stat .label{font-size:12px;color:var(--muted);font-weight:600;}
+    .stat .value{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;}
+    .stat .sub{font-size:12px;color:var(--muted);}
+    .good{color:var(--good);} .bad{color:var(--bad);} .muted{color:var(--muted);font-size:12px;}
+    .badge{display:inline-block;font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;letter-spacing:.02em;white-space:nowrap;}
+    .badge.spike{background:#E8E9E6;color:#3D434B;} .badge.trend{background:var(--bad);color:#fff;}
+    .badge.impact{background:var(--bad-soft);color:#6B3608;border:1px solid #C9772E;}
+    .badge.st-correct{background:#E3F1DF;color:#2F6324;} .badge.st-review{background:#FFF3C9;color:#6B5000;} .badge.st-adjust{background:#B3401B;color:#fff;}
+    .badge.st-other{background:#E8E9E6;color:#3D434B;}
+    .banner{border-radius:10px;padding:12px 16px;font-size:13px;line-height:1.5;}
+    .banner.warn{background:var(--bad-soft);border:1px solid var(--bad-line);color:#4A2A0A;}
+    .banner.info{background:var(--brand-soft);border:1px solid #C9D8EE;color:var(--brand-dark);}
+    table{border-collapse:collapse;width:100%;}
+    th,td{padding:7px 10px;border-bottom:1px solid #EDEDE8;font-size:13px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+    th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600;background:#FAFAF8;position:sticky;top:0;}
+    td:first-child,th:first-child{text-align:left;}
+    tr.sec td{background:var(--ground);font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#4A5058;padding-top:10px;}
+    .bar{position:relative;height:10px;background:#F3F4F1;border-radius:4px;min-width:120px;}
+    .bar .fill{position:absolute;left:0;top:0;bottom:0;border-radius:4px;background:var(--brand);}
+    .drop{border:2px dashed #B9C6D6;border-radius:12px;padding:22px;text-align:center;cursor:pointer;background:#fff;display:block;}
+    .drop input{display:none;}
+    .checks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;}
+    .checks li{display:flex;gap:8px;align-items:flex-start;font-size:13px;}
+    .toast-stack{position:fixed;top:16px;right:16px;z-index:60;display:flex;flex-direction:column;gap:8px;max-width:340px;}
+    .toast{padding:10px 36px 10px 12px;border-radius:8px;font-weight:600;font-size:13px;box-shadow:0 2px 10px rgba(0,0,0,.18);position:relative;}
+    .toast-close{position:absolute;top:4px;right:4px;background:none;color:inherit;min-height:0;padding:4px 8px;opacity:.6;}
+    .toast-close:hover:not(:disabled){background:none;opacity:1;}
+    .s-loading{background:var(--brand-soft);color:var(--brand);} .s-success{background:#d4edda;color:#155724;} .s-error{background:#f8d7da;color:#721c24;}
     .spin{display:inline-block;width:14px;height:14px;border:2px solid #cfe0ff;border-top-color:var(--brand);border-radius:50%;animation:s .8s linear infinite;vertical-align:middle;margin-right:6px;}
     @keyframes s{to{transform:rotate(360deg);}}
-    .settings-modal{max-width:600px;max-height:86vh;overflow-y:auto;}
-    .settings-section{margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid #eee;}
-    .settings-section:last-of-type{border-bottom:none;}
-    .settings-section h4{margin:0 0 4px;color:#3c4043;}
-    .settings-error{background:#f8d7da;color:#721c24;padding:8px 10px;border-radius:6px;font-size:13px;margin-bottom:10px;}
-    .chip-list{list-style:none;margin:8px 0;padding:0;display:flex;flex-wrap:wrap;gap:6px;}
-    .chip-list li{background:#f1f3f4;border-radius:12px;padding:4px 6px 4px 10px;font-size:12px;display:flex;align-items:center;gap:6px;}
-    .chip-remove{border:none;background:none;color:var(--danger);cursor:pointer;line-height:1;padding:0 2px;display:inline-flex;align-items:center;}
-    .add-row{display:flex;gap:6px;}
-    .add-row input{flex:1;padding:6px 8px;border:1px solid #ccc;border-radius:5px;font-size:13px;}
-    .col-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px;margin-top:6px;}
-    .col-grid label{font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;}
+    .empty{padding:60px 20px;text-align:center;color:var(--muted);}
+    .overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:50;display:flex;align-items:center;justify-content:center;}
+    .modal{background:#fff;border-radius:12px;max-width:680px;width:94%;max-height:88vh;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px;}
+    .modal section{border-top:1px solid var(--line);padding-top:12px;}
+    .chip-list{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px;}
+    .chip-list li{background:#F1F3F4;border-radius:12px;padding:4px 6px 4px 10px;font-size:12px;display:flex;align-items:center;gap:6px;}
+    .chip-list li button{background:none;color:var(--danger);min-height:0;padding:0 4px;}
+    .chip-list li button:hover:not(:disabled){background:none;}
+    .pending-pill{font-size:12px;font-weight:700;color:var(--brand-dark);background:var(--brand-soft);padding:6px 10px;border-radius:999px;white-space:nowrap;}
+    .check-label{display:flex;gap:6px;align-items:center;font-size:13px;min-height:40px;cursor:pointer;}
+    .check-label input{width:18px;height:18px;}
+    .inv-scroll{max-height:75vh;overflow:auto;overscroll-behavior:contain;}
+    .inv-table{min-width:1000px;}
+    .inv-table td{vertical-align:top;}
+    .inv-table td.inv-item,.inv-table th.inv-item{white-space:normal;min-width:190px;max-width:240px;position:sticky;left:0;}
+    .inv-table td.inv-item{z-index:1;background:#fff;box-shadow:inset -1px 0 0 #E2E2DC;}
+    .inv-table th.inv-item{z-index:3;}
+    .inv-table tr.sec td{position:sticky;top:30px;z-index:2;white-space:normal;}
+    .inv-table tr.sec td .sec-label{position:sticky;left:10px;}
+    .inv-table th{z-index:2;}
+    .inv-table tr.st-row-correct td{background:#F0F7EE;} .inv-table tr.st-row-review td{background:#FFF9E6;} .inv-table tr.st-row-adjust td{background:#FFF1EC;}
+    .zero-cost{color:var(--danger);font-weight:700;}
+    .cat-btns{display:flex;gap:4px;margin-bottom:6px;}
+    .cat-btn{flex:1;font-size:11px;min-height:30px;padding:0 4px;border-radius:6px;border:1px solid #C9CCD1;background:#fff;color:#3D434B;font-weight:700;letter-spacing:.02em;}
+    .cat-btn:hover:not(:disabled){background:#F6F6F3;}
+    .cat-btn.cat-correct{border-color:#3C7A2E;color:#2F6324;} .cat-btn.cat-review{border-color:#A67C00;color:#7A5B00;} .cat-btn.cat-adjust{border-color:#B3401B;color:#9A3412;}
+    .cat-btn.active.cat-correct,.cat-btn.active.cat-correct:hover:not(:disabled){background:#3C7A2E;color:#fff;}
+    .cat-btn.active.cat-review,.cat-btn.active.cat-review:hover:not(:disabled){background:#A67C00;color:#fff;}
+    .cat-btn.active.cat-adjust,.cat-btn.active.cat-adjust:hover:not(:disabled){background:#B3401B;color:#fff;}
+    .sync{font-size:12px;margin-top:3px;white-space:normal;}
+    @media print{nav.top,.no-print,.toast-stack{display:none !important;} body{background:#fff;} main{padding:0;}
+      .inv-scroll{max-height:none;overflow:visible;} .inv-table tr.sec td,.inv-table .inv-item{position:static;}}
   </style>
 </head>
 <body>
-  <div id="app" v-cloak>
-    <div class="toast-stack">
-      <div v-for="t in toasts" :key="t.id" :class="['toast', 's-' + t.type]">
-        {{ t.msg }}
-        <button class="toast-close" @click="dismissToast(t.id)" aria-label="Dismiss"><svg class="icon" width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
-      </div>
+<div id="app" v-cloak>
+  <div class="toast-stack">
+    <div v-for="t in toasts" :key="t.id" :class="['toast', 's-' + t.type]">{{ t.msg }}
+      <button class="toast-close" @click="dismissToast(t.id)" aria-label="Dismiss">×</button>
     </div>
-
-    <div v-if="bootLoading" class="empty-state"><span class="spin"></span>Loading…</div>
-
-    <div v-else-if="!bootstrap.properties.length" class="empty-state">
-      No properties are configured for your account.<br>Contact an admin.
-    </div>
-
-    <template v-else>
-      <div class="header">
-        <h2>{{ activeProperty ? activeProperty.name + ' — Items to Review' : 'Items to Review' }}</h2>
-        <div class="controls">
-          <select v-if="bootstrap.properties.length > 1" class="property-select"
-            :value="activeProperty && activeProperty.id" @change="onPropertyChange($event.target.value)">
-            <option v-for="p in bootstrap.properties" :key="p.id" :value="p.id">{{ p.name }}</option>
-          </select>
-          <div class="progress-wrap" v-if="activeTab">
-            <div class="progress-bar"><div class="progress-fill" :style="{width: progressPct + '%'}"></div></div>
-            <div class="progress-label">{{ progressLabel }}</div>
-          </div>
-          <span class="pending-indicator" v-if="pendingCount">{{ pendingCount }} pending sync</span>
-          <label class="toggle"><input type="checkbox" v-model="autoSync"> Auto-sync</label>
-          <button @click="syncPending" :disabled="!pendingCount || syncing">
-            {{ syncing ? 'Syncing…' : (pendingCount ? 'Sync now (' + pendingCount + ')' : 'Sync now') }}
-          </button>
-          <button class="ghost" @click="loadData()" :disabled="loading">Refresh</button>
-          <button class="ghost" v-if="session.isAdmin" @click="openSettings"><svg class="icon" width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M8.6 1.5h2.8l.4 2.1c.5.15.95.36 1.38.62l1.8-1.2 2 2-1.2 1.8c.26.43.47.88.62 1.38l2.1.4v2.8l-2.1.4c-.15.5-.36.95-.62 1.38l1.2 1.8-2 2-1.8-1.2c-.43.26-.88.47-1.38.62l-.4 2.1H8.6l-.4-2.1a6.6 6.6 0 01-1.38-.62l-1.8 1.2-2-2 1.2-1.8a6.6 6.6 0 01-.62-1.38l-2.1-.4V8.6l2.1-.4c.15-.5.36-.95.62-1.38l-1.2-1.8 2-2 1.8 1.2c.43-.26.88-.47 1.38-.62l.4-2.1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><circle cx="10" cy="10" r="2.6" stroke="currentColor" stroke-width="1.3"/></svg> Settings</button>
-        </div>
-      </div>
-
-      <div id="adminBar" v-if="session.isAdmin">
-        <span class="admin-title">Admin</span>
-        <label class="upload">Upload monthly counts (CSV)
-          <input type="file" accept=".csv" @change="onCsvFileChosen">
-        </label>
-        <button class="danger" @click="askRemove">Remove all data</button>
-        <span class="who">signed in as {{ session.email || 'unknown' }}<template v-if="bootstrap.isGlobalAdmin"> · global admin</template></span>
-      </div>
-
-      <div class="tabs" v-if="tabsRaw.length">
-        <button v-for="t in tabsRaw" :key="t.key" :class="['tab', { active: t.key === activeKey }]" @click="activeKey = t.key">
-          {{ t.label }}<span class="count">{{ t.counts.reviewed }}/{{ t.counts.total }}</span>
-        </button>
-      </div>
-
-      <div class="table-container" v-if="activeTab">
-        <table>
-          <thead>
-            <tr>
-              <th>Item</th>
-              <th v-for="col in visibleColumnDefs" :key="col.key" :class="colClass(col.key)" :style="colStyle(col.key)"
-                draggable="true" @dragstart="onColDragStart(col.key, $event)" @dragover.prevent @drop="onColDrop(col.key, $event)">
-                {{ col.label }}<span class="col-resize" draggable="false" @mousedown="startResize(col.key, $event)"></span>
-              </th>
-              <th>Notes / SOP Action</th>
-              <th>Sync</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template v-for="section in activeTab.sections" :key="section.key">
-              <tr class="section"><td :colspan="totalCols">{{ section.label }}</td></tr>
-              <tr class="empty" v-if="!section.items.length"><td :colspan="totalCols">No items in this category.</td></tr>
-              <tr v-for="it in section.items" :key="section.key + '-' + it.row" :class="rowClass(it)">
-                <td><strong>{{ it.item }}</strong>
-                  <span class="dup-badge" v-if="dupCounts[it.row] > 1" :title="'Appears in ' + dupCounts[it.row] + ' categories'"><svg class="icon" width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="2"/></svg>{{ dupCounts[it.row] }}</span>
-                </td>
-                <td v-for="col in visibleColumnDefs" :key="col.key" :class="[colClass(col.key), varianceClass(col.key, it.variance)]" :style="colStyle(col.key)">
-                  <span v-if="col.key === 'flag' && it.flag" class="flag">{{ it.flag }}</span>
-                  <template v-else>{{ formatCell(it, col.key) }}</template>
-                </td>
-                <td class="note-cell">
-                  <div class="cat-btns">
-                    <button v-for="g in CATEGORY_GROUPS" :key="g"
-                      :class="['cat-btn', 'cat-' + g.toLowerCase(), { active: categoryOf(it.row) === g }]"
-                      @click="pickCategory(it, g)">{{ g }}</button>
-                  </div>
-                  <select :value="noteOf(it.row)" @change="onSelect(it, $event.target.value)">
-                    <option value="" disabled>{{ categoryOf(it.row) ? 'Select action…' : 'Pick a category above, or choose…' }}</option>
-                    <option v-for="c in filteredCategories(it.row)" :key="c" :value="c">{{ c }}</option>
-                  </select>
-                </td>
-                <td class="sync-cell">
-                  <span v-if="syncStatus[dkey(activeKey, it.row)] === 'pending'" class="badge badge-pending"><svg class="icon" width="8" height="8" viewBox="0 0 8 8" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="4" cy="4" r="4"/></svg> pending</span>
-                  <span v-else-if="syncStatus[dkey(activeKey, it.row)] === 'syncing'" class="badge badge-syncing"><span class="spin" style="margin-right:0;width:10px;height:10px;"></span></span>
-                  <span v-else-if="syncStatus[dkey(activeKey, it.row)] === 'error'" class="badge badge-error" :title="syncErrors[dkey(activeKey, it.row)] || 'Sync failed'"><svg class="icon" width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M12 3L22 20H2L12 3z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><line x1="12" y1="9" x2="12" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17" r="1" fill="currentColor"/></svg> retry</span>
-                  <span v-else-if="syncStatus[dkey(activeKey, it.row)] === 'synced'" class="badge badge-synced"><svg class="icon" width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M5 12l5 5L20 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg> synced</span>
-                </td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
-      </div>
-      <p v-else-if="loading" class="muted">Loading inventory data…</p>
-      <p v-else class="muted">No data yet.</p>
-
-      <p class="muted" v-if="generatedAt">
-        Loaded {{ new Date(generatedAt).toLocaleString() }}. Categories are computed live from the data store.
-        Edits are kept in memory and synced to the sheet automatically (every 20s) or via "Sync now" — a note
-        saves once per item and shows in every category it appears in. Drag a column header to reorder it, or
-        its right edge to resize — layout resets on reload.
-      </p>
-
-      <!-- CSV upload modal -->
-      <div class="overlay" v-if="csv.stage">
-        <div class="modal" role="dialog" aria-modal="true" aria-label="CSV upload">
-          <template v-if="csv.stage === 'checking'">
-            <h3>Checking existing data…</h3>
-            <p><span class="spin"></span>One moment.</p>
-          </template>
-          <template v-else-if="csv.stage === 'confirm'">
-            <h3>Replace last month's data?</h3>
-            <div class="warn">
-              <b>This permanently erases the current data and every note in it:</b>
-              <ul><li v-for="s in csv.summary.sheets.filter(function(s){return s.rows>0;})" :key="s.name">{{ s.label }}: {{ s.rows }} rows</li></ul>
-            </div>
-            <div class="row"><button class="ghost" @click="closeCsvModal">Cancel</button><button class="danger" @click="doUpload">Wipe &amp; import</button></div>
-          </template>
-          <template v-else-if="csv.stage === 'importing'">
-            <h3>Importing…</h3>
-            <p><span class="spin"></span>Wiping and loading the new month.</p>
-          </template>
-          <template v-else-if="csv.stage === 'done'">
-            <h3>Import complete</h3>
-            <p>Loaded {{ csv.result.beverage }} beverage and {{ csv.result.food }} food rows.</p>
-            <div class="row"><button @click="finishCsvUpload">Done</button></div>
-          </template>
-          <template v-else-if="csv.stage === 'error'">
-            <h3>Import failed</h3>
-            <p>{{ csv.error }}</p>
-            <p class="muted">Existing data was not changed.</p>
-            <div class="row"><button class="ghost" @click="closeCsvModal">Close</button></div>
-          </template>
-        </div>
-      </div>
-
-      <!-- Remove data modal -->
-      <div class="overlay" v-if="removeModal.stage">
-        <div class="modal" role="dialog" aria-modal="true" aria-label="Remove data">
-          <template v-if="removeModal.stage === 'confirm'">
-            <h3>Remove all count data?</h3>
-            <div class="warn"><b>This deletes both Count Details sheets and every note.</b> The next upload will recreate them.</div>
-            <div class="row"><button class="ghost" @click="closeRemoveModal">Cancel</button><button class="danger" @click="doRemove">Remove everything</button></div>
-          </template>
-          <template v-else-if="removeModal.stage === 'removing'">
-            <h3>Removing…</h3><p><span class="spin"></span>Deleting count data.</p>
-          </template>
-          <template v-else-if="removeModal.stage === 'done'">
-            <h3>Removed</h3><p>All count data deleted.</p>
-            <div class="row"><button @click="finishRemove">Done</button></div>
-          </template>
-          <template v-else-if="removeModal.stage === 'error'">
-            <h3>Could not remove</h3><p>{{ removeModal.error }}</p>
-            <div class="row"><button class="ghost" @click="closeRemoveModal">Close</button></div>
-          </template>
-        </div>
-      </div>
-
-      <!-- Settings modal (property admin, and global admin) -->
-      <div class="overlay" v-if="showSettings">
-        <div class="modal settings-modal" role="dialog" aria-modal="true" aria-label="Settings">
-          <h3>Settings — {{ activeProperty && activeProperty.name }}</h3>
-          <p class="settings-error" v-if="settingsError">{{ settingsError }}</p>
-
-          <section class="settings-section">
-            <h4>Property admins</h4>
-            <p class="muted">Accounts that can upload/replace data, remove data, and change these settings for this property only. Global admins always have access to every property regardless of this list.</p>
-            <ul class="chip-list">
-              <li v-for="e in settingsDraft.propertyAdmins" :key="e">
-                {{ e }}<button class="chip-remove" @click="removePropertyAdminEmail(e)" title="Remove"><svg class="icon" width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
-              </li>
-            </ul>
-            <div class="add-row">
-              <input type="email" ref="firstSettingsInput" v-model="newPropertyAdminEmail" placeholder="name@company.com" @keydown.enter.prevent="addPropertyAdminEmail">
-              <button class="ghost" @click="addPropertyAdminEmail">Add</button>
-            </div>
-          </section>
-
-          <section class="settings-section">
-            <h4>Property users</h4>
-            <p class="muted">Accounts with view-only access to this property.</p>
-            <ul class="chip-list">
-              <li v-for="e in settingsDraft.propertyUsers" :key="e">
-                {{ e }}<button class="chip-remove" @click="removePropertyUserEmail(e)" title="Remove"><svg class="icon" width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
-              </li>
-            </ul>
-            <div class="add-row">
-              <input type="email" v-model="newPropertyUserEmail" placeholder="name@company.com" @keydown.enter.prevent="addPropertyUserEmail">
-              <button class="ghost" @click="addPropertyUserEmail">Add</button>
-            </div>
-          </section>
-
-          <section class="settings-section">
-            <h4>Visible columns</h4>
-            <p class="muted">Report columns shown in the review table (Item and Notes always show).</p>
-            <div class="col-grid">
-              <label v-for="c in settings.allColumns" :key="c.key">
-                <input type="checkbox" :checked="settingsDraft.visibleColumns.includes(c.key)" @change="toggleColumn(c.key)">
-                {{ c.label }}
-              </label>
-            </div>
-          </section>
-
-          <section class="settings-section">
-            <h4>Note categories</h4>
-            <p class="muted">Dropdown options managers choose from. Each must start with CORRECT, REVIEW, or ADJUST.</p>
-            <ul class="chip-list">
-              <li v-for="c in settingsDraft.noteCategories" :key="c">
-                {{ c }}<button class="chip-remove" @click="removeCategory(c)" title="Remove"><svg class="icon" width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
-              </li>
-            </ul>
-            <div class="add-row">
-              <input type="text" v-model="newCategory" placeholder="ADJUST - …" @keydown.enter.prevent="addCategory">
-              <button class="ghost" @click="addCategory">Add</button>
-            </div>
-          </section>
-
-          <section class="settings-section">
-            <h4>Reset</h4>
-            <p class="muted">Restore this property's admins, users, columns, and categories to the hardcoded defaults.</p>
-            <button class="danger" @click="resetSettingsToDefault">Reset to defaults</button>
-          </section>
-
-          <section class="settings-section" v-if="bootstrap.isGlobalAdmin">
-            <h4>Global admins</h4>
-            <p class="muted">Accounts with admin access to every property, always. Only global admins can edit this list.</p>
-            <p class="settings-error" v-if="globalAdminsError">{{ globalAdminsError }}</p>
-            <template v-if="globalAdminsDraft">
-              <ul class="chip-list">
-                <li v-for="e in globalAdminsDraft" :key="e">
-                  {{ e }}<button class="chip-remove" @click="removeGlobalAdminEmail(e)" title="Remove"><svg class="icon" width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
-                </li>
-              </ul>
-              <div class="add-row">
-                <input type="email" v-model="newGlobalAdminEmail" placeholder="name@company.com" @keydown.enter.prevent="addGlobalAdminEmail">
-                <button class="ghost" @click="addGlobalAdminEmail">Add</button>
-              </div>
-              <div class="row"><button class="ghost" @click="saveGlobalAdminsDraft">Save global admins</button></div>
-            </template>
-          </section>
-
-          <div class="row">
-            <button class="ghost" @click="closeSettings">Cancel</button>
-            <button @click="saveSettingsDraft">Save settings</button>
-          </div>
-        </div>
-      </div>
-    </template>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/vue@3.4.31/dist/vue.global.prod.js"></script>
-  <script>
-    const CATEGORY_GROUPS = ['CORRECT', 'REVIEW', 'ADJUST'];
-    const NUMERIC_COLS = ['currentQty', 'currentCost', 'currentTotal', 'previousQty', 'prevCost', 'prevTotal', 'adjustment', 'variance'];
-    const CURRENCY_COLS = ['currentCost', 'currentTotal', 'prevCost', 'prevTotal'];
-    const STATUS_CLASS = { correct: 'row-correct', review: 'row-review', adjust: 'row-adjust' };
-    const AUTO_SYNC_MS = 20000;
+  <div v-if="bootLoading" class="empty"><span class="spin"></span>Loading…</div>
+  <div v-else-if="!bootstrap.properties.length" class="empty">
+    No properties are set up for your account.<br>Signed in as {{ bootstrap.email || 'an unknown account' }}. Ask an administrator to add you.
+  </div>
 
-    // Promise wrapper around google.script.run so call sites can use async/await
-    // instead of chained .withSuccessHandler()/.withFailureHandler() callbacks.
-    const gas = (funcName, ...args) => new Promise((resolve, reject) => {
-      const runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
-      runner[funcName](...args);
-    });
+  <template v-else>
+    <nav class="top">
+      <div class="title">Inventory Audit</div>
+      <select v-if="bootstrap.properties.length > 1" aria-label="Property" :value="activeProperty && activeProperty.id" @change="onPropertyChange($event.target.value)">
+        <option v-for="p in bootstrap.properties" :key="p.id" :value="p.id">{{ p.name }}</option>
+      </select>
+      <div class="tabs" role="tablist">
+        <button v-for="t in tabs" :key="t.key" role="tab" :aria-selected="view === t.key" :class="['tab', { active: view === t.key }]" @click="go(t.key)">
+          {{ t.label }}<span class="count" v-if="t.items">{{ t.counts.reviewed }}/{{ t.counts.total }}</span></button>
+        <button v-if="session.isAdmin" role="tab" :aria-selected="view === 'upload'" :class="['tab', { active: view === 'upload' }]" @click="go('upload')">Upload</button>
+      </div>
+      <div class="who">
+        <span>{{ session.email || bootstrap.email }}<template v-if="bootstrap.isGlobalAdmin"> · global admin</template><template v-else-if="session.isAdmin"> · admin</template></span>
+        <button v-if="session.isAdmin" class="ghost small" @click="openSettings">Settings</button>
+      </div>
+    </nav>
 
-    const app = Vue.createApp({
-      data: function () {
-        return {
-          CATEGORY_GROUPS: CATEGORY_GROUPS,
-          bootLoading: true,
-          bootstrap: { email: '', isGlobalAdmin: false, properties: [] },
-          activeProperty: null,
-          tabsRaw: [],
-          activeKey: null,
-          session: { email: '', isAdmin: false },
-          settings: { visibleColumns: [], noteCategories: [], allColumns: [], propertyAdmins: [], propertyUsers: [] },
-          generatedAt: null,
-          loading: true,
-          toasts: [],
-          _toastSeq: 0,
-          pending: {},        // dkey -> { datastore, row, note, item }
-          origNotes: {},      // dkey -> note as last loaded/synced from the sheet
-          syncStatus: {},     // dkey -> 'pending' | 'syncing' | 'synced' | 'error'
-          syncErrors: {},     // dkey -> error message
-          categoryOverride: {}, // dkey -> 'CORRECT' | 'REVIEW' | 'ADJUST' chosen this session
-          autoSync: true,
-          syncing: false,
-          csvFileText: null,
-          csv: { stage: null, summary: null, error: null, result: null },
-          removeModal: { stage: null, error: null },
-          showSettings: false,
-          settingsDraft: null,
-          newPropertyAdminEmail: '',
-          newPropertyUserEmail: '',
-          newCategory: '',
-          settingsError: '',
-          globalAdmins: [],
-          globalAdminsDraft: null,
-          newGlobalAdminEmail: '',
-          globalAdminsError: '',
-          // view ergonomics — session only, reset on page reload
-          columnOrder: [],
-          columnWidths: {},
-          dragKey: null
+    <main>
+      <div v-if="loading && !tabs.length" class="muted"><span class="spin"></span>Loading…</div>
+      <div v-else-if="loadError" class="banner warn">{{ loadError }}</div>
+
+      <!-- ============================== REVIEW ============================== -->
+      <template v-if="activeTab">
+        <div v-if="!activeTab.items" class="card empty">
+          No {{ activeTab.label.toLowerCase() }} count uploaded yet.
+          <template v-if="session.isAdmin"><br><br>Export <b>Inventory Count Item Details</b> from R365 as CSV, then <button class="link" @click="go('upload')">upload it</button>.</template>
+        </div>
+        <template v-else>
+          <div class="row">
+            <div>
+              <div class="muted">{{ activeTab.items }} items<template v-if="activeTab.upload"> · uploaded {{ dayLabel(activeTab.upload.at) }}<template v-if="activeTab.upload.by"> by {{ activeTab.upload.by }}</template><template v-if="activeTab.upload.file"> · {{ activeTab.upload.file }}</template></template></div>
+              <h1>{{ activeProperty.name }} · {{ activeTab.label }} count</h1>
+            </div>
+            <div style="min-width:240px;flex:0 1 320px">
+              <div class="muted" style="display:flex;justify-content:space-between"><span>Reviewed</span><b>{{ notedCount }} of {{ activeTab.counts.total }}</b></div>
+              <div class="bar" style="margin-top:4px"><div class="fill" :style="{ width: pct(notedCount, activeTab.counts.total) + '%' }"></div></div>
+              <div class="muted" style="margin-top:4px">{{ statusCounts.adjust }} adjust · {{ statusCounts.review }} review · {{ statusCounts.correct }} correct</div>
+            </div>
+          </div>
+
+          <div class="grid">
+            <div class="card stat"><div class="label">Inventory value</div><div class="value">{{ money(activeTab.totals.current) }}</div>
+              <div class="sub">last count {{ money(activeTab.totals.previous) }} · <span :class="cls(activeTab.totals.change)">{{ signed(activeTab.totals.change) }}</span></div></div>
+            <div class="card stat"><div class="label">Price changes</div><div class="value" :class="cls(activeTab.totals.priceEffect)">{{ signed(activeTab.totals.priceEffect) }}</div>
+              <div class="sub">cost changes on what was counted</div></div>
+            <div class="card stat"><div class="label">Quantity changes</div><div class="value" :class="cls(activeTab.totals.qtyEffect)">{{ signed(activeTab.totals.qtyEffect) }}</div>
+              <div class="sub">everything else</div></div>
+            <div class="card stat"><div class="label">High impact</div><div class="value" :class="{ bad: highImpactOpen }">{{ highImpactCount }}</div>
+              <div class="sub">{{ money(highImpactCut) }}+ items, {{ highImpactOpen }} without a note</div></div>
+          </div>
+
+          <div class="row no-print">
+            <div class="controls">
+              <div class="field"><label for="mode">Show</label>
+                <select id="mode" v-model="mode">
+                  <option v-for="m in MODES" :key="m.key" :value="m.key">{{ m.label }}</option>
+                </select></div>
+              <div class="field"><label for="search">Find an item</label><input id="search" type="text" v-model="search" placeholder="Name contains…" style="width:180px"></div>
+              <label class="check-label"><input type="checkbox" v-model="onlyOpen"> Only items without a note</label>
+            </div>
+            <div class="controls">
+              <span class="pending-pill" v-if="pendingCount || syncing">{{ syncing ? 'Saving notes…' : pendingCount + ' note' + (pendingCount === 1 ? '' : 's') + ' not saved yet' }}</span>
+              <button class="small" @click="syncPending(true)" :disabled="syncing || !pendingCount">Save now</button>
+              <button class="ghost small" @click="loadData()" :disabled="loading">Refresh</button>
+            </div>
+          </div>
+          <div class="muted" v-if="modeHint">{{ modeHint }}</div>
+
+          <div class="card flush">
+            <div class="inv-scroll">
+              <table class="inv-table">
+                <thead><tr><th class="inv-item">Item</th><th>Quantity</th><th>Cost</th><th>Value</th><th>Dollar impact</th><th style="text-align:left;min-width:220px">Why it is here</th><th style="text-align:left;min-width:220px;width:220px">Note</th></tr></thead>
+                <tbody>
+                  <template v-for="r in rows" :key="r.id">
+                    <tr v-if="r.head" class="sec"><td colspan="7"><span class="sec-label">{{ r.head }}<span v-if="r.sub" class="muted" style="text-transform:none;letter-spacing:0;font-weight:400"> · {{ r.sub }}</span></span></td></tr>
+                    <tr v-else :class="'st-row-' + statusOf(r.key)">
+                      <td class="inv-item"><b>{{ r.it.item }}</b>
+                        <div class="muted">{{ r.it.uom }}<template v-if="mode !== 'account'"> · {{ r.it.inventoryAcct }}</template><template v-if="/assumed/i.test(r.it.flag)"> · <span class="bad">{{ r.it.flag }}</span></template></div>
+                        <span v-if="r.it.impact >= highImpactCut" class="badge impact" title="On the regional manager's check">High impact</span></td>
+                      <td>{{ qty(r.it.prevQty) }} → <b>{{ qty(r.it.curQty) }}</b></td>
+                      <td :class="{ bad: r.it.variance != null && Math.abs(r.it.variance) >= 0.1, 'zero-cost': r.it.curQty > 0 && !r.it.curCost }">{{ cost(r.it.prevCost) }} → <b>{{ cost(r.it.curCost) }}</b>
+                        <div v-if="r.it.variance != null && Math.abs(r.it.variance) >= 0.005" class="muted">{{ signedPct(r.it.variance * 100) }}</div></td>
+                      <td>{{ money(r.it.curTotal) }}<div class="muted">was {{ money(r.it.prevTotal) }}</div></td>
+                      <td><b>{{ money(r.it.impact) }}</b>
+                        <div class="muted" v-if="Math.round(r.it.priceEffect)">price {{ signed(r.it.priceEffect) }}</div>
+                        <div class="muted" v-if="Math.round(r.it.qtyEffect)">qty {{ signed(r.it.qtyEffect) }}</div></td>
+                      <td style="text-align:left;white-space:normal">
+                        <div v-for="(why, i) in reasons(r)" :key="i" :class="{ muted: i > 0 }" style="margin-bottom:2px">{{ why }}</div></td>
+                      <td style="text-align:left;white-space:normal">
+                        <div class="cat-btns" role="group" :aria-label="'Note type for ' + r.it.item">
+                          <button v-for="p in PREFIXES" :key="p.key" type="button" :class="['cat-btn', 'cat-' + p.key, { active: categoryOf(r.key) === p.prefix }]" @click="pickCategory(r.key, p.prefix)">{{ p.prefix }}</button>
+                        </div>
+                        <select :value="noteOf(r.key)" @change="applyEdit(r.key, $event.target.value)" :aria-label="'Note for ' + r.it.item" style="width:100%;min-height:32px;font-size:12px">
+                          <option value="">{{ categoryOf(r.key) ? 'Choose a note…' : 'No note' }}</option>
+                          <option v-for="o in optionsFor(r.key)" :key="o" :value="o">{{ o }}</option>
+                        </select>
+                        <div class="sync" :title="syncErrors[dkey(r.key)] || ''">
+                          <span v-if="syncStatus[dkey(r.key)] === 'pending'" class="badge spike">not saved</span>
+                          <span v-else-if="syncStatus[dkey(r.key)] === 'syncing'" class="muted"><span class="spin"></span>saving</span>
+                          <span v-else-if="syncStatus[dkey(r.key)] === 'synced'" class="good">✓ saved</span>
+                          <span v-else-if="syncStatus[dkey(r.key)] === 'error'" class="badge trend">retry: {{ syncErrors[dkey(r.key)] }}</span>
+                        </div>
+                        <div v-if="noteMeta(r.key)" class="muted" style="margin-top:2px">{{ noteMeta(r.key) }}</div>
+                      </td>
+                    </tr>
+                  </template>
+                  <tr v-if="!rows.length"><td colspan="7" class="muted" style="text-align:left;padding:20px">{{ search || onlyOpen ? 'Nothing matches the filters.' : 'Nothing to review in this count.' }}</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="muted">Notes are kept in this page and saved every {{ SYNC_SECONDS }} seconds (or with <b>Save now</b>). An item in several sections has one note, shown in each.
+            <b>CORRECT</b>: the count is right. <b>REVIEW</b>: count or check it again. <b>ADJUST</b>: fix it in R365 (price, unit, item), then upload the corrected export: notes carry over.
+            Items marked <span class="badge impact">High impact</span> ({{ money(highImpactCut) }} or more) are the ones the regional manager's check lists from the same export.</div>
+        </template>
+      </template>
+
+      <!-- ============================== UPLOAD ============================== -->
+      <template v-if="view === 'upload'">
+        <div class="row"><h1>Upload a count · {{ activeProperty && activeProperty.name }}</h1></div>
+        <div v-if="!session.isAdmin" class="banner warn">Only an administrator of this property can upload counts.</div>
+        <div v-else class="card" style="display:flex;flex-direction:column;gap:12px;max-width:820px">
+          <p class="muted" style="margin:0">In R365, export the count's <b>Inventory Count Item Details</b> as CSV.
+            A beverage count goes to the Beverage tab whole, food-coded cocktail ingredients included; a food count to the Food tab. A full count is split by inventory account.
+            Uploading replaces only the tab the file covers.</p>
+          <label class="drop" for="csv-file">
+            <b>Choose the CSV</b><br><span class="muted">{{ up.fileName || 'InventoryCountItemDetails.csv' }}</span>
+            <input id="csv-file" type="file" accept=".csv" @change="onCsvFile">
+          </label>
+          <div v-if="up.stage === 'reading'" class="muted"><span class="spin"></span>Reading the file…</div>
+          <div v-if="up.stage === 'error'" class="banner warn">{{ up.error }}<br><span class="muted">Nothing was changed.</span></div>
+          <template v-if="up.preview && (up.stage === 'preview' || up.stage === 'saving')">
+            <div class="muted">{{ up.preview.fileName }} · {{ up.preview.rows }} items · reads as a <b>{{ up.preview.kind.toLowerCase() }}</b> count</div>
+            <ul class="checks">
+              <li><b :class="up.preview.tieOuts ? 'bad' : 'good'">{{ up.preview.tieOuts ? '!' : '✓' }}</b>
+                <span v-if="!up.preview.tieOuts">Every item's previous value plus its adjustment equals its current value.</span>
+                <span v-else>{{ up.preview.tieOuts }} items do not add up (previous value + adjustment ≠ current value). Check the export.</span></li>
+              <li v-for="w in up.preview.warnings" :key="w"><b class="bad">!</b><span>{{ w }}</span></li>
+            </ul>
+            <div v-for="t in up.preview.tables" :key="t.key" class="card" style="display:flex;flex-direction:column;gap:8px">
+              <h2>{{ t.label }} tab</h2>
+              <ul class="checks">
+                <li><b class="good">✓</b><span>{{ t.items }} items. Value {{ money(t.totals.current) }}, last count {{ money(t.totals.previous) }}
+                  (<span :class="cls(t.totals.change)">{{ signed(t.totals.change) }}</span>: price {{ signed(t.totals.priceEffect) }}, quantity {{ signed(t.totals.qtyEffect) }}).</span></li>
+                <li><b class="good">✓</b><span>{{ t.review.total }} items to review, {{ t.review.highImpact }} of them high impact:
+                  <template v-for="(s, i) in t.review.sections.filter(x => x.items)" :key="s.key">{{ i ? ', ' : '' }}{{ s.label.toLowerCase() }} {{ s.items }}</template>.</span></li>
+              </ul>
+              <div v-if="!t.existing" class="banner info">No {{ t.label.toLowerCase() }} count on file yet.</div>
+              <div v-else-if="t.relation.relation === 'next'" class="banner info">
+                <b>Follows the count on file</b> (uploaded {{ dayLabel(t.existing.upload && t.existing.upload.at) }}): its previous figures match.
+                Replaces it<template v-if="t.lostNotes"> and its {{ t.lostNotes }} note{{ t.lostNotes === 1 ? '' : 's' }}</template>.
+                <template v-if="t.relation.differ"><br>{{ t.relation.differ }} item{{ t.relation.differ === 1 ? '' : 's' }} changed in R365 after that count was reviewed: {{ t.relation.examples.slice(0, 3).join(', ') }}.</template></div>
+              <div v-else-if="t.relation.relation === 'recount'" class="banner info">
+                <b>The same count again</b> (corrected in R365?). {{ t.keptNotes }} note{{ t.keptNotes === 1 ? '' : 's' }} carry over<template v-if="t.lostNotes">;
+                {{ t.lostNotes }} item{{ t.lostNotes === 1 ? ' is' : 's are' }} no longer picked for review and lose their note</template>.</div>
+              <div v-else class="banner warn">
+                <b>This file does not follow the {{ t.label.toLowerCase() }} count on file.</b>
+                {{ t.relation.differ }} of {{ t.relation.compared }} items have a previous quantity that differs from the count on file<template v-if="t.relation.examples.length"> (for example {{ t.relation.examples.slice(0, 2).join('; ') }})</template>.
+                Check it is the next count for this property, and that months were uploaded in order. Saving replaces the count on file<template v-if="t.lostNotes"> and its {{ t.lostNotes }} notes</template>.</div>
+            </div>
+            <div class="controls">
+              <button @click="commitCsv" :disabled="up.stage === 'saving'">{{ up.stage === 'saving' ? 'Saving…' : 'Save count' }}</button>
+              <button class="ghost" @click="resetUpload" :disabled="up.stage === 'saving'">Cancel</button>
+            </div>
+          </template>
+        </div>
+        <div v-if="session.isAdmin" class="card" style="max-width:820px">
+          <h3>Remove all count data</h3>
+          <p class="muted" style="margin:0 0 10px">Empties both tabs, notes included. Settings stay.</p>
+          <button class="danger small" @click="removeAll">Remove all data</button>
+        </div>
+      </template>
+    </main>
+
+    <!-- ============================== SETTINGS ============================== -->
+    <div class="overlay" v-if="settingsDraft" @click.self="closeSettings">
+      <div class="modal" role="dialog" aria-modal="true" aria-label="Settings">
+        <h2>Settings · {{ activeProperty && activeProperty.name }}</h2>
+        <div class="banner warn" v-if="settingsError">{{ settingsError }}</div>
+        <section>
+          <h3>Property admins</h3>
+          <p class="muted" style="margin:0 0 6px">Can upload and remove counts and change these settings for this property. Global admins can always do everything.</p>
+          <ul class="chip-list"><li v-for="e in settingsDraft.propertyAdmins" :key="e">{{ e }}<button @click="settingsDraft.propertyAdmins = settingsDraft.propertyAdmins.filter(x => x !== e)" :aria-label="'Remove ' + e">×</button></li></ul>
+          <div class="controls" style="margin-top:6px"><input type="email" ref="firstSettingsInput" v-model="newAdmin" placeholder="name@company.com" style="flex:1" @keydown.enter.prevent="addEmail('propertyAdmins', 'newAdmin')"><button class="ghost" @click="addEmail('propertyAdmins', 'newAdmin')">Add</button></div>
+        </section>
+        <section>
+          <h3>Property users</h3>
+          <p class="muted" style="margin:0 0 6px">Can work through the review and write notes for this property.</p>
+          <ul class="chip-list"><li v-for="e in settingsDraft.propertyUsers" :key="e">{{ e }}<button @click="settingsDraft.propertyUsers = settingsDraft.propertyUsers.filter(x => x !== e)" :aria-label="'Remove ' + e">×</button></li></ul>
+          <div class="controls" style="margin-top:6px"><input type="email" v-model="newUser" placeholder="name@company.com" style="flex:1" @keydown.enter.prevent="addEmail('propertyUsers', 'newUser')"><button class="ghost" @click="addEmail('propertyUsers', 'newUser')">Add</button></div>
+        </section>
+        <section>
+          <h3>Notes</h3>
+          <p class="muted" style="margin:0 0 6px">The notes managers choose from. Each starts with CORRECT, REVIEW or ADJUST.</p>
+          <ul class="chip-list"><li v-for="n in settingsDraft.noteCategories" :key="n">{{ n }}<button @click="removeNote(n)" :aria-label="'Remove ' + n">×</button></li></ul>
+          <div class="controls" style="margin-top:6px"><input type="text" v-model="newNote" placeholder="ADJUST - WRONG UNIT OF MEASURE" style="flex:1" @keydown.enter.prevent="addNote"><button class="ghost" @click="addNote">Add</button></div>
+        </section>
+        <section>
+          <h3>Reset</h3>
+          <p class="muted" style="margin:0 0 6px">Restore this property's admins, users and notes to the defaults.</p>
+          <button class="danger small" @click="resetSettingsToDefault">Reset to defaults</button>
+        </section>
+        <section v-if="bootstrap.isGlobalAdmin">
+          <h3>Global admins</h3>
+          <p class="muted" style="margin:0 0 6px">Admin on every property. Only global admins see this list.</p>
+          <div class="banner warn" v-if="globalError">{{ globalError }}</div>
+          <template v-if="globalDraft">
+            <ul class="chip-list"><li v-for="e in globalDraft" :key="e">{{ e }}<button @click="removeGlobalAdmin(e)" :aria-label="'Remove ' + e">×</button></li></ul>
+            <div class="controls" style="margin-top:6px"><input type="email" v-model="newGlobal" placeholder="name@company.com" style="flex:1" @keydown.enter.prevent="addGlobalAdmin"><button class="ghost" @click="addGlobalAdmin">Add</button>
+              <button class="ghost" @click="saveGlobalAdmins">Save global admins</button></div>
+          </template>
+        </section>
+        <div class="controls" style="justify-content:flex-end">
+          <button class="ghost" @click="closeSettings">Cancel</button>
+          <button @click="saveSettingsDraft">Save settings</button>
+        </div>
+      </div>
+    </div>
+  </template>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/vue@3.4.31/dist/vue.global.prod.js"></script>
+<script>
+  const PREFIXES = [{ key: 'correct', prefix: 'CORRECT' }, { key: 'review', prefix: 'REVIEW' }, { key: 'adjust', prefix: 'ADJUST' }];
+  const MODES = [
+    { key: 'impact', label: 'Largest dollar impact first', hint: 'Every item picked for review once, largest dollar impact first. Work down from the top.' },
+    { key: 'category', label: 'By section', hint: '' },
+    { key: 'account', label: 'By account', hint: 'Grouped by inventory and cost account, so the work can be split (wine, liquor, food …).' },
+    { key: 'actions', label: 'Action items (ADJUST / REVIEW)', hint: 'Items marked ADJUST or REVIEW: what to fix in R365 or count again.' }
+  ];
+  const SYNC_SECONDS = 20;
+  const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  // google.script.run as a promise.
+  const gas = (name, ...args) => new Promise((resolve, reject) => {
+    google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[name](...args);
+  });
+  const statusOfNote = note => {
+    const n = String(note || '').trim().toUpperCase();
+    if (!n) return '';
+    const p = PREFIXES.filter(x => n.indexOf(x.prefix) === 0)[0];
+    return p ? p.key : 'other';
+  };
+
+  Vue.createApp({
+    data() {
+      return {
+        PREFIXES, MODES, SYNC_SECONDS,
+        bootLoading: true, bootstrap: { email: '', isGlobalAdmin: false, properties: [] },
+        activeProperty: null, view: null, tabs: [], loading: false, loadError: '',
+        session: { email: '', isAdmin: false }, settings: { noteCategories: [], propertyAdmins: [], propertyUsers: [] },
+        rules: { highImpact: 1000 },
+        mode: 'impact', search: '', onlyOpen: false, sticky: {},
+        pending: {}, syncStatus: {}, syncErrors: {}, cats: {}, syncing: false,
+        up: { stage: null, fileName: '', text: null, preview: null, error: '' },
+        settingsDraft: null, settingsError: '', newAdmin: '', newUser: '', newNote: '',
+        globalDraft: null, globalError: '', newGlobal: '',
+        toasts: [], toastSeq: 0
+      };
+    },
+    computed: {
+      activeTab() { return this.tabs.filter(t => t.key === this.view)[0] || null; },
+      pendingCount() { return Object.keys(this.pending).length; },
+      highImpactCut() { return this.rules.highImpact; },
+      reviewKeys() { return this.activeTab ? Object.keys(this.activeTab.review) : []; },
+      notedCount() { return this.reviewKeys.filter(k => this.noteOf(k)).length; },
+      statusCounts() {
+        const s = { correct: 0, review: 0, adjust: 0, other: 0 };
+        this.reviewKeys.forEach(k => { const st = this.statusOf(k); if (st) s[st]++; });
+        return s;
+      },
+      highImpactCount() { return this.reviewKeys.filter(k => this.activeTab.review[k].impact >= this.highImpactCut).length; },
+      highImpactOpen() { return this.reviewKeys.filter(k => this.activeTab.review[k].impact >= this.highImpactCut && !this.noteOf(k)).length; },
+      modeHint() { const m = MODES.filter(x => x.key === this.mode)[0]; return m ? m.hint : ''; },
+      rows() {
+        const t = this.activeTab;
+        if (!t) return [];
+        const q = this.search.trim().toLowerCase();
+        const keep = key => {
+          const it = t.review[key];
+          if (!it) return false;
+          if (q && it.item.toLowerCase().indexOf(q) === -1) return false;
+          if (this.onlyOpen && this.noteOf(key) && !this.sticky[this.dkey(key)]) return false;
+          return true;
         };
-      },
-      computed: {
-        activeTab: function () {
-          return this.tabsRaw.filter((t) => t.key === this.activeKey)[0] || null;
-        },
-        visibleColumnDefs: function () {
-          const vis = this.settings.visibleColumns;
-          const all = this.settings.allColumns;
-          const byKey = {};
-          all.forEach((c) => { byKey[c.key] = c; });
-          const order = this.columnOrder.length ? this.columnOrder : all.map((c) => c.key);
-          return order.filter((k) => vis.indexOf(k) !== -1 && byKey[k]).map((k) => byKey[k]);
-        },
-        totalCols: function () { return this.visibleColumnDefs.length + 3; },
-        pendingCount: function () { return Object.keys(this.pending).length; },
-        dupCounts: function () {
-          const c = {};
-          if (!this.activeTab) return c;
-          this.activeTab.sections.forEach((s) => {
-            s.items.forEach((it) => { c[it.row] = (c[it.row] || 0) + 1; });
+        const byImpact = (a, b) => t.review[b].impact - t.review[a].impact || a.localeCompare(b);
+        const row = (key, cat) => ({ id: (cat || '') + ':' + key, key: key, it: t.review[key], cat: cat || null });
+        const out = [];
+        if (this.mode === 'category') {
+          t.sections.forEach(s => {
+            const keys = s.keys.filter(keep);
+            if (!keys.length) return;
+            out.push({ id: 'h-' + s.key, head: s.label + ' · ' + (keys.length === s.keys.length ? s.keys.length : keys.length + ' of ' + s.keys.length), sub: s.hint });
+            keys.forEach(k => out.push(row(k, s.key)));
           });
-          return c;
-        },
-        progressPct: function () {
-          if (!this.activeTab || !this.activeTab.counts.total) return 0;
-          return Math.round(100 * this.activeTab.counts.reviewed / this.activeTab.counts.total);
-        },
-        progressLabel: function () {
-          if (!this.activeTab) return '—';
-          return this.activeTab.counts.reviewed + ' of ' + this.activeTab.counts.total + ' reviewed (' + this.progressPct + '%)';
+        } else if (this.mode === 'impact') {
+          this.reviewKeys.filter(keep).sort(byImpact).forEach(k => out.push(row(k)));
+        } else if (this.mode === 'account') {
+          const groups = {};
+          this.reviewKeys.filter(keep).forEach(k => {
+            const it = t.review[k];
+            const g = (it.inventoryAcct || 'No inventory account') + ' · ' + (it.costAcct || 'No cost account');
+            (groups[g] = groups[g] || { name: g, keys: [], impact: 0 }).keys.push(k);
+            groups[g].impact += it.impact;
+          });
+          Object.values(groups).sort((a, b) => b.impact - a.impact).forEach(g => {
+            out.push({ id: 'h-' + g.name, head: g.name + ' · ' + g.keys.length, sub: this.money(g.impact) + ' dollar impact' });
+            g.keys.sort(byImpact).forEach(k => out.push(row(k)));
+          });
+        } else {
+          const rank = { adjust: 0, review: 1 };
+          this.reviewKeys.filter(k => keep(k) && rank[this.statusOf(k)] != null)
+            .sort((a, b) => rank[this.statusOf(a)] - rank[this.statusOf(b)] || byImpact(a, b)).forEach(k => out.push(row(k)));
         }
-      },
-      mounted: function () {
-        this.loadBootstrap();
-        this._autoSyncTimer = setInterval(this.autoSyncTick, AUTO_SYNC_MS);
-        this._beforeUnload = this.onBeforeUnload.bind(this);
-        window.addEventListener('beforeunload', this._beforeUnload);
-        this._onKeydown = this.handleEscapeKey.bind(this);
-        window.addEventListener('keydown', this._onKeydown);
-      },
-      beforeUnmount: function () {
-        clearInterval(this._autoSyncTimer);
-        window.removeEventListener('beforeunload', this._beforeUnload);
-        window.removeEventListener('keydown', this._onKeydown);
-      },
-      methods: {
-        dkey: function (ds, row) { return ds + ' ' + row; },
-
-        handleEscapeKey: function (e) {
-          if (e.key !== 'Escape') return;
-          if (this.showSettings) { this.closeSettings(); return; }
-          if (this.csv.stage === 'confirm' || this.csv.stage === 'error') { this.closeCsvModal(); return; }
-          if (this.csv.stage === 'done') { this.finishCsvUpload(); return; }
-          if (this.removeModal.stage === 'confirm' || this.removeModal.stage === 'error') { this.closeRemoveModal(); return; }
-          if (this.removeModal.stage === 'done') { this.finishRemove(); return; }
-          // 'checking' / 'importing' / 'removing' stages have no cancel action in the
-          // UI either — an operation is in flight, so Escape is a no-op there too.
-        },
-
-        showStatus: function (msg, type) {
-          if (type === 'loading') {
-            // a new operation starting supersedes whatever was showing before,
-            // same as the old single-banner behavior
-            this.toasts = [];
-          } else {
-            this.toasts = this.toasts.filter((t) => t.type !== 'loading');
-          }
-          const id = ++this._toastSeq;
-          this.toasts.push({ id: id, msg: msg, type: type });
-          if (type === 'success') {
-            setTimeout(() => { this.dismissToast(id); }, 3000);
-          }
-          // 'error' toasts persist until manually dismissed; 'loading' is dismissed
-          // implicitly when the follow-up success/error toast arrives.
-        },
-        dismissToast: function (id) {
-          this.toasts = this.toasts.filter((t) => t.id !== id);
-        },
-
-        colClass: function (key) { return NUMERIC_COLS.indexOf(key) !== -1 ? 'qty' : ''; },
-        colStyle: function (key) {
-          const w = this.columnWidths[key];
-          return w ? { width: w + 'px', maxWidth: w + 'px' } : {};
-        },
-        varianceClass: function (key, variance) {
-          if (key !== 'variance' || variance === '' || variance === null || variance === -1) return '';
-          if (variance >= 0.5) return 'variance-high';
-          if (variance >= 0.2) return 'variance-mid';
-          return '';
-        },
-        formatCell: function (it, key) {
-          const v = it[key];
-          if (v === '' || v === null || v === undefined) return '—';
-          if (key === 'variance') {
-            if (v === -1) return 'Zero $ cost';
-            return (v * 100).toFixed(1) + '%';
-          }
-          if (CURRENCY_COLS.indexOf(key) !== -1) {
-            const n = Number(v);
-            return isNaN(n) ? '—' : n.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
-          }
-          if (key === 'adjustment') {
-            const an = Number(v);
-            if (isNaN(an)) return '—';
-            return (an > 0 ? '+' : '') + an.toLocaleString(undefined, { maximumFractionDigits: 2 });
-          }
-          if (key === 'currentQty' || key === 'previousQty') {
-            const qn = Number(v);
-            return isNaN(qn) ? String(v) : qn.toLocaleString(undefined, { maximumFractionDigits: 2 });
-          }
-          return v;
-        },
-
-        /* ---------- column reorder / resize (session-only) ---------- */
-        ensureColumnOrder: function () {
-          const have = {};
-          this.columnOrder.forEach((k) => { have[k] = true; });
-          this.settings.allColumns.forEach((c) => { if (!have[c.key]) this.columnOrder.push(c.key); });
-        },
-        onColDragStart: function (key, e) {
-          this.dragKey = key;
-          e.dataTransfer.effectAllowed = 'move';
-        },
-        onColDrop: function (targetKey, e) {
-          e.preventDefault();
-          if (!this.dragKey || this.dragKey === targetKey) return;
-          const order = this.columnOrder.slice();
-          const from = order.indexOf(this.dragKey);
-          const to = order.indexOf(targetKey);
-          if (from === -1 || to === -1) return;
-          order.splice(from, 1);
-          order.splice(to, 0, this.dragKey);
-          this.columnOrder = order;
-          this.dragKey = null;
-        },
-        startResize: function (key, e) {
-          e.preventDefault();
-          e.stopPropagation();
-          const startX = e.clientX;
-          const startWidth = this.columnWidths[key] || e.target.parentElement.offsetWidth;
-          const onMove = (ev) => {
-            const w = Math.max(60, startWidth + (ev.clientX - startX));
-            this.columnWidths = Object.assign({}, this.columnWidths);
-            this.columnWidths[key] = w;
-          };
-          const onUp = () => {
-            window.removeEventListener('mousemove', onMove);
-            window.removeEventListener('mouseup', onUp);
-          };
-          window.addEventListener('mousemove', onMove);
-          window.addEventListener('mouseup', onUp);
-        },
-
-        /* ---------- bootstrap / property selection ---------- */
-        loadBootstrap: async function () {
-          this.bootLoading = true;
-          try {
-            const b = await gas('getBootstrap');
-            this.bootstrap = b;
-            this.bootLoading = false;
-            if (!b.properties.length) return;
-            if (b.properties.length === 1) { this.selectProperty(b.properties[0]); return; }
-            google.script.url.getLocation((loc) => {
-              const wanted = loc && loc.parameter && loc.parameter.property;
-              const match = wanted && b.properties.filter((p) => p.id === wanted)[0];
-              this.selectProperty(match || b.properties[0]);
-            });
-          } catch (err) {
-            this.bootLoading = false;
-            this.showStatus('Error loading properties: ' + err.message, 'error');
-          }
-        },
-        onPropertyChange: function (id) {
-          const p = this.bootstrap.properties.filter((x) => x.id === id)[0];
-          if (p) this.selectProperty(p);
-        },
-        selectProperty: function (p) {
-          this.activeProperty = p;
-          this.activeKey = null;
-          this.columnOrder = [];
-          this.columnWidths = {};
-          this.loadData(true);
-        },
-
-        /* ---------- load ---------- */
-        loadData: async function (force) {
-          if (!this.activeProperty) return;
-          if (this.pendingCount && !force) {
-            const ok = confirm('You have ' + this.pendingCount + ' unsynced change(s). Refreshing now discards them unless they finish syncing first. Refresh anyway?');
-            if (!ok) return;
-          }
-          this.loading = true;
-          this.showStatus('Loading inventory data…', 'loading');
-          try {
-            const payload = await gas('getInventoryData', this.activeProperty.id);
-            this.tabsRaw = payload.tabs;
-            this.generatedAt = payload.generatedAt;
-            this.session = payload.session;
-            this.settings = payload.settings;
-            this.ensureColumnOrder();
-            if (!this.activeKey && payload.tabs.length) this.activeKey = payload.tabs[0].key;
-            this.pending = {}; this.syncStatus = {}; this.syncErrors = {}; this.categoryOverride = {};
-            this.origNotes = {};
-            payload.tabs.forEach((t) => {
-              t.sections.forEach((s) => {
-                s.items.forEach((it) => { this.origNotes[this.dkey(t.key, it.row)] = it.note || ''; });
-              });
-            });
-            this.loading = false;
-            this.showStatus('Data loaded.', 'success');
-          } catch (err) {
-            this.loading = false;
-            this.showStatus('Error loading data: ' + err.message, 'error');
-          }
-        },
-
-        /* ---------- review / notes ---------- */
-        findItem: function (row) {
-          if (!this.activeTab) return null;
-          for (let i = 0; i < this.activeTab.sections.length; i++) {
-            const found = this.activeTab.sections[i].items.filter((it) => it.row === row)[0];
-            if (found) return found;
-          }
-          return null;
-        },
-        noteOf: function (row) {
-          const k = this.dkey(this.activeKey, row);
-          if (this.pending[k]) return this.pending[k].note;
-          const it = this.findItem(row);
-          return it ? (it.note || '') : '';
-        },
-        statusOf: function (note) {
-          const n = (note || '').trim().toUpperCase();
-          if (n.indexOf('CORRECT') === 0) return 'correct';
-          if (n.indexOf('REVIEW') === 0) return 'review';
-          if (n.indexOf('ADJUST') === 0) return 'adjust';
-          return note ? 'other' : '';
-        },
-        rowClass: function (it) {
-          const cls = STATUS_CLASS[this.statusOf(this.noteOf(it.row))];
-          return cls || '';
-        },
-        categoryOf: function (row) {
-          const k = this.dkey(this.activeKey, row);
-          if (this.categoryOverride[k]) return this.categoryOverride[k];
-          const s = this.statusOf(this.noteOf(row));
-          if (s === 'correct') return 'CORRECT';
-          if (s === 'review') return 'REVIEW';
-          if (s === 'adjust') return 'ADJUST';
-          return null;
-        },
-        filteredCategories: function (row) {
-          const cat = this.categoryOf(row);
-          let list = cat
-            ? this.settings.noteCategories.filter((c) => c.indexOf(cat) === 0)
-            : this.settings.noteCategories.slice();
-          // Preserve legacy/free-text notes (e.g. saved before the dropdown existed, or
-          // a category since removed by an admin) as a selectable option instead of
-          // silently blanking the <select> when the exact string isn't in the list.
-          const current = this.noteOf(row);
-          if (current && list.indexOf(current) === -1) list = [current].concat(list);
-          return list;
-        },
-        pickCategory: function (it, group) {
-          const k = this.dkey(this.activeKey, it.row);
-          this.categoryOverride[k] = group;
-          const bare = this.settings.noteCategories.filter((c) => c === group)[0]
-            || this.settings.noteCategories.filter((c) => c.indexOf(group) === 0)[0]
-            || group;
-          this.applyEdit(it, bare);
-        },
-        onSelect: function (it, value) { this.applyEdit(it, value); },
-        applyEdit: function (it, value) {
-          const dsKey = this.activeKey;
-          const k = this.dkey(dsKey, it.row);
-          const t = this.activeTab;
-          t.sections.forEach((s) => {
-            s.items.forEach((row2) => { if (row2.row === it.row) row2.note = value; });
-          });
-          const baseline = this.origNotes[k] !== undefined ? this.origNotes[k] : '';
-          if (value === baseline) {
-            delete this.pending[k];
-            delete this.syncStatus[k];
-          } else {
-            this.pending[k] = { datastore: dsKey, row: it.row, note: value, item: it.item };
-            this.syncStatus[k] = 'pending';
-          }
-        },
-
-        /* ---------- sync (in-memory edits -> sheet) ---------- */
-        autoSyncTick: function () { if (this.autoSync) this.syncPending(); },
-        syncPending: async function () {
-          const entries = [];
-          for (const k in this.pending) if (this.pending.hasOwnProperty(k)) entries.push(this.pending[k]);
-          if (!entries.length || this.syncing || !this.activeProperty) return;
-          this.syncing = true;
-          const keys = entries.map((e) => this.dkey(e.datastore, e.row));
-          keys.forEach((k) => { this.syncStatus[k] = 'syncing'; });
-          try {
-            const res = await gas('saveNotesBatch', this.activeProperty.id, entries.map((e) => ({
-              datastore: e.datastore, row: e.row, note: e.note, expectedItem: e.item
-            })));
-            this.onSyncResult(entries, res);
-          } catch (err) {
-            keys.forEach((k) => { this.syncStatus[k] = 'error'; this.syncErrors[k] = err.message; });
-            this.showStatus('Sync failed: ' + err.message, 'error');
-          } finally {
-            this.syncing = false;
-          }
-        },
-        onSyncResult: function (entries, res) {
-          const results = (res && res.results) || [];
-          let okCount = 0, errCount = 0;
-          entries.forEach((e, i) => {
-            const k = this.dkey(e.datastore, e.row);
-            const r = results[i];
-            if (r && r.ok) {
-              okCount++;
-              this.origNotes[k] = e.note;
-              delete this.pending[k];
-              this.syncStatus[k] = 'synced';
-              setTimeout(() => { if (this.syncStatus[k] === 'synced') delete this.syncStatus[k]; }, 2500);
-            } else {
-              errCount++;
-              this.syncStatus[k] = 'error';
-              this.syncErrors[k] = (r && r.error) || 'Unknown error';
-            }
-          });
-          if (res && res.progress) {
-            Object.keys(res.progress).forEach((dsKey) => {
-              const t = this.tabsRaw.filter((x) => x.key === dsKey)[0];
-              if (t) t.counts = res.progress[dsKey];
-            });
-          }
-          if (errCount) this.showStatus(okCount + ' synced, ' + errCount + ' failed — will retry.', 'error');
-          else this.showStatus('Synced ' + okCount + ' change(s).', 'success');
-        },
-        onBeforeUnload: function (e) {
-          if (this.pendingCount) {
-            e.preventDefault();
-            e.returnValue = 'You have unsynced changes.';
-            return e.returnValue;
-          }
-        },
-
-        /* ---------- CSV upload / remove (admin) ---------- */
-        onCsvFileChosen: function (e) {
-          const f = e.target.files[0]; if (!f) return;
-          const reader = new FileReader();
-          reader.onload = async (ev) => {
-            this.csvFileText = ev.target.result;
-            e.target.value = '';
-            this.csv = { stage: 'checking', summary: null, error: null, result: null };
-            try {
-              const summary = await gas('getExistingDataSummary', this.activeProperty.id);
-              this.csv.summary = summary;
-              if (summary.hasData) { this.csv.stage = 'confirm'; }
-              else { this.doUpload(); }
-            } catch (err) {
-              this.csv.stage = 'error'; this.csv.error = err.message;
-            }
-          };
-          reader.readAsText(f);
-        },
-        doUpload: async function () {
-          this.csv.stage = 'importing';
-          try {
-            const res = await gas('processCSVData', this.activeProperty.id, this.csvFileText);
-            this.csv.stage = 'done'; this.csv.result = res;
-          } catch (err) {
-            this.csv.stage = 'error'; this.csv.error = err.message;
-          }
-        },
-        closeCsvModal: function () { this.csv = { stage: null, summary: null, error: null, result: null }; },
-        finishCsvUpload: function () { this.closeCsvModal(); this.loadData(true); },
-
-        askRemove: function () { this.removeModal = { stage: 'confirm', error: null }; },
-        doRemove: async function () {
-          this.removeModal.stage = 'removing';
-          try {
-            await gas('removeAllCountData', this.activeProperty.id);
-            this.removeModal.stage = 'done';
-          } catch (err) {
-            this.removeModal.stage = 'error'; this.removeModal.error = err.message;
-          }
-        },
-        closeRemoveModal: function () { this.removeModal = { stage: null, error: null }; },
-        finishRemove: function () { this.closeRemoveModal(); this.loadData(true); },
-
-        /* ---------- settings (property admin) ---------- */
-        openSettings: function () {
-          this.settingsDraft = {
-            propertyAdmins: this.settings.propertyAdmins.slice(),
-            propertyUsers: this.settings.propertyUsers.slice(),
-            visibleColumns: this.settings.visibleColumns.slice(),
-            noteCategories: this.settings.noteCategories.slice()
-          };
-          this.newPropertyAdminEmail = ''; this.newPropertyUserEmail = ''; this.newCategory = ''; this.settingsError = '';
-          this.globalAdmins = []; this.globalAdminsDraft = null; this.newGlobalAdminEmail = ''; this.globalAdminsError = '';
-          this.showSettings = true;
-          if (this.bootstrap.isGlobalAdmin) this.loadGlobalAdmins();
-          this.$nextTick(() => {
-            if (this.$refs.firstSettingsInput) this.$refs.firstSettingsInput.focus();
-          });
-        },
-        closeSettings: function () { this.showSettings = false; this.settingsDraft = null; },
-        addPropertyAdminEmail: function () {
-          const e = this.newPropertyAdminEmail.trim();
-          if (!e) return;
-          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { this.settingsError = 'Enter a valid email address.'; return; }
-          const exists = this.settingsDraft.propertyAdmins.some((x) => x.toLowerCase() === e.toLowerCase());
-          if (!exists) this.settingsDraft.propertyAdmins.push(e);
-          this.newPropertyAdminEmail = ''; this.settingsError = '';
-        },
-        removePropertyAdminEmail: function (email) {
-          if (!this.bootstrap.isGlobalAdmin && this.session.email && email.toLowerCase() === this.session.email.toLowerCase()) {
-            if (!confirm('This removes your own admin access to this property. Continue?')) return;
-          }
-          this.settingsDraft.propertyAdmins = this.settingsDraft.propertyAdmins.filter((e) => e !== email);
-        },
-        addPropertyUserEmail: function () {
-          const e = this.newPropertyUserEmail.trim();
-          if (!e) return;
-          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { this.settingsError = 'Enter a valid email address.'; return; }
-          const exists = this.settingsDraft.propertyUsers.some((x) => x.toLowerCase() === e.toLowerCase());
-          if (!exists) this.settingsDraft.propertyUsers.push(e);
-          this.newPropertyUserEmail = ''; this.settingsError = '';
-        },
-        removePropertyUserEmail: function (email) {
-          this.settingsDraft.propertyUsers = this.settingsDraft.propertyUsers.filter((e) => e !== email);
-        },
-        toggleColumn: function (key) {
-          const i = this.settingsDraft.visibleColumns.indexOf(key);
-          if (i === -1) this.settingsDraft.visibleColumns.push(key);
-          else this.settingsDraft.visibleColumns.splice(i, 1);
-        },
-        addCategory: function () {
-          const c = this.newCategory.trim().toUpperCase();
-          if (!c) return;
-          if (!/^(CORRECT|REVIEW|ADJUST)/.test(c)) { this.settingsError = 'Category must start with CORRECT, REVIEW, or ADJUST.'; return; }
-          if (this.settingsDraft.noteCategories.indexOf(c) === -1) this.settingsDraft.noteCategories.push(c);
-          this.newCategory = ''; this.settingsError = '';
-        },
-        removeCategory: function (c) {
-          if (this.settingsDraft.noteCategories.length <= 1) { this.settingsError = 'At least one note category is required.'; return; }
-          this.settingsDraft.noteCategories = this.settingsDraft.noteCategories.filter((x) => x !== c);
-        },
-        saveSettingsDraft: async function () {
-          this.settingsError = '';
-          try {
-            const s = await gas('saveSettings', this.activeProperty.id, this.settingsDraft);
-            this.settings = s;
-            this.ensureColumnOrder();
-            this.showSettings = false;
-            this.settingsDraft = null;
-            this.showStatus('Settings saved.', 'success');
-          } catch (err) {
-            this.settingsError = err.message;
-          }
-        },
-        resetSettingsToDefault: async function () {
-          if (!confirm('Reset this property\'s settings to the hardcoded defaults? This clears custom admins, users, columns, and categories.')) return;
-          this.settingsError = '';
-          try {
-            const s = await gas('resetSettings', this.activeProperty.id);
-            this.settings = s;
-            this.ensureColumnOrder();
-            this.settingsDraft = {
-              propertyAdmins: s.propertyAdmins.slice(), propertyUsers: s.propertyUsers.slice(),
-              visibleColumns: s.visibleColumns.slice(), noteCategories: s.noteCategories.slice()
-            };
-            this.showStatus('Settings reset to defaults.', 'success');
-          } catch (err) {
-            this.settingsError = err.message;
-          }
-        },
-
-        /* ---------- global admins (global admin only) ---------- */
-        loadGlobalAdmins: async function () {
-          try {
-            const list = await gas('getGlobalAdmins');
-            this.globalAdmins = list; this.globalAdminsDraft = list.slice();
-          } catch (err) {
-            this.globalAdminsError = err.message;
-          }
-        },
-        addGlobalAdminEmail: function () {
-          const e = this.newGlobalAdminEmail.trim();
-          if (!e) return;
-          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { this.globalAdminsError = 'Enter a valid email address.'; return; }
-          const exists = this.globalAdminsDraft.some((x) => x.toLowerCase() === e.toLowerCase());
-          if (!exists) this.globalAdminsDraft.push(e);
-          this.newGlobalAdminEmail = ''; this.globalAdminsError = '';
-        },
-        removeGlobalAdminEmail: function (email) {
-          if (this.globalAdminsDraft.length <= 1) { this.globalAdminsError = 'At least one global admin is required.'; return; }
-          if (this.session.email && email.toLowerCase() === this.session.email.toLowerCase()) {
-            if (!confirm('This removes your own global admin access. Continue?')) return;
-          }
-          this.globalAdminsDraft = this.globalAdminsDraft.filter((e) => e !== email);
-        },
-        saveGlobalAdminsDraft: async function () {
-          this.globalAdminsError = '';
-          try {
-            const list = await gas('saveGlobalAdmins', this.globalAdminsDraft);
-            this.globalAdmins = list; this.globalAdminsDraft = list.slice();
-            this.showStatus('Global admins saved.', 'success');
-          } catch (err) {
-            this.globalAdminsError = err.message;
-          }
-        }
+        return out;
       }
-    });
+    },
+    mounted() {
+      this.loadBootstrap();
+      this._timer = setInterval(() => { if (this.pendingCount && !this.syncing) this.syncPending(false); }, SYNC_SECONDS * 1000);
+      window.addEventListener('beforeunload', e => { if (this.pendingCount) { e.preventDefault(); e.returnValue = ''; } });
+      window.addEventListener('keydown', e => { if (e.key === 'Escape' && this.settingsDraft) this.closeSettings(); });
+    },
+    methods: {
+      /* ---------- formatting ---------- */
+      money(v) { const n = Number(v) || 0; return (Math.round(n) < 0 ? '−' : '') + '$' + Math.abs(Math.round(n)).toLocaleString('en-US'); },
+      signed(v) { const n = Math.round(Number(v) || 0); return (n > 0 ? '+' : n < 0 ? '−' : '') + '$' + Math.abs(n).toLocaleString('en-US'); },
+      signedPct(v) { return (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1) + '%'; },
+      cls(v) { return Math.round(Number(v) || 0) < 0 ? 'bad' : 'good'; },
+      qty(v) { const n = Number(v) || 0; return Math.abs(n - Math.round(n)) < 0.005 ? String(Math.round(n)) : n.toFixed(2).replace(/0$/, ''); },
+      cost(v) { return '$' + (Number(v) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); },
+      pct(n, d) { return d ? Math.min(100, n / d * 100) : 100; },
+      dayLabel(iso) {
+        if (!iso) return '—';
+        const d = new Date(iso);
+        return isNaN(d) ? String(iso).slice(0, 10) : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      },
+      toast(msg, type) {
+        const id = ++this.toastSeq;
+        this.toasts.push({ id, msg, type: type || 'success' });
+        if (type !== 'error') setTimeout(() => this.dismissToast(id), 3500);
+      },
+      dismissToast(id) { this.toasts = this.toasts.filter(t => t.id !== id); },
 
-    app.mount('#app');
-  </script>
+      /* ---------- property and data ---------- */
+      async loadBootstrap() {
+        try {
+          const b = await gas('getBootstrap');
+          this.bootstrap = b;
+          this.bootLoading = false;
+          if (!b.properties.length) return;
+          if (b.properties.length === 1) { this.selectProperty(b.properties[0]); return; }
+          google.script.url.getLocation(loc => {
+            const wanted = loc && loc.parameter && loc.parameter.property;
+            this.selectProperty(b.properties.filter(p => p.id === wanted)[0] || b.properties[0]);
+          });
+        } catch (err) { this.bootLoading = false; this.toast('Could not load properties: ' + err.message, 'error'); }
+      },
+      onPropertyChange(id) {
+        if (this.pendingCount && !confirm(this.pendingCount + ' note(s) are not saved yet and will be lost. Switch anyway?')) return;
+        const p = this.bootstrap.properties.filter(x => x.id === id)[0];
+        if (p) this.selectProperty(p);
+      },
+      selectProperty(p) {
+        this.activeProperty = p;
+        this.tabs = []; this.view = null; this.resetUpload();
+        this.loadData(true);
+      },
+      go(view) { this.view = view; this.sticky = {}; },
+      async loadData(force) {
+        if (!this.activeProperty) return;
+        if (this.pendingCount && !force && !confirm(this.pendingCount + ' note(s) are not saved yet. Refreshing now loses them. Refresh anyway?')) return;
+        this.loading = true; this.loadError = '';
+        try {
+          const d = await gas('getInventoryData', this.activeProperty.id);
+          this.tabs = d.tabs; this.session = d.session; this.settings = d.settings; this.rules = d.rules;
+          this.pending = {}; this.syncStatus = {}; this.syncErrors = {}; this.cats = {}; this.sticky = {};
+          if (!this.view || (this.view !== 'upload' && !this.activeTab)) {
+            const first = d.tabs.filter(t => t.items)[0];
+            this.view = first ? first.key : (d.session.isAdmin ? 'upload' : d.tabs[0].key);
+          }
+        } catch (err) { this.loadError = err.message; }
+        this.loading = false;
+      },
+
+      /* ---------- notes ---------- */
+      dkey(key) { return this.view + '|' + key; },
+      noteOf(key) {
+        const p = this.pending[this.dkey(key)];
+        if (p) return p.note;
+        const it = this.activeTab && this.activeTab.review[key];
+        return it ? it.note || '' : '';
+      },
+      statusOf(key) { return statusOfNote(this.noteOf(key)); },
+      noteMeta(key) {
+        if (this.pending[this.dkey(key)]) return '';
+        const it = this.activeTab.review[key];
+        return it && it.note && it.reviewedBy ? it.reviewedBy + ' · ' + String(it.reviewedAt).slice(0, 16) : '';
+      },
+      categoryOf(key) {
+        const c = this.cats[this.dkey(key)];
+        if (c != null) return c;
+        const p = PREFIXES.filter(x => x.key === this.statusOf(key))[0];
+        return p ? p.prefix : '';
+      },
+      /** A note-type button: filters the list, and picks the bare type (e.g. "CORRECT") when it is one of the notes. */
+      pickCategory(key, prefix) {
+        this.cats[this.dkey(key)] = prefix;
+        const cur = this.noteOf(key);
+        if (cur && cur.toUpperCase().indexOf(prefix) === 0) return;
+        if (this.settings.noteCategories.indexOf(prefix) !== -1) this.applyEdit(key, prefix);
+      },
+      optionsFor(key) {
+        const cat = this.categoryOf(key);
+        const list = this.settings.noteCategories.filter(o => !cat || o.toUpperCase().indexOf(cat) === 0);
+        const cur = this.noteOf(key);
+        if (cur && list.indexOf(cur) === -1) list.unshift(cur); // a note since removed from Settings stays visible
+        return list;
+      },
+      applyEdit(key, value) {
+        const k = this.dkey(key);
+        const it = this.activeTab.review[key];
+        if (this.onlyOpen) this.sticky[k] = true;
+        if (value === (it.note || '')) { delete this.pending[k]; delete this.syncStatus[k]; delete this.syncErrors[k]; }
+        else { this.pending[k] = { datastore: this.view, key: key, row: it.row, item: it.item, note: value }; this.syncStatus[k] = 'pending'; delete this.syncErrors[k]; }
+        const p = PREFIXES.filter(x => x.key === statusOfNote(value))[0];
+        if (p) this.cats[k] = p.prefix;
+      },
+      reasons(r) {
+        const rs = r.it.reasons || [];
+        if (!r.cat) return rs.map(x => x.text);
+        return rs.filter(x => x.cat === r.cat).concat(rs.filter(x => x.cat !== r.cat)).map(x => x.text);
+      },
+      /** Save queued notes. Automatic saves skip entries that already failed; "Save now" retries them. */
+      async syncPending(manual) {
+        if (this.syncing || !this.activeProperty) return;
+        const list = Object.keys(this.pending).filter(k => manual || this.syncStatus[k] !== 'error')
+          .map(k => Object.assign({ k: k }, this.pending[k]));
+        if (!list.length) return;
+        this.syncing = true;
+        list.forEach(e => { this.syncStatus[e.k] = 'syncing'; });
+        let failed = 0, firstError = '';
+        try {
+          const res = await gas('saveNotesBatch', this.activeProperty.id, list.map(e => ({ datastore: e.datastore, row: e.row, note: e.note, expectedItem: e.item })));
+          res.results.forEach((r, i) => {
+            const e = list[i];
+            if (!r.ok) { failed++; firstError = firstError || r.error; this.syncStatus[e.k] = 'error'; this.syncErrors[e.k] = r.error; return; }
+            const changedSince = this.pending[e.k] && this.pending[e.k].note !== e.note;
+            if (!changedSince) delete this.pending[e.k];
+            const tab = this.tabs.filter(t => t.key === e.datastore)[0];
+            const it = tab && tab.review[e.key];
+            if (it) { it.note = e.note; it.status = r.status; it.reviewedBy = r.by; it.reviewedAt = r.at; }
+            if (tab) tab.counts.reviewed = Object.keys(tab.review).filter(x => tab.review[x].note).length;
+            delete this.syncErrors[e.k];
+            this.syncStatus[e.k] = changedSince ? 'pending' : 'synced';
+            if (!changedSince) setTimeout(() => { if (this.syncStatus[e.k] === 'synced') delete this.syncStatus[e.k]; }, 2500);
+          });
+        } catch (err) {
+          failed = list.length; firstError = err.message;
+          list.forEach(e => { this.syncStatus[e.k] = 'error'; this.syncErrors[e.k] = err.message; });
+        }
+        this.syncing = false;
+        if (failed) this.toast(failed + ' note' + (failed === 1 ? '' : 's') + ' could not be saved: ' + firstError, 'error');
+      },
+
+      /* ---------- upload ---------- */
+      onCsvFile(e) {
+        const f = e.target.files[0]; if (!f) return;
+        const reader = new FileReader();
+        reader.onload = async ev => {
+          e.target.value = '';
+          this.up = { stage: 'reading', fileName: f.name, text: ev.target.result, preview: null, error: '' };
+          try {
+            this.up.preview = await gas('previewUpload', this.activeProperty.id, this.up.text, f.name);
+            this.up.stage = 'preview';
+          } catch (err) { this.up.stage = 'error'; this.up.error = err.message; }
+        };
+        reader.readAsText(f);
+      },
+      async commitCsv() {
+        if (this.pendingCount) await this.syncPending(true);
+        this.up.stage = 'saving';
+        try {
+          const res = await gas('commitUpload', this.activeProperty.id, this.up.text, this.up.fileName);
+          this.toast('Saved: ' + res.tables.map(t => t.label + ' ' + t.items + ' items, ' + t.review + ' to review' + (t.keptNotes ? ', ' + t.keptNotes + ' notes kept' : '')).join('; ') + '.');
+          this.resetUpload();
+          this.view = res.tables[0].key;
+          await this.loadData(true);
+        } catch (err) { this.up.stage = 'error'; this.up.error = err.message; }
+      },
+      resetUpload() { this.up = { stage: null, fileName: '', text: null, preview: null, error: '' }; },
+      async removeAll() {
+        if (!confirm('Empty both tabs of ' + this.activeProperty.name + ', notes included? This cannot be undone.')) return;
+        try { await gas('removeAllCountData', this.activeProperty.id); this.toast('All count data removed.'); await this.loadData(true); }
+        catch (err) { this.toast(err.message, 'error'); }
+      },
+
+      /* ---------- settings ---------- */
+      openSettings() {
+        this.settingsDraft = { propertyAdmins: this.settings.propertyAdmins.slice(), propertyUsers: this.settings.propertyUsers.slice(),
+          noteCategories: this.settings.noteCategories.slice() };
+        this.settingsError = ''; this.newAdmin = ''; this.newUser = ''; this.newNote = '';
+        this.globalDraft = null; this.globalError = ''; this.newGlobal = '';
+        if (this.bootstrap.isGlobalAdmin) gas('getGlobalAdmins').then(l => { this.globalDraft = l.slice(); }).catch(err => { this.globalError = err.message; });
+        this.$nextTick(() => { if (this.$refs.firstSettingsInput) this.$refs.firstSettingsInput.focus(); });
+      },
+      closeSettings() { this.settingsDraft = null; },
+      addEmail(list, field) {
+        const e = this[field].trim();
+        if (!e) return;
+        if (!EMAIL.test(e)) { this.settingsError = 'Enter a valid email address.'; return; }
+        if (!this.settingsDraft[list].some(x => x.toLowerCase() === e.toLowerCase())) this.settingsDraft[list].push(e);
+        this[field] = ''; this.settingsError = '';
+      },
+      addNote() {
+        const n = this.newNote.trim().toUpperCase();
+        if (!n) return;
+        if (!/^(CORRECT|REVIEW|ADJUST)/.test(n)) { this.settingsError = 'A note must start with CORRECT, REVIEW or ADJUST.'; return; }
+        if (this.settingsDraft.noteCategories.indexOf(n) === -1) this.settingsDraft.noteCategories.push(n);
+        this.newNote = ''; this.settingsError = '';
+      },
+      removeNote(n) {
+        if (this.settingsDraft.noteCategories.length <= 1) { this.settingsError = 'At least one note is required.'; return; }
+        this.settingsDraft.noteCategories = this.settingsDraft.noteCategories.filter(x => x !== n);
+      },
+      async saveSettingsDraft() {
+        this.settingsError = '';
+        try {
+          const s = await gas('saveSettings', this.activeProperty.id, this.settingsDraft);
+          this.settings = s; this.settingsDraft = null; this.toast('Settings saved.');
+        } catch (err) { this.settingsError = err.message; }
+      },
+      async resetSettingsToDefault() {
+        if (!confirm('Reset this property\'s admins, users and notes to the defaults?')) return;
+        try {
+          const s = await gas('resetSettings', this.activeProperty.id);
+          this.settings = s;
+          this.settingsDraft = { propertyAdmins: s.propertyAdmins.slice(), propertyUsers: s.propertyUsers.slice(), noteCategories: s.noteCategories.slice() };
+          this.toast('Settings reset to defaults.');
+        } catch (err) { this.settingsError = err.message; }
+      },
+      addGlobalAdmin() {
+        const e = this.newGlobal.trim();
+        if (!e) return;
+        if (!EMAIL.test(e)) { this.globalError = 'Enter a valid email address.'; return; }
+        if (!this.globalDraft.some(x => x.toLowerCase() === e.toLowerCase())) this.globalDraft.push(e);
+        this.newGlobal = ''; this.globalError = '';
+      },
+      removeGlobalAdmin(e) {
+        if (this.globalDraft.length <= 1) { this.globalError = 'At least one global admin is required.'; return; }
+        if (this.session.email && e.toLowerCase() === this.session.email.toLowerCase() && !confirm('This removes your own global admin access. Continue?')) return;
+        this.globalDraft = this.globalDraft.filter(x => x !== e);
+      },
+      async saveGlobalAdmins() {
+        this.globalError = '';
+        try { this.globalDraft = (await gas('saveGlobalAdmins', this.globalDraft)).slice(); this.toast('Global admins saved.'); }
+        catch (err) { this.globalError = err.message; }
+      }
+    }
+  }).mount('#app');
+</script>
 </body>
 </html>

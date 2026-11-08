@@ -1,20 +1,19 @@
 /*******************************************************************************
- * InventoryApi.gs — the inventory review's endpoints. The logic is in
- * Inventory.gs; this file reads and writes the four inventory sheets
- * (Store.gs SHEETS.invCounts / invItems / invNotes / invReports).
+ * InventoryApi.gs — the regional inventory check's endpoints. The logic is in
+ * InventoryRules.gs (shared with inventory_audit) and InventoryCheck.gs; this
+ * file reads and writes the two inventory sheets (Store.gs SHEETS.invChecks /
+ * invFlags).
  *
  * WHO CAN DO WHAT (Code.gs roleOf_ / canEditInventory_)
  *   read      admins, viewers, inventory reviewers
- *   edit      admins and inventory reviewers: upload counts, write notes,
- *             save reports
- *   remove    admins only (a count, or a saved report)
+ *   upload    admins and inventory reviewers
+ *   remove    admins only
  *   P&L figures in the report (days on hand) are left out for the
  *   inventory-only role.
  *
- * UPLOADS replace the count in the same slot (property + count name). For
- * the same month (a recount) notes are kept for items still under review;
- * for a new month the old count and its notes go, and only its saved report
- * (if any) stays.
+ * UPLOADS. Property + count name + month is one check; uploading it again
+ * replaces it (the store fixed things in R365 and the count was exported
+ * again). Writes add rows at the end; only a replacement rewrites the sheets.
  ******************************************************************************/
 
 /** ------------------------------------------------------------- access */
@@ -24,53 +23,49 @@ function inventoryAccess_(ss) {
   return { role: role, canEdit: canEditInventory_(ss, role), seesPnl: role === 'admin' || role === 'viewer' };
 }
 function requireInventoryAdmin_(ss) {
-  if (inventoryAccess_(ss).role !== 'admin') throw new Error('Only an administrator can remove inventory data. You are signed in as ' + currentUserEmail_() + '.');
+  if (inventoryAccess_(ss).role !== 'admin') throw new Error('Only an administrator can remove inventory checks. You are signed in as ' + currentUserEmail_() + '.');
 }
 function requireInventoryEditor_(ss) {
   const a = inventoryAccess_(ss);
-  if (!a.canEdit) throw new Error('Only an administrator or an inventory reviewer can do this. You are signed in as ' + currentUserEmail_() + '.');
+  if (!a.canEdit) throw new Error('Only an administrator or an inventory reviewer can upload counts. You are signed in as ' + currentUserEmail_() + '.');
   return a;
 }
 
 /**
- * Properties an inventory count can belong to: configured ones (every P&L
- * upload registers its properties there) plus any with a count on file.
+ * Properties a count can belong to: configured ones (every P&L upload
+ * registers its properties there) plus any with a check on file.
  */
 function inventoryProperties_(ss, config) {
   const list = (config.properties || []).map(function (p) { return { code: p.code, name: p.name, active: p.active !== false }; });
   const known = {};
   list.forEach(function (p) { known[p.code] = true; });
-  readDataRows_(ss, 'invCounts').forEach(function (r) {
-    const code = String(r[1]);
-    if (!known[code]) { list.push({ code: code, name: code, active: true }); known[code] = true; }
+  readInventoryChecks_(ss).forEach(function (c) {
+    if (!known[c.property]) { list.push({ code: c.property, name: c.property, active: true }); known[c.property] = true; }
   });
   return list.sort(function (a, b) { return a.name.localeCompare(b.name); });
 }
 
 /** ------------------------------------------------------------- reading */
-function readInventoryCounts_(ss) {
-  return readDataRows_(ss, 'invCounts').map(inventoryCountFromRow_);
+function readInventoryChecks_(ss) {
+  return readDataRows_(ss, 'invChecks').map(inventoryCheckFromRow_);
 }
 
-/** One count's items: one range read, checked against the count ID; a full scan if the layout moved. */
-function readInventoryItems_(ss, count) {
-  const def = SHEETS.invItems;
-  const sheet = ss.getSheetByName(def.name);
-  if (!sheet || sheet.getLastRow() < 2) return [];
-  if (count.firstRow >= 2 && count.rowCount > 0 && count.firstRow + count.rowCount - 1 <= sheet.getLastRow()) {
-    const rows = sheet.getRange(count.firstRow, 1, count.rowCount, def.headers.length).getValues();
-    if (rows.every(function (r) { return String(r[0]) === count.id; })) return rows.map(inventoryItemFromRow_);
-  }
-  return readDataRows_(ss, 'invItems').filter(function (r) { return String(r[0]) === count.id; }).map(inventoryItemFromRow_);
+/** Flags of the given counts: { countId: flags[] }. */
+function readInventoryFlags_(ss, countIds) {
+  const want = {};
+  countIds.forEach(function (id) { want[id] = []; });
+  readDataRows_(ss, 'invFlags').forEach(function (r) {
+    const id = String(r[0]);
+    if (want[id]) want[id].push(inventoryFlagFromRow_(r));
+  });
+  return want;
 }
 
-function findInventoryCount_(ss, countId) {
-  const c = readInventoryCounts_(ss).filter(function (x) { return x.id === String(countId); })[0];
-  if (!c) throw new Error('That count is no longer on file. It may have been replaced by a newer upload. Refresh the page.');
-  return c;
+/** The latest check before `period` in the same slot, or null. */
+function checkBefore_(checks, property, label, period) {
+  return checks.filter(function (c) { return c.property === property && sameInventoryLabel_(c.label, label) && c.period < period; })
+    .sort(function (a, b) { return b.period.localeCompare(a.period); })[0] || null;
 }
-
-function readInventoryNotes_(ss) { return inventoryNotesByCount_(readDataRows_(ss, 'invNotes')); }
 
 /** P&L month for the report's days on hand: { stage, asOf, lines: {key: amount} } or null. */
 function inventoryPnlMonth_(ss, property, period) {
@@ -84,116 +79,23 @@ function inventoryPnlMonth_(ss, property, period) {
 
 /** ------------------------------------------------------------- dashboard */
 
-/** Every count on file with its review progress, the open action items, and the saved reports. */
+/** Every check on file, newest month first, with what it found. */
 function getInventoryDashboard() {
   const ss = dataSpreadsheet_();
   const access = inventoryAccess_(ss);
   const config = readConfig_(ss);
-  const counts = readInventoryCounts_(ss);
-  const notes = readInventoryNotes_(ss);
-  const reports = inventoryReportsFromRows_(readInventoryReportMeta_(ss), false);
-  const actions = [];
-  const rows = counts.map(function (c) {
-    const n = notes[c.id] || {};
-    const st = { noted: 0, correct: 0, review: 0, adjust: 0, other: 0, openImpact: 0, lastNoteAt: '' };
-    Object.keys(n).forEach(function (k) {
-      const s = n[k].status || inventoryStatus_(n[k].note);
-      st.noted++;
-      if (st[s] != null) st[s]++;
-      if (n[k].at > st.lastNoteAt) st.lastNoteAt = n[k].at;
-      if (s === 'review' || s === 'adjust') {
-        st.openImpact += n[k].impact;
-        actions.push({ countId: c.id, property: c.property, period: c.period, label: c.label, key: k, note: n[k].note,
-          status: s, impact: n[k].impact, by: n[k].by, at: n[k].at });
-      }
-    });
-    const rep = reports[inventoryReportId_(c.property, c.period)];
-    const lastChange = [c.uploadedAt, st.lastNoteAt].sort().pop();
-    return Object.assign({}, c, { review: st, report: rep ? { savedAt: rep.savedAt, savedBy: rep.savedBy,
-      stale: rep.savedAt < lastChange } : null });
+  const checks = readInventoryChecks_(ss).map(function (c) {
+    const out = Object.assign({}, c);
+    delete out.summary;
+    out.notCounted = c.summary.notCounted ? c.summary.notCounted.items : 0;
+    return out;
   });
-  actions.sort(function (a, b) { return (a.status === b.status ? 0 : a.status === 'adjust' ? -1 : 1) || b.impact - a.impact; });
   return safe_({
     canEdit: access.canEdit, isAdmin: access.role === 'admin',
+    highImpact: INV_RULES.highImpact,
     properties: inventoryProperties_(ss, config),
-    noteCategories: config.inventory.noteCategories,
-    counts: rows,
-    actions: actions,
-    reports: Object.keys(reports).map(function (k) { return reports[k]; })
-      .sort(function (a, b) { return b.period.localeCompare(a.period) || a.property.localeCompare(b.property); })
+    checks: checks.sort(function (a, b) { return b.period.localeCompare(a.period) || a.property.localeCompare(b.property) || a.label.localeCompare(b.label); })
   });
-}
-
-/** Report metadata only: the first nine columns (the JSON column can be large). */
-function readInventoryReportMeta_(ss) {
-  const def = SHEETS.invReports;
-  const sheet = ss.getSheetByName(def.name);
-  if (!sheet || sheet.getLastRow() < 2) return [];
-  return sheet.getRange(2, 1, sheet.getLastRow() - 1, def.headers.length - 1).getValues()
-    .filter(function (r) { return String(r[0]) && Number(r[8]) === 0; });
-}
-
-/** ------------------------------------------------------------- review */
-
-/** One count to review: the items picked for review, their notes, and the note list. */
-function getInventoryCount(countId) {
-  const ss = dataSpreadsheet_();
-  const access = inventoryAccess_(ss);
-  const config = readConfig_(ss);
-  const count = findInventoryCount_(ss, countId);
-  const items = readInventoryItems_(ss, count);
-  const tri = triageInventory_(items);
-  return safe_({
-    count: count, canEdit: access.canEdit,
-    totals: inventoryTotals_(items),
-    sections: tri.sections, items: tri.items, total: tri.total,
-    notes: readInventoryNotes_(ss)[count.id] || {},
-    noteCategories: config.inventory.noteCategories
-  });
-}
-
-/**
- * Save review notes for one count. entries: [{ key, note }] (an empty note
- * removes it). Returns one result per entry, in order, so the page's sync
- * queue keeps any entry that failed instead of dropping it.
- */
-function saveInventoryNotes(countId, entries) {
-  const ss = dataSpreadsheet_();
-  requireInventoryEditor_(ss);
-  if (!Array.isArray(entries)) throw new Error('saveInventoryNotes expects a list.');
-  const lock = LockService.getScriptLock();
-  try { lock.waitLock(30000); }
-  catch (e) { throw new Error('Another save is in progress. Try again in a moment.'); }
-  try {
-    const count = findInventoryCount_(ss, countId);
-    const tri = triageInventory_(readInventoryItems_(ss, count));
-    const who = currentUserEmail_() || 'unknown';
-    const at = new Date().toISOString();
-    const rows = readDataRows_(ss, 'invNotes');
-    const index = {};
-    rows.forEach(function (r, i) { if (String(r[0]) === count.id) index[String(r[1])] = i; });
-    const drop = {};
-    const results = entries.map(function (e) {
-      const key = String(e && e.key || '');
-      const note = String(e && e.note || '').trim();
-      if (!tri.items[key]) return { key: key, ok: false, error: 'not under review in the count on file — refresh' };
-      const i = index[key];
-      if (!note) {
-        if (i != null) drop[i] = true;
-        return { key: key, ok: true, status: '' };
-      }
-      const row = [count.id, key, note, inventoryStatus_(note), tri.items[key].impact, who, at];
-      if (i != null) { rows[i] = row; delete drop[i]; }
-      else { index[key] = rows.length; rows.push(row); }
-      return { key: key, ok: true, status: inventoryStatus_(note), by: who, at: at };
-    });
-    writeDataRows_(ss, 'invNotes', rows.filter(function (r, i) { return !drop[i]; }));
-    SpreadsheetApp.flush();
-    const mine = rows.filter(function (r, i) { return !drop[i] && String(r[0]) === count.id; });
-    return safe_({ results: results, noted: mine.length, total: tri.total });
-  } finally {
-    lock.releaseLock();
-  }
 }
 
 /** ------------------------------------------------------------- upload */
@@ -209,70 +111,55 @@ function checkInventoryUpload_(property, period, label) {
   return { property: property, period: period, label: label };
 }
 
-/** Read an upload and work out what it would replace. Writes nothing. */
+/** Read an upload and work out what it would replace and how it compares with the month before. Writes nothing. */
 function inventoryUploadPlan_(ss, csvText, fileName, property, period, label) {
   const parsed = parseInventoryCsv_(Utilities.parseCsv(String(csvText || '')));
-  const tri = triageInventory_(parsed.items);
-  const totals = inventoryTotals_(parsed.items);
-  const counts = readInventoryCounts_(ss);
   const target = checkInventoryUpload_(property, period, label || suggestInventoryLabel_(parsed.items));
-  const existing = counts.filter(function (c) { return c.property === target.property && sameInventoryLabel_(c.label, target.label); })[0] || null;
-  const plan = { parsed: parsed, triage: tri, totals: totals, target: target, existing: existing, counts: counts,
-    keptNotes: {}, droppedNotes: [], continuity: null, duplicateOf: null, reportSaved: false };
-  if (existing) {
-    const notes = readInventoryNotes_(ss)[existing.id] || {};
-    if (existing.period === target.period) {
-      const carry = carryInventoryNotes_(notes, tri);
-      plan.keptNotes = carry.kept; plan.droppedNotes = carry.dropped;
-    } else {
-      plan.droppedNotes = Object.keys(notes);
-    }
-    if (existing.period < target.period) plan.continuity = inventoryContinuity_(readInventoryItems_(ss, existing), parsed.items);
-    plan.reportSaved = !!inventoryReportsFromRows_(readInventoryReportMeta_(ss), false)[inventoryReportId_(existing.property, existing.period)];
-  }
-  // The same file under a second name for the same property and month.
-  plan.duplicateOf = counts.filter(function (c) {
-    return c !== existing && c.property === target.property && c.period === target.period &&
-      c.items === parsed.items.length && Math.abs(c.current - totals.current) < 0.01 && Math.abs(c.previous - totals.previous) < 0.01;
+  const checks = readInventoryChecks_(ss);
+  const existing = checks.filter(function (c) {
+    return c.property === target.property && c.period === target.period && sameInventoryLabel_(c.label, target.label);
   })[0] || null;
-  return plan;
+  const built = buildInventoryCheck_(parsed, { id: '', property: target.property, period: target.period, label: target.label,
+    file: String(fileName || '') });
+  const now = { check: built.check, flags: built.flags.map(function (f) { return inventoryFlagFromRow_(inventoryFlagRow_('', f)); }) };
+  const prev = checkBefore_(checks, target.property, target.label, target.period);
+  const before = prev ? { check: prev, flags: readInventoryFlags_(ss, [prev.id])[prev.id] } : null;
+  // The same export filed under a second name, or for a second property.
+  const duplicateOf = checks.filter(function (c) {
+    return c !== existing && c.period === target.period && c.items === parsed.items.length &&
+      Math.abs(c.current - built.check.current) < 0.01 && Math.abs(c.previous - built.check.previous) < 0.01;
+  })[0] || null;
+  return { parsed: parsed, target: target, existing: existing, built: built, now: now,
+    compare: compareInventoryChecks_(now, before), duplicateOf: duplicateOf };
 }
 
-/** Inventory editors. What an Inventory Count Item Details CSV holds, and what saving it would replace. */
+/**
+ * Inventory editors. What an export holds, what it would replace, and what
+ * the check finds: the high-impact items, the follow-on check against last
+ * month, and the tie-out.
+ */
 function previewInventoryUpload(csvText, fileName, property, period, label) {
   const ss = dataSpreadsheet_();
   requireInventoryEditor_(ss);
   const plan = inventoryUploadPlan_(ss, csvText, fileName, property, period, label);
-  const e = plan.existing;
+  const c = plan.built.check;
   return safe_({
     fileName: String(fileName || ''),
     rows: plan.parsed.rows, warnings: plan.parsed.warnings, tieOuts: plan.parsed.tieOuts,
-    totals: plan.totals,
     suggestedLabel: suggestInventoryLabel_(plan.parsed.items),
     target: plan.target,
-    accounts: inventoryAccountMix_(plan.parsed.items),
-    review: { total: plan.triage.total, sections: plan.triage.sections.map(function (s) { return { key: s.key, label: s.label, items: s.keys.length }; }) },
-    existing: e ? { id: e.id, period: e.period, label: e.label, uploadedAt: e.uploadedAt, uploadedBy: e.uploadedBy, current: e.current,
-      sameMonth: e.period === plan.target.period, olderThanUpload: e.period > plan.target.period } : null,
-    keptNotes: Object.keys(plan.keptNotes).length, droppedNotes: plan.droppedNotes.slice(0, 20), droppedCount: plan.droppedNotes.length,
-    reportSaved: plan.reportSaved,
-    continuity: plan.continuity,
-    duplicateOf: plan.duplicateOf ? { label: plan.duplicateOf.label, period: plan.duplicateOf.period } : null
+    totals: { current: c.current, previous: c.previous, change: round2Inv_(c.current - c.previous), priceEffect: c.priceEffect, qtyEffect: c.qtyEffect },
+    picked: c.picked, highImpact: c.highImpact, highImpactValue: c.highImpactValue,
+    top: plan.now.flags.filter(function (f) { return f.impact >= INV_RULES.highImpact; }).slice(0, 5)
+      .map(function (f) { return { item: f.item, impact: f.impact, reason: f.reasons[0] || '' }; }),
+    follows: plan.compare.follows,
+    existing: plan.existing ? { id: plan.existing.id, uploadedAt: plan.existing.uploadedAt, uploadedBy: plan.existing.uploadedBy,
+      highImpact: plan.existing.highImpact } : null,
+    duplicateOf: plan.duplicateOf ? { property: plan.duplicateOf.property, period: plan.duplicateOf.period, label: plan.duplicateOf.label } : null
   });
 }
 
-function inventoryAccountMix_(items) {
-  const by = {};
-  items.forEach(function (it) {
-    const k = it.inventoryAcct || 'No inventory account';
-    const a = by[k] = by[k] || { name: k, items: 0, value: 0 };
-    a.items++; a.value += it.curTotal;
-  });
-  return Object.keys(by).map(function (k) { by[k].value = round2Inv_(by[k].value); return by[k]; })
-    .sort(function (a, b) { return b.value - a.value; });
-}
-
-/** Inventory editors. Save the count, replacing the one in the same slot. */
+/** Inventory editors. Save the check, replacing one for the same property, count name and month. */
 function commitInventoryUpload(csvText, fileName, property, period, label) {
   const ss = dataSpreadsheet_();
   requireInventoryEditor_(ss);
@@ -283,61 +170,41 @@ function commitInventoryUpload(csvText, fileName, property, period, label) {
     const plan = inventoryUploadPlan_(ss, csvText, fileName, property, period, label);
     if (plan.duplicateOf) {
       throw new Error('Not saved: this file is identical to the ' + plan.duplicateOf.label + ' count already on file for ' +
-        plan.target.property + ' ' + plan.target.period + '.');
-    }
-    if (plan.existing && plan.existing.period > plan.target.period) {
-      throw new Error('Not saved: the ' + plan.existing.label + ' count on file is for ' + plan.existing.period +
-        ', later than ' + plan.target.period + '. Remove it first if this older count should replace it.');
+        plan.duplicateOf.property + ' ' + plan.duplicateOf.period + '.');
     }
     const at = new Date().toISOString(), who = currentUserEmail_();
-    const count = { id: Utilities.getUuid().slice(0, 8), property: plan.target.property, period: plan.target.period,
-      label: plan.target.label, file: String(fileName || ''), uploadedAt: at, uploadedBy: who, items: plan.parsed.rows,
-      current: plan.totals.current, previous: plan.totals.previous, reviewItems: plan.triage.total };
-    const replaced = plan.existing ? plan.existing.id : null;
-    writeInventoryLayout_(ss, plan.counts.filter(function (c) { return c.id !== replaced; }), count, plan.parsed.items);
-
-    const noteRows = readDataRows_(ss, 'invNotes').filter(function (r) { return String(r[0]) !== replaced; });
-    Object.keys(plan.keptNotes).forEach(function (k) {
-      const n = plan.keptNotes[k];
-      noteRows.push([count.id, k, n.note, inventoryStatus_(n.note), plan.triage.items[k].impact, n.by, n.at]);
-    });
-    writeDataRows_(ss, 'invNotes', noteRows);
-    appendDataRow_(ss, 'uploads', [count.id, at, who, count.file, 'inventory', '', count.period, count.property,
-      count.items, count.label + (replaced ? ' (replaced ' + plan.existing.period + ')' : '')]);
+    const check = Object.assign({}, plan.built.check, { id: Utilities.getUuid().slice(0, 8), uploadedAt: at, uploadedBy: who });
+    const flagRows = plan.built.flags.map(function (f) { return inventoryFlagRow_(check.id, f); });
+    if (plan.existing) {
+      const id = plan.existing.id;
+      writeDataRows_(ss, 'invChecks', readDataRows_(ss, 'invChecks').filter(function (r) { return String(r[0]) !== id; }).concat([inventoryCheckRow_(check)]));
+      writeDataRows_(ss, 'invFlags', readDataRows_(ss, 'invFlags').filter(function (r) { return String(r[0]) !== id; }).concat(flagRows));
+    } else {
+      appendDataRows_(ss, 'invChecks', [inventoryCheckRow_(check)]);
+      appendDataRows_(ss, 'invFlags', flagRows);
+    }
+    appendDataRow_(ss, 'uploads', [check.id, at, who, check.file, 'inventory', '', check.period, check.property,
+      check.items, check.label + (plan.existing ? ' (replaced ' + plan.existing.uploadedAt.slice(0, 10) + ')' : '')]);
     SpreadsheetApp.flush();
-    return safe_({ countId: count.id, property: count.property, period: count.period, label: count.label,
-      items: count.items, reviewItems: count.reviewItems, keptNotes: Object.keys(plan.keptNotes).length });
+    return safe_({ countId: check.id, property: check.property, period: check.period, label: check.label,
+      items: check.items, picked: check.picked, highImpact: check.highImpact, replaced: !!plan.existing });
   } finally {
     lock.releaseLock();
   }
 }
 
-/**
- * Rewrite Inventory Items with each count's rows together, then Inventory
- * Counts with where each count now starts. `add` / `addItems` is the new
- * count (or null to only drop counts).
- */
-function writeInventoryLayout_(ss, keep, add, addItems) {
-  const allRows = readDataRows_(ss, 'invItems');
-  const byCount = {};
-  allRows.forEach(function (r) { (byCount[String(r[0])] = byCount[String(r[0])] || []).push(r); });
-  const groups = keep.map(function (c) { return { count: c, rows: byCount[c.id] || [] }; });
-  if (add) groups.push({ count: add, rows: addItems.map(function (it) { return inventoryItemRow_(add.id, it); }) });
-  writeDataRows_(ss, 'invItems', layoutInventoryItems_(groups));
-  writeDataRows_(ss, 'invCounts', groups.map(function (g) { return inventoryCountRow_(g.count); }));
-}
-
-/** Admin. Remove a count and its notes. Its saved report, if any, stays. */
+/** Admin. Remove a check and its flags. */
 function removeInventoryCount(countId) {
   const ss = dataSpreadsheet_();
   requireInventoryAdmin_(ss);
+  const id = String(countId);
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    const counts = readInventoryCounts_(ss);
-    if (!counts.some(function (c) { return c.id === String(countId); })) return { removed: false };
-    writeInventoryLayout_(ss, counts.filter(function (c) { return c.id !== String(countId); }), null, null);
-    writeDataRows_(ss, 'invNotes', readDataRows_(ss, 'invNotes').filter(function (r) { return String(r[0]) !== String(countId); }));
+    const rows = readDataRows_(ss, 'invChecks');
+    if (!rows.some(function (r) { return String(r[0]) === id; })) return { removed: false };
+    writeDataRows_(ss, 'invChecks', rows.filter(function (r) { return String(r[0]) !== id; }));
+    writeDataRows_(ss, 'invFlags', readDataRows_(ss, 'invFlags').filter(function (r) { return String(r[0]) !== id; }));
     return { removed: true };
   } finally {
     lock.releaseLock();
@@ -346,84 +213,26 @@ function removeInventoryCount(countId) {
 
 /** ------------------------------------------------------------- report */
 
-/**
- * The inventory report for a property and month. Built from the counts on
- * file when there are any; otherwise the saved copy. Both are returned when
- * both exist, so the page can show when the saved copy was made.
- */
+/** The check report for a property and month: every count on file for it, compared with the month before. */
 function getInventoryReport(property, period) {
   const ss = dataSpreadsheet_();
   const access = inventoryAccess_(ss);
   property = String(property); period = String(period).slice(0, 7);
-  const saved = inventorySavedReport_(ss, property, period);
-  const live = buildLiveInventoryReport_(ss, access, property, period, saved && saved.report ? saved.report.summary : '');
-  return safe_({
-    canEdit: access.canEdit, isAdmin: access.role === 'admin',
-    report: live || (saved && saved.report) || null,
-    live: !!live,
-    saved: saved ? { savedAt: saved.savedAt, savedBy: saved.savedBy, summary: saved.report ? saved.report.summary : '' } : null
-  });
-}
-
-function buildLiveInventoryReport_(ss, access, property, period, summary) {
-  const counts = readInventoryCounts_(ss).filter(function (c) { return c.property === property && c.period === period; })
+  const checks = readInventoryChecks_(ss);
+  const mine = checks.filter(function (c) { return c.property === property && c.period === period; })
     .sort(function (a, b) { return a.label.localeCompare(b.label); });
-  if (!counts.length) return null;
-  const notes = readInventoryNotes_(ss);
-  const report = buildInventoryReport_({
-    property: property, period: period, summary: summary || '',
-    counts: counts.map(function (c) {
-      return { id: c.id, label: c.label, period: c.period, file: c.file, uploadedAt: c.uploadedAt, uploadedBy: c.uploadedBy,
-        items: readInventoryItems_(ss, c), notes: notes[c.id] || {} };
+  if (!mine.length) return safe_({ report: null, canEdit: access.canEdit, isAdmin: access.role === 'admin' });
+  const befores = mine.map(function (c) { return checkBefore_(checks, c.property, c.label, c.period); });
+  const ids = mine.map(function (c) { return c.id; }).concat(befores.filter(Boolean).map(function (c) { return c.id; }));
+  const flags = readInventoryFlags_(ss, ids);
+  const report = buildInventoryCheckReport_({
+    property: property, period: period,
+    counts: mine.map(function (c, i) {
+      const now = { check: c, flags: flags[c.id] };
+      const b = befores[i];
+      return { check: c, flags: flags[c.id], compare: compareInventoryChecks_(now, b ? { check: b, flags: flags[b.id] } : null) };
     }),
     pnl: access.seesPnl ? inventoryPnlMonth_(ss, property, period) : null
   });
-  report.generatedAt = new Date().toISOString();
-  return report;
-}
-
-function inventorySavedReport_(ss, property, period) {
-  const id = inventoryReportId_(property, period);
-  const rows = readDataRows_(ss, 'invReports').filter(function (r) { return String(r[0]) === id; });
-  if (!rows.length) return null;
-  return inventoryReportsFromRows_(rows, true)[id] || null;
-}
-
-/** Inventory editors. Save the report for a property and month, with the manager's summary. Replaces an earlier save. */
-function saveInventoryReport(property, period, summary) {
-  const ss = dataSpreadsheet_();
-  const access = requireInventoryEditor_(ss);
-  property = String(property); period = String(period).slice(0, 7);
-  const lock = LockService.getScriptLock();
-  try { lock.waitLock(30000); }
-  catch (e) { throw new Error('Another save is in progress. Try again in a moment.'); }
-  try {
-    // Saved reports carry the P&L comparison when whoever saves may see it.
-    const report = buildLiveInventoryReport_(ss, access, property, period, String(summary || '').slice(0, 5000));
-    if (!report) throw new Error('No counts are on file for this property and month.');
-    const meta = { at: new Date().toISOString(), by: currentUserEmail_() };
-    report.savedAt = meta.at; report.savedBy = meta.by;
-    const id = inventoryReportId_(property, period);
-    const rows = readDataRows_(ss, 'invReports').filter(function (r) { return String(r[0]) !== id; });
-    writeDataRows_(ss, 'invReports', rows.concat(inventoryReportRows_(id, report, meta)));
-    SpreadsheetApp.flush();
-    return safe_({ savedAt: meta.at, savedBy: meta.by });
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-/** Admin. Delete a saved report. */
-function removeInventoryReport(property, period) {
-  const ss = dataSpreadsheet_();
-  requireInventoryAdmin_(ss);
-  const id = inventoryReportId_(String(property), String(period).slice(0, 7));
-  const lock = LockService.getScriptLock();
-  lock.waitLock(30000);
-  try {
-    writeDataRows_(ss, 'invReports', readDataRows_(ss, 'invReports').filter(function (r) { return String(r[0]) !== id; }));
-    return { removed: true };
-  } finally {
-    lock.releaseLock();
-  }
+  return safe_({ report: report, canEdit: access.canEdit, isAdmin: access.role === 'admin' });
 }

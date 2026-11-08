@@ -15,11 +15,15 @@
  *            row recording the upload (JSON in the Name column).
  *   Tags     the manager's notes and "timing / accrual" tags on a line.
  *   Uploads  one row per upload: who, when, which file, what it held.
- *   Inventory Counts / Items / Notes / Reports
- *            the inventory review (Inventory.gs). Only InventoryApi.gs reads
- *            them, so they never slow the P&L views down. Items of one count
- *            sit together; the count's row records where (First Row, Row
- *            Count) so one count is read with a single range.
+ *   Inventory Checks  one row per inventory count export checked: totals,
+ *            the price / quantity split, the checks, and a small JSON summary
+ *            (value by account, by P&L line). About 20 cells a count.
+ *   Inventory Flags   the items the rules picked from each count (about 50),
+ *            each with its figures and the questions to ask. Every other
+ *            item of the export is read, checked and dropped: nothing item-
+ *            level is kept for items that did not need a second look.
+ *            Only InventoryApi.gs reads these two, so they never slow the
+ *            P&L views down.
  *   _Config  settings (viewers, properties, flag rule, inventory).
  ******************************************************************************/
 
@@ -32,13 +36,12 @@ const SHEETS = {
   tags: { name: 'Tags', headers: ['Period', 'Property', 'Key', 'Tag', 'Note', 'By', 'At'] },
   uploads: { name: 'Uploads', headers: ['Upload ID', 'At', 'By', 'File', 'Format', 'Detailed', 'Periods',
     'Properties', 'Rows', 'Warnings'] },
-  invCounts: { name: 'Inventory Counts', headers: ['Count ID', 'Property', 'Period', 'Label', 'File', 'Uploaded At',
-    'Uploaded By', 'Items', 'Current Total', 'Previous Total', 'Review Items', 'First Row', 'Row Count'] },
-  invItems: { name: 'Inventory Items', headers: ['Count ID', 'Key', 'Item', 'UofM', 'Current Qty', 'Current Cost',
-    'Current Total', 'Previous Qty', 'Previous Cost', 'Previous Total', 'Adjustment', 'Cost Acct', 'Inventory Acct', 'Flag'] },
-  invNotes: { name: 'Inventory Notes', headers: ['Count ID', 'Key', 'Note', 'Status', 'Impact', 'By', 'At'] },
-  invReports: { name: 'Inventory Reports', headers: ['Report ID', 'Property', 'Period', 'Saved At', 'Saved By', 'Counts',
-    'Value', 'Action Items', 'Part', 'Report'] }
+  invChecks: { name: 'Inventory Checks', headers: ['Count ID', 'Property', 'Period', 'Label', 'File', 'Uploaded At',
+    'Uploaded By', 'Items', 'Stocked', 'Current Total', 'Previous Total', 'Price Effect', 'Quantity Effect', 'Tie-out Errors',
+    'Picked', 'High Impact', 'High Impact Value', 'Summary'] },
+  invFlags: { name: 'Inventory Flags', headers: ['Count ID', 'Key', 'Item', 'UofM', 'Inventory Acct', 'Cost Acct',
+    'Current Qty', 'Current Cost', 'Current Total', 'Previous Qty', 'Previous Cost', 'Previous Total',
+    'Price Effect', 'Quantity Effect', 'Impact', 'Flag', 'Sections', 'Reasons'] }
 };
 
 /** Key used in Tags for the manager's free-text note on a whole month. */

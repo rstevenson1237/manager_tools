@@ -10,6 +10,7 @@
  *   --vue   inline a local copy of Vue instead of the CDN link (offline use)
  *   --user  the signed-in account (default: the seeded global admin)
  *   --pnl   seed a made-up October 2026 P&L month for TST1 (for days on hand)
+ *   --prop  add a property, CODE:Name (repeat for more), e.g. to upload real exports
  * Data lives only in the page: a reload starts empty.
  */
 const fs = require('fs');
@@ -20,8 +21,10 @@ const args = process.argv.slice(2);
 const out = args[0];
 if (!out) { console.error('usage: node preview.js <out.html> [--vue file] [--user email] [--pnl]'); process.exit(1); }
 const opt = name => { const i = args.indexOf(name); return i === -1 ? null : args[i + 1]; };
+const extraProps = args.reduce((list, a, i) => (a === '--prop' ? list.concat([args[i + 1]]) : list), [])
+  .map(s => ({ code: s.split(':')[0], name: s.split(':').slice(1).join(':') || s.split(':')[0], active: true }));
 
-const GS = ['Parse.gs', 'Budget.gs', 'Analysis.gs', 'Store.gs', 'Review.gs', 'Inventory.gs', 'Code.gs', 'Import.gs', 'InventoryApi.gs'];
+const GS = ['Parse.gs', 'Budget.gs', 'Analysis.gs', 'Store.gs', 'Review.gs', 'InventoryRules.gs', 'InventoryCheck.gs', 'Code.gs', 'Import.gs', 'InventoryApi.gs'];
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 const noScriptEnd = s => s.replace(/<\/script/gi, '<\\/script');
 
@@ -42,7 +45,7 @@ ${backendSrc}
   b.setup();
   const ss = b.dataSpreadsheet_();
   const cfg = b.readConfig_(ss);
-  cfg.properties = [{ code: 'TST1', name: 'Sample Grill', active: true }, { code: 'TST2', name: 'Harbor House', active: true }];
+  cfg.properties = [{ code: 'TST1', name: 'Sample Grill', active: true }, { code: 'TST2', name: 'Harbor House', active: true }].concat(${JSON.stringify(extraProps)});
   cfg.viewers = ['viewer@example.com'];
   cfg.inventory.reviewers = ['bar@example.com'];
   b.writeConfig_(ss, cfg);

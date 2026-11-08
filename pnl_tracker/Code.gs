@@ -14,11 +14,14 @@
  *     Store.gs     sheet layouts; parsed upload ⇄ sheet rows ⇄ in-memory store
  *     Analysis.gs  period report, flags, portfolio, trends
  *     Review.gs    budget review
- *     Inventory.gs inventory review: count export, triage, inventory report
+ *     InventoryRules.gs  reads the inventory count export and picks what to
+ *                  question (the same file as inventory_audit's)
+ *     InventoryCheck.gs  the regional inventory check: summary, report rows
  *     Import.gs    upload endpoints (preview, then save)
- *     InventoryApi.gs  inventory endpoints (upload, notes, dashboard, report)
+ *     InventoryApi.gs  inventory endpoints (upload, dashboard, report)
  *     Code.gs      this file: setup, access, settings, read endpoints
- *   Parse/Budget/Store/Analysis/Review/Inventory use no Apps Script services,
+ *   Parse/Budget/Store/Analysis/Review/InventoryRules/InventoryCheck use no
+ *   Apps Script services,
  *   so tests/ runs them in Node against sample exports. Index.html pulls in
  *   InventoryView.html and InventoryScript.html with include().
  *
@@ -26,9 +29,9 @@
  *   Global admins (Script Properties, same list mechanism as the sibling
  *   apps) can upload, tag, write notes and change settings. Viewers (listed
  *   in the data workbook's _Config sheet) can see everything read-only.
- *   Inventory reviewers (also in _Config) can upload counts, write review
- *   notes and save inventory reports. A reviewer who is not also a viewer
- *   gets the 'inventory' role: the Inventory tab only, with no P&L figures.
+ *   Inventory reviewers (also in _Config) can upload inventory counts for
+ *   the regional check. A reviewer who is not also a viewer gets the
+ *   'inventory' role: the Inventory tab only, with no P&L figures.
  ******************************************************************************/
 
 const DATA_SS_KEY = 'PNL_DATA_SPREADSHEET_ID';
@@ -37,7 +40,7 @@ const DEFAULT_GLOBAL_ADMINS = ['robert.stevenson@atlasrestaurantgroup.com'];
 
 /** Columns kept as plain text so Sheets never turns '2026-10' or '7312.1' into a date or number. */
 const TEXT_COLUMNS = { actuals: [1, 2, 3, 10], detail: [1, 2, 3, 4], budget: [2, 4], tags: [1, 2, 3], uploads: [1],
-  invCounts: [1, 2, 3, 4, 6], invItems: [1, 2, 3, 4, 12, 13, 14], invNotes: [1, 2, 3, 4, 7], invReports: [1, 2, 3, 4, 6, 10] };
+  invChecks: [1, 2, 3, 4, 5, 6, 7, 18], invFlags: [1, 2, 3, 4, 5, 6, 16, 17, 18] };
 
 const CONFIG_SHEET_NAME = '_Config';
 const CONFIG_ROWS = [
@@ -167,12 +170,24 @@ function appendDataRow_(ss, key, row) {
   sheet.appendRow(row);
 }
 
+/** Add rows below the last data row, without rewriting the rest of the sheet. */
+function appendDataRows_(ss, key, rows) {
+  if (!rows.length) return;
+  const def = SHEETS[key];
+  const sheet = ensureDataSheet_(ss, key);
+  const start = Math.max(sheet.getLastRow(), 1) + 1;
+  if (sheet.getMaxRows() < start + rows.length - 1) sheet.insertRowsAfter(sheet.getMaxRows(), start + rows.length - 1 - sheet.getMaxRows());
+  sheet.getRange(start, 1, rows.length, def.headers.length).setValues(rows.map(function (r) {
+    return r.map(function (v) { return v == null ? '' : v; });
+  }));
+}
+
 /** --------------------------------------------------------------- _CONFIG */
 function defaultConfig_() {
   return { viewers: [], properties: [], rules: JSON.parse(JSON.stringify(DEFAULT_RULES)), inventory: defaultInventoryConfig_() };
 }
 function defaultInventoryConfig_() {
-  return { reviewers: [], noteCategories: DEFAULT_INV_NOTES.slice() };
+  return { reviewers: [] };
 }
 
 function ensureConfigSheet_(ss) {
@@ -214,8 +229,7 @@ function readConfig_(ss) {
   out.rules = Object.assign({}, DEFAULT_RULES, out.rules || {});
   const inv = out.inventory && typeof out.inventory === 'object' ? out.inventory : {};
   out.inventory = {
-    reviewers: Array.isArray(inv.reviewers) ? inv.reviewers.map(String).filter(Boolean) : [],
-    noteCategories: Array.isArray(inv.noteCategories) && inv.noteCategories.length ? inv.noteCategories.map(String) : DEFAULT_INV_NOTES.slice()
+    reviewers: Array.isArray(inv.reviewers) ? inv.reviewers.map(String).filter(Boolean) : []
   };
   return out;
 }
@@ -246,7 +260,7 @@ function roleOf_(ss) {
   if (lower(config.viewers).indexOf(email) !== -1) return 'viewer';
   return lower(config.inventory.reviewers).indexOf(email) !== -1 ? 'inventory' : null;
 }
-/** May this account change inventory data (upload counts, notes, reports)? */
+/** May this account upload inventory counts for the regional check? */
 function canEditInventory_(ss, role) {
   if (role === 'admin' || role === 'inventory') return true;
   if (role !== 'viewer') return false;
@@ -469,16 +483,7 @@ function saveSettings(payload) {
   if (payload.inventory && typeof payload.inventory === 'object') {
     const inv = payload.inventory;
     const reviewers = Array.isArray(inv.reviewers) ? inv.reviewers.map(function (e) { return String(e).trim(); }).filter(Boolean) : config.inventory.reviewers;
-    let notes = config.inventory.noteCategories;
-    if (Array.isArray(inv.noteCategories)) {
-      notes = inv.noteCategories.map(function (c) { return String(c).trim().toUpperCase(); }).filter(Boolean)
-        .filter(function (c, i, a) { return a.indexOf(c) === i; });
-      if (!notes.length) throw new Error('At least one inventory note is required.');
-      notes.forEach(function (c) {
-        if (!inventoryStatus_(c) || inventoryStatus_(c) === 'other') throw new Error('Inventory note "' + c + '" must start with CORRECT, REVIEW or ADJUST.');
-      });
-    }
-    config.inventory = { reviewers: reviewers, noteCategories: notes };
+    config.inventory = { reviewers: reviewers };
   }
   writeConfig_(ss, config);
   return getSettings();

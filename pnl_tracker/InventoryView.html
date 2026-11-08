@@ -4,105 +4,60 @@
     <div class="subtabs" role="tablist" aria-label="Inventory">
       <button v-for="s in invSubViews" :key="s.key" role="tab" :aria-selected="inv.sub === s.key" :class="['subtab', { active: inv.sub === s.key }]" @click="invGo(s.key)">{{ s.label }}</button>
     </div>
-    <div class="controls" v-if="invPendingCount || inv.syncing">
-      <span class="pending-pill">{{ inv.syncing ? 'Saving notes…' : invPendingCount + ' note' + (invPendingCount === 1 ? '' : 's') + ' not saved yet' }}</span>
-      <button class="small" @click="invSync" :disabled="inv.syncing || !invPendingCount">Save now</button>
-    </div>
   </div>
 
   <!-- ------------------------------ DASHBOARD ------------------------------ -->
   <template v-if="inv.sub === 'dashboard'">
     <div class="row">
       <div>
-        <div class="muted">Counts on file, what is left to review, and what needs fixing</div>
-        <h1>Inventory audit</h1>
+        <div class="muted">The regional check of each property's count: what is still worth asking the store about</div>
+        <h1>Inventory check<template v-if="invLatest.period"> · {{ monthLabel(invLatest.period) }}</template></h1>
       </div>
       <div class="controls no-print">
-        <button v-if="invCanEdit" @click="invGo('upload')">Upload a count</button>
+        <button v-if="invCanEdit" @click="invGo('upload')">Upload counts</button>
         <button class="ghost" @click="loadInvDash" :disabled="inv.dashLoading">Refresh</button>
       </div>
     </div>
     <div v-if="inv.dashLoading && !inv.dash" class="muted"><span class="spin"></span>Loading…</div>
     <div v-else-if="inv.dashError" class="banner warn">{{ inv.dashError }}</div>
     <template v-if="inv.dash">
-      <div v-if="!inv.dash.counts.length && !inv.dash.reports.length" class="card empty">
-        No inventory counts on file.
-        <template v-if="invCanEdit"><br><br>Export <b>Inventory Count Item Details</b> from R365 as CSV, then <button class="link" @click="invGo('upload')">upload it</button>.</template>
+      <div v-if="!invMonths.length" class="card empty">
+        No inventory counts checked yet.
+        <template v-if="invCanEdit"><br><br>Once a store has finished its review in Inventory Audit, export the same <b>Inventory Count Item Details</b> from R365 and <button class="link" @click="invGo('upload')">upload it</button>.</template>
       </div>
       <template v-else>
         <div class="grid">
-          <div class="card stat"><div class="label">Items left to review</div><div class="value">{{ invDashTotals.open }}</div>
-            <div class="sub">of {{ invDashTotals.total }} across {{ invDashTotals.counts }} count{{ invDashTotals.counts === 1 ? '' : 's' }}</div></div>
-          <div class="card stat"><div class="label">Adjust in R365</div><div class="value" :class="{ bad: invDashTotals.adjust }">{{ invDashTotals.adjust }}</div>
-            <div class="sub">items marked ADJUST</div></div>
-          <div class="card stat"><div class="label">To check again</div><div class="value">{{ invDashTotals.review }}</div>
-            <div class="sub">items marked REVIEW</div></div>
-          <div class="card stat"><div class="label">Value in action items</div><div class="value">{{ money(invDashTotals.impact) }}</div>
-            <div class="sub">dollar size of ADJUST and REVIEW items</div></div>
+          <div class="card stat"><div class="label">Properties checked</div><div class="value">{{ invLatest.rows.length }}</div>
+            <div class="sub">for {{ monthLabel(invLatest.period) }}</div></div>
+          <div class="card stat"><div class="label">Clean</div><div class="value">{{ invLatest.clean }}</div>
+            <div class="sub">no item of ${{ money(inv.dash.highImpact) }} or more</div></div>
+          <div class="card stat"><div class="label">High-impact items</div><div class="value" :class="{ bad: invLatest.high }">{{ invLatest.high }}</div>
+            <div class="sub">questions for the stores</div></div>
+          <div class="card stat"><div class="label">Their dollar impact</div><div class="value">${{ money(invLatest.highValue) }}</div>
+            <div class="sub">fewer than 10 items each once audited</div></div>
         </div>
 
-        <div class="card flush" v-if="inv.dash.counts.length">
-          <div class="head"><h2>Counts on file</h2><span class="muted">One row per count · select a row to review it</span></div>
+        <div class="card flush">
+          <div class="head"><h2>Checks on file</h2><span class="muted">One row per property and month · select a row for its report</span></div>
           <div class="scroll">
-            <table style="min-width:980px">
-              <thead><tr><th>Property · month</th><th style="text-align:left">Count</th><th>Value</th><th>Change</th>
-                <th style="text-align:left;width:22%">Reviewed</th><th>Adjust</th><th>Review</th><th style="text-align:left">Report</th><th class="no-print"></th></tr></thead>
+            <table style="min-width:900px">
+              <thead><tr><th>Property · month</th><th style="text-align:left">Counts</th><th>Value</th><th>Change</th><th>Picked</th><th>High impact</th><th style="text-align:left">Status</th><th class="no-print"></th></tr></thead>
               <tbody>
-                <tr v-for="c in invDashRows" :key="c.id" class="clickable" @click="openInvCount(c.id)">
-                  <td><b>{{ propertyName(c.property) }}</b> <span class="muted">{{ monthLabel(c.period) }}</span></td>
-                  <td style="text-align:left">{{ c.label }}<div class="muted">{{ c.items }} items · uploaded {{ dayLabel(c.uploadedAt) }}</div></td>
-                  <td>{{ money(c.current) }}</td>
-                  <td :class="c.current - c.previous < 0 ? 'bad' : 'muted'">{{ signed(c.current - c.previous) }}</td>
-                  <td style="text-align:left"><div style="display:flex;gap:8px;align-items:center">
-                    <div class="bar" style="flex:1"><div class="fill" :style="{ width: invPct(c.review.noted, c.reviewItems) + '%', background: c.review.noted >= c.reviewItems ? 'var(--brand)' : '#8FB0DA' }"></div></div>
-                    <b style="min-width:70px;text-align:right">{{ c.review.noted }} / {{ c.reviewItems }}</b></div></td>
-                  <td><span v-if="c.review.adjust" class="bad"><b>{{ c.review.adjust }}</b></span><span v-else class="muted">0</span></td>
-                  <td><span v-if="c.review.review"><b>{{ c.review.review }}</b></span><span v-else class="muted">0</span></td>
+                <tr v-for="m in invMonths" :key="m.key" class="clickable" @click="openInvReport(m.property, m.period)">
+                  <td><b>{{ propertyName(m.property) }}</b> <span class="muted">{{ monthLabel(m.period) }}</span></td>
+                  <td style="text-align:left">{{ m.counts.map(c => c.label).join(', ') }}
+                    <div class="muted">uploaded {{ dayLabel(m.counts[0].uploadedAt) }}<template v-if="m.counts[0].uploadedBy"> by {{ m.counts[0].uploadedBy }}</template></div></td>
+                  <td>{{ money(m.value) }}</td>
+                  <td :class="cls(m.value - m.prev)">{{ signed(m.value - m.prev) }}</td>
+                  <td class="muted">{{ m.picked }}</td>
+                  <td><b v-if="m.high" class="bad">{{ m.high }}</b><span v-else class="muted">0</span>
+                    <div class="muted" v-if="m.high">${{ money(m.highValue) }}</div></td>
                   <td style="text-align:left">
-                    <span v-if="!c.report" class="badge preliminary">Not saved</span>
-                    <span v-else-if="c.report.stale" class="badge draft" :title="'Saved ' + dayLabel(c.report.savedAt) + '; notes or the count changed since'">Changed since saved</span>
-                    <span v-else class="badge settled">Saved {{ dayLabel(c.report.savedAt) }}</span></td>
+                    <span v-if="m.tieOuts" class="badge preliminary">Export does not add up</span>
+                    <span v-else-if="m.high" class="badge preliminary">{{ m.high }} question{{ m.high === 1 ? '' : 's' }}</span>
+                    <span v-else class="badge settled">Clean</span></td>
                   <td class="no-print" @click.stop>
-                    <button class="small ghost" @click="openInvReport(c.property, c.period)">Report</button>
-                    <button v-if="inv.dash.isAdmin" class="link small" style="margin-left:6px" @click="removeInvCount(c)" :aria-label="'Remove ' + c.label + ' count'">×</button></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div class="card flush" v-if="inv.dash.actions.length">
-          <div class="head"><h2>Action items · {{ inv.dash.actions.length }}</h2><span class="muted">ADJUST first, largest dollar size first · select one to open it in its count</span></div>
-          <div class="scroll">
-            <table style="min-width:760px">
-              <thead><tr><th>Item</th><th style="text-align:left">Count</th><th style="text-align:left">Note</th><th>Dollar size</th><th style="text-align:left">By</th></tr></thead>
-              <tbody>
-                <tr v-for="a in inv.dash.actions.slice(0, inv.showAllActions ? 9999 : 25)" :key="a.countId + a.key" class="clickable" @click="openInvCount(a.countId, a.key)">
-                  <td style="white-space:normal"><b>{{ a.key }}</b></td>
-                  <td style="text-align:left">{{ propertyName(a.property) }} · {{ a.label }} <span class="muted">{{ monthLabel(a.period, true) }}</span></td>
-                  <td style="text-align:left"><span :class="['badge', 'st-' + a.status]">{{ a.note }}</span></td>
-                  <td>{{ money(a.impact) }}</td>
-                  <td style="text-align:left" class="muted">{{ a.by }} · {{ dayLabel(a.at) }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <div style="padding:10px 16px" v-if="inv.dash.actions.length > 25"><button class="link" @click="inv.showAllActions = !inv.showAllActions">{{ inv.showAllActions ? 'Show the top 25' : 'Show all ' + inv.dash.actions.length }}</button></div>
-        </div>
-
-        <div class="card flush" v-if="inv.dash.reports.length">
-          <div class="head"><h2>Saved reports</h2><span class="muted">Kept after the count is replaced by next month's</span></div>
-          <div class="scroll">
-            <table style="min-width:640px">
-              <thead><tr><th>Property · month</th><th style="text-align:left">Counts</th><th>Value</th><th>Action items</th><th style="text-align:left">Saved</th><th class="no-print"></th></tr></thead>
-              <tbody>
-                <tr v-for="r in inv.dash.reports" :key="r.id" class="clickable" @click="openInvReport(r.property, r.period)">
-                  <td><b>{{ propertyName(r.property) }}</b> <span class="muted">{{ monthLabel(r.period) }}</span></td>
-                  <td style="text-align:left">{{ r.counts }}</td>
-                  <td>{{ money(r.value) }}</td>
-                  <td>{{ r.actionItems }}</td>
-                  <td style="text-align:left" class="muted">{{ dayLabel(r.savedAt) }} · {{ r.savedBy }}</td>
-                  <td class="no-print" @click.stop><button v-if="inv.dash.isAdmin" class="link small" @click="removeInvReport(r)" :aria-label="'Delete the saved report'">×</button></td>
+                    <template v-if="inv.dash.isAdmin"><button v-for="c in m.counts" :key="c.id" class="link small" style="margin-left:6px" @click="removeInvCount(c)" :title="'Remove the ' + c.label + ' check'" :aria-label="'Remove the ' + c.label + ' check'">× {{ m.counts.length > 1 ? c.label : '' }}</button></template></td>
                 </tr>
               </tbody>
             </table>
@@ -114,197 +69,103 @@
 
   <!-- ------------------------------ UPLOAD ------------------------------ -->
   <template v-if="inv.sub === 'upload'">
-    <div class="row"><h1>Upload a count</h1></div>
+    <div class="row"><h1>Upload counts</h1></div>
     <div v-if="!invCanEdit" class="banner warn">Only an administrator or an inventory reviewer can upload counts.</div>
-    <div v-else class="card" style="display:flex;flex-direction:column;gap:12px;max-width:820px">
-      <p class="muted" style="margin:0">In R365, export the count's <b>Inventory Count Item Details</b> as CSV. A property can have several counts a month, such as Food and Beverage: give each its own name.
-        Uploading the same property and count name again replaces that count.</p>
+    <div v-else class="card" style="display:flex;flex-direction:column;gap:12px">
+      <p class="muted" style="margin:0">Once a store has finished its review in Inventory Audit, export the same <b>Inventory Count Item Details</b> from R365 as CSV and upload it here.
+        Choose several files at once, one per property and count. Each file is checked on its own; only its totals and the items the rules pick are kept.
+        Uploading the same property, count name and month again replaces that check.</p>
       <div class="controls">
-        <div class="field"><label for="inv-prop">Property</label>
-          <select id="inv-prop" v-model="inv.up.property" @change="invRepreview">
-            <option value="" disabled>Choose…</option>
-            <option v-for="p in invProperties" :key="p.code" :value="p.code">{{ p.name }}</option>
-          </select></div>
-        <div class="field"><label for="inv-period">Month the count closes</label><input id="inv-period" type="month" v-model="inv.up.period" @change="invRepreview" placeholder="YYYY-MM"></div>
-        <div class="field"><label for="inv-label">Count name</label>
-          <input id="inv-label" type="text" v-model="inv.up.label" list="inv-labels" @input="invRepreviewSoon" placeholder="Food, Beverage…" style="width:180px">
-          <datalist id="inv-labels"><option v-for="l in invLabelChoices" :key="l" :value="l"></option></datalist></div>
+        <div class="field"><label for="inv-period">Month the counts close</label><input id="inv-period" type="month" v-model="inv.up.period" @change="invRepreviewAll" placeholder="YYYY-MM"></div>
+        <label class="drop" for="inv-files" style="flex:1;min-width:260px;padding:14px">
+          <b>Choose CSV files</b><br><span class="muted">one per property and count</span>
+          <input id="inv-files" type="file" accept=".csv" multiple @change="onInvFiles">
+        </label>
       </div>
-      <label class="drop" for="inv-file">
-        <b>Choose the CSV</b><br><span class="muted">{{ inv.up.fileName || 'InventoryCountItemDetails.csv' }}</span>
-        <input id="inv-file" type="file" accept=".csv" @change="onInvFile">
-      </label>
-      <div v-if="inv.up.stage === 'reading'" class="muted"><span class="spin"></span>{{ inv.up.preview ? 'Checking again…' : 'Reading the file…' }}</div>
-      <div v-if="inv.up.stage === 'error'" class="banner warn">{{ inv.up.error }}</div>
-      <template v-if="inv.up.preview && inv.up.stage !== 'error'">
-        <div class="muted">{{ inv.up.preview.fileName }} · {{ inv.up.preview.rows }} items ·
-          <template v-for="(a, i) in inv.up.preview.accounts" :key="a.name">{{ i ? ', ' : '' }}{{ a.name }} {{ a.items }}</template></div>
-        <ul class="checks">
-          <li><b :class="inv.up.preview.tieOuts ? 'bad' : 'good'">{{ inv.up.preview.tieOuts ? '!' : '✓' }}</b>
-            <span v-if="!inv.up.preview.tieOuts">Every item's previous value plus its adjustment equals its current value.</span>
-            <span v-else>{{ inv.up.preview.tieOuts }} items do not add up (previous value + adjustment ≠ current value). Check the export.</span></li>
-          <li><b class="good">✓</b><span>Value {{ money(inv.up.preview.totals.current) }}, last count {{ money(inv.up.preview.totals.previous) }}
-            (<span :class="cls(inv.up.preview.totals.change)">{{ signed(inv.up.preview.totals.change) }}</span>).</span></li>
-          <li><b class="good">✓</b><span>{{ inv.up.preview.review.total }} items to review:
-            <template v-for="(s, i) in inv.up.preview.review.sections.filter(x => x.items)" :key="s.key">{{ i ? ', ' : '' }}{{ s.label.toLowerCase() }} {{ s.items }}</template>.</span></li>
-          <li v-if="inv.up.preview.continuity"><b :class="inv.up.preview.continuity.differ ? 'bad' : 'good'">{{ inv.up.preview.continuity.differ ? '!' : '✓' }}</b>
-            <span v-if="!inv.up.preview.continuity.differ">The previous quantities in this file match the {{ monthLabel(inv.up.preview.existing.period) }} count on file.</span>
-            <span v-else>{{ inv.up.preview.continuity.differ }} of {{ inv.up.preview.continuity.compared }} items {{ inv.up.preview.continuity.differ === 1 ? 'has a previous quantity that differs' : 'have previous quantities that differ' }} from the {{ monthLabel(inv.up.preview.existing.period) }} count on file
-              (for example {{ inv.up.preview.continuity.examples.slice(0, 3).join(', ') }}). That count may have been changed in R365 after it was reviewed.</span></li>
-          <li v-for="w in inv.up.preview.warnings" :key="w"><b class="bad">!</b><span>{{ w }}</span></li>
-        </ul>
-        <div v-if="inv.up.preview.suggestedLabel && inv.up.preview.target.label.toLowerCase() !== inv.up.preview.suggestedLabel.toLowerCase()" class="banner info">
-          This file looks like a <b>{{ inv.up.preview.suggestedLabel }}</b> count, but it will be saved as <b>{{ inv.up.preview.target.label }}</b>.</div>
-        <div v-if="inv.up.preview.duplicateOf" class="banner warn"><b>This file cannot be saved:</b> it is identical to the {{ inv.up.preview.duplicateOf.label }} count already on file for this property and month.</div>
-        <div v-else-if="inv.up.preview.existing && inv.up.preview.existing.olderThanUpload" class="banner warn"><b>This file cannot be saved:</b>
-          the {{ inv.up.preview.existing.label }} count on file is for {{ monthLabel(inv.up.preview.existing.period) }}, later than {{ monthLabel(inv.up.preview.target.period) }}. Check the month.</div>
-        <div v-else-if="inv.up.preview.existing && inv.up.preview.existing.sameMonth" class="banner info">
-          <b>Replaces the {{ inv.up.preview.existing.label }} count for {{ monthLabel(inv.up.preview.existing.period) }}</b> uploaded {{ dayLabel(inv.up.preview.existing.uploadedAt) }} (a recount).
-          {{ inv.up.preview.keptNotes }} note{{ inv.up.preview.keptNotes === 1 ? '' : 's' }} carry over<template v-if="inv.up.preview.droppedCount">;
-          {{ inv.up.preview.droppedCount }} item{{ inv.up.preview.droppedCount === 1 ? ' is' : 's are' }} no longer under review (fixed by the recount?) and lose their note: {{ inv.up.preview.droppedNotes.slice(0, 5).join(', ') }}{{ inv.up.preview.droppedCount > 5 ? '…' : '' }}</template>.</div>
-        <div v-else-if="inv.up.preview.existing" :class="['banner', inv.up.preview.reportSaved ? 'info' : 'warn']">
-          <b>Replaces the {{ inv.up.preview.existing.label }} count for {{ monthLabel(inv.up.preview.existing.period) }}.</b>
-          <template v-if="inv.up.preview.reportSaved"> Its saved report is kept.</template>
-          <template v-else> Its report was never saved<template v-if="inv.up.preview.droppedCount">, so its {{ inv.up.preview.droppedCount }} review note{{ inv.up.preview.droppedCount === 1 ? '' : 's' }} will be lost</template>.
-            <button class="link" @click="openInvReport(inv.up.preview.target.property, inv.up.preview.existing.period)">Open its report to save it first</button>.</template></div>
-        <div class="controls">
-          <button @click="commitInv" :disabled="inv.up.stage !== 'preview' || !!inv.up.preview.duplicateOf || (inv.up.preview.existing && inv.up.preview.existing.olderThanUpload)">{{ inv.up.stage === 'saving' ? 'Saving…' : 'Save count' }}</button>
-          <button class="ghost" @click="resetInvUpload" :disabled="inv.up.stage === 'saving'">Cancel</button>
+      <div class="card flush" v-if="inv.up.files.length">
+        <div class="scroll">
+          <table style="min-width:900px" class="inv-up">
+            <thead><tr><th>File</th><th style="text-align:left">Property</th><th style="text-align:left">Count name</th><th style="text-align:left;width:45%">What the check found</th><th></th></tr></thead>
+            <tbody>
+              <tr v-for="f in inv.up.files" :key="f.id">
+                <td style="white-space:normal;max-width:200px"><b>{{ f.fileName }}</b></td>
+                <td style="text-align:left">
+                  <select v-model="f.property" @change="previewInvFile(f)" :disabled="f.stage === 'saving' || f.stage === 'saved'" :aria-label="'Property for ' + f.fileName">
+                    <option value="" disabled>Choose…</option>
+                    <option v-for="p in invProperties" :key="p.code" :value="p.code">{{ p.name }}</option>
+                  </select></td>
+                <td style="text-align:left">
+                  <input type="text" v-model="f.label" list="inv-labels" @input="invRepreviewSoon(f)" :disabled="f.stage === 'saving' || f.stage === 'saved'" style="width:130px" :aria-label="'Count name for ' + f.fileName"></td>
+                <td style="text-align:left;white-space:normal">
+                  <span v-if="f.stage === 'reading'" class="muted"><span class="spin"></span>Checking…</span>
+                  <span v-else-if="f.stage === 'saving'" class="muted"><span class="spin"></span>Saving…</span>
+                  <span v-else-if="f.stage === 'error'" class="bad">{{ f.error }}</span>
+                  <template v-else-if="f.preview">
+                    <div><b :class="f.preview.highImpact ? 'bad' : 'good'">{{ f.preview.highImpact ? f.preview.highImpact + ' high-impact item' + (f.preview.highImpact === 1 ? '' : 's') + ' ($' + money(f.preview.highImpactValue) + ')' : 'Clean: nothing of $' + money(inv.dash ? inv.dash.highImpact : 1000) + ' or more' }}</b>
+                      <span class="muted"> · {{ f.preview.rows }} items · value {{ money(f.preview.totals.current) }} ({{ signed(f.preview.totals.change) }})</span></div>
+                    <div v-for="t in f.preview.top.slice(0, 3)" :key="t.item" class="muted">{{ t.item }}: ${{ money(t.impact) }}</div>
+                    <div v-if="f.preview.tieOuts" class="bad">{{ f.preview.tieOuts }} items do not add up. Check the export.</div>
+                    <div v-if="f.preview.follows.status === 'differs'" class="bad">Does not follow {{ monthLabel(f.preview.follows.period) }}'s count on file: its previous total is {{ money(f.preview.follows.found) }}, {{ monthLabel(f.preview.follows.period, true) }} was {{ money(f.preview.follows.expected) }}. Check the month and the property.</div>
+                    <div v-else class="muted">{{ invFollowsText(f.preview.follows) }}</div>
+                    <div v-if="f.preview.existing" class="muted">Replaces the check uploaded {{ dayLabel(f.preview.existing.uploadedAt) }} ({{ f.preview.existing.highImpact }} high impact then).</div>
+                    <div v-if="f.preview.duplicateOf" class="bad">Identical to the {{ f.preview.duplicateOf.label }} count on file for {{ propertyName(f.preview.duplicateOf.property) }}, {{ monthLabel(f.preview.duplicateOf.period) }}: not saved.</div>
+                    <div v-if="f.preview.suggestedLabel.toLowerCase() !== f.preview.target.label.toLowerCase()" class="muted">Reads as a {{ f.preview.suggestedLabel }} count.</div>
+                    <div v-if="f.stage === 'saved'"><b class="good">✓ Saved.</b> <button class="link small" @click="openInvReport(f.result.property, f.result.period)">Open the report</button></div>
+                  </template></td>
+                <td><button v-if="f.stage !== 'saving'" class="link small" @click="invDropFile(f)" :aria-label="'Drop ' + f.fileName">×</button></td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-      </template>
+      </div>
+      <datalist id="inv-labels"><option v-for="l in invLabelChoices" :key="l" :value="l"></option></datalist>
+      <div class="controls" v-if="inv.up.files.length">
+        <button @click="commitInvAll" :disabled="inv.up.saving || !invUpReady.length">{{ inv.up.saving ? 'Saving…' : 'Save ' + invUpReady.length + ' check' + (invUpReady.length === 1 ? '' : 's') }}</button>
+        <button class="ghost" @click="invClearSaved" :disabled="inv.up.saving">Clear saved files</button>
+      </div>
     </div>
-  </template>
-
-  <!-- ------------------------------ REVIEW ------------------------------ -->
-  <template v-if="inv.sub === 'review'">
-    <div v-if="!invCountOptions.length && inv.dash" class="card empty">No counts on file to review.<template v-if="invCanEdit"> <button class="link" @click="invGo('upload')">Upload one</button>.</template></div>
-    <template v-else>
-      <div class="row no-print">
-        <div class="controls">
-          <div class="field"><label for="inv-count">Count</label>
-            <select id="inv-count" v-model="inv.countId" @change="loadInvCount()">
-              <option v-for="c in invCountOptions" :key="c.id" :value="c.id">{{ propertyName(c.property) }} · {{ c.label }} · {{ monthLabel(c.period, true) }}</option>
-            </select></div>
-          <div class="field"><label for="inv-mode">Report</label>
-            <select id="inv-mode" v-model="inv.mode">
-              <option v-for="m in INV_MODES" :key="m.key" :value="m.key">{{ m.label }}</option>
-            </select></div>
-          <div class="field"><label for="inv-search">Find an item</label><input id="inv-search" type="text" v-model="inv.search" placeholder="Name contains…" style="width:180px"></div>
-          <label class="check-label"><input type="checkbox" v-model="inv.onlyOpen"> Only items without a note</label>
-        </div>
-        <button class="ghost" v-if="inv.data" @click="openInvReport(inv.data.count.property, inv.data.count.period)">Report</button>
-      </div>
-      <div v-if="inv.loading" class="muted"><span class="spin"></span>Loading…</div>
-      <div v-else-if="inv.error" class="banner warn">{{ inv.error }}</div>
-      <template v-if="inv.data && !inv.loading">
-        <div class="row" style="align-items:flex-end">
-          <div>
-            <div class="muted">{{ inv.data.count.items }} items · value {{ money(inv.data.totals.current) }} ({{ signed(inv.data.totals.change) }} on the last count) · uploaded {{ dayLabel(inv.data.count.uploadedAt) }}<template v-if="inv.data.count.uploadedBy"> by {{ inv.data.count.uploadedBy }}</template></div>
-            <h1>{{ propertyName(inv.data.count.property) }} · {{ inv.data.count.label }} · {{ monthLabel(inv.data.count.period) }}</h1>
-          </div>
-          <div style="min-width:240px;flex:0 1 320px">
-            <div class="muted" style="display:flex;justify-content:space-between"><span>Reviewed</span><b>{{ invNoted }} of {{ inv.data.total }}</b></div>
-            <div class="bar" style="height:10px;margin-top:4px"><div class="fill" :style="{ width: invPct(invNoted, inv.data.total) + '%', background: 'var(--brand)' }"></div></div>
-            <div class="muted" style="margin-top:4px">{{ invStatusCounts.adjust }} adjust · {{ invStatusCounts.review }} review · {{ invStatusCounts.correct }} correct</div>
-          </div>
-        </div>
-        <div v-if="!inv.data.canEdit" class="banner info">You can read this review. Notes can be added by an administrator or an inventory reviewer.</div>
-        <div class="muted" v-if="invModeHint">{{ invModeHint }}</div>
-
-        <div class="card flush">
-          <div class="scroll inv-scroll">
-            <table class="inv-table">
-              <thead><tr><th class="inv-item">Item</th><th>Quantity</th><th>Cost</th><th>Value</th><th>Change</th><th style="text-align:left;min-width:260px">Why it is here</th><th style="text-align:left;min-width:260px">Note</th></tr></thead>
-              <tbody>
-                <template v-for="r in invRows" :key="r.id">
-                  <tr v-if="r.head" class="sec"><td colspan="7"><span class="sec-label">{{ r.head }}<span v-if="r.sub" class="muted" style="text-transform:none;letter-spacing:0;font-weight:400"> · {{ r.sub }}</span></span></td></tr>
-                  <tr v-else-if="r.empty" class="empty-row"><td colspan="7" class="muted" style="text-align:left">{{ r.empty }}</td></tr>
-                  <tr v-else :class="['inv-row', 'st-row-' + invStatus(r.key), { focus: inv.focus === r.key }]" :data-key="r.key">
-                    <td class="inv-item"><b>{{ r.it.item }}</b><div class="muted">{{ r.it.uom }}<template v-if="inv.mode !== 'account'"> · {{ r.it.inventoryAcct }}</template><template v-if="r.it.flag"> · <span class="bad">{{ r.it.flag }}</span></template></div></td>
-                    <td>{{ qty(r.it.prevQty) }} → <b>{{ qty(r.it.curQty) }}</b></td>
-                    <td :class="{ bad: r.it.variance != null && Math.abs(r.it.variance) >= 0.1, 'zero-cost': r.it.curQty > 0 && !r.it.curCost }">{{ cost(r.it.prevCost) }} → <b>{{ cost(r.it.curCost) }}</b>
-                      <div v-if="r.it.variance != null && Math.abs(r.it.variance) >= 0.005" class="muted">{{ signedPct(r.it.variance * 100) }}</div></td>
-                    <td>{{ money(r.it.curTotal) }}</td>
-                    <td :class="cls(r.it.adjustment)">{{ signed(r.it.adjustment) }}</td>
-                    <td style="text-align:left;white-space:normal">
-                      <div v-for="(why, i) in invReasons(r)" :key="i" :class="{ muted: i > 0 }" style="margin-bottom:2px">{{ why }}</div></td>
-                    <td class="note-cell" style="text-align:left;white-space:normal">
-                      <template v-if="inv.data.canEdit">
-                        <div class="cat-btns" role="group" :aria-label="'Note type for ' + r.it.item">
-                          <button v-for="p in INV_PREFIXES" :key="p.key" type="button" :class="['cat-btn', 'cat-' + p.key, { active: invCategory(r.key) === p.prefix }]" @click="invSetCategory(r.key, p.prefix)">{{ p.prefix }}</button>
-                        </div>
-                        <div style="display:flex;gap:6px;align-items:center">
-                          <select :value="invNote(r.key)" @change="invApply(r.key, $event.target.value)" :aria-label="'Note for ' + r.it.item" style="flex:1;min-height:32px;font-size:12px">
-                            <option value="">{{ invCategory(r.key) ? 'Choose a note…' : 'No note' }}</option>
-                            <option v-for="o in invOptions(r.key)" :key="o" :value="o">{{ o }}</option>
-                          </select>
-                          <span class="sync" :title="inv.errors[invKey(r.key)] || ''">
-                            <span v-if="inv.status[invKey(r.key)] === 'pending'" class="badge spike">not saved</span>
-                            <span v-else-if="inv.status[invKey(r.key)] === 'syncing'" class="spin" aria-label="Saving"></span>
-                            <span v-else-if="inv.status[invKey(r.key)] === 'synced'" class="good" aria-label="Saved">✓</span>
-                            <span v-else-if="inv.status[invKey(r.key)] === 'error'" class="badge trend">retry</span>
-                          </span>
-                        </div>
-                        <div v-if="invNoteMeta(r.key)" class="muted" style="margin-top:2px">{{ invNoteMeta(r.key) }}</div>
-                      </template>
-                      <template v-else>
-                        <span v-if="invNote(r.key)" :class="['badge', 'st-' + invStatus(r.key)]">{{ invNote(r.key) }}</span><span v-else class="muted">No note</span>
-                        <div v-if="invNoteMeta(r.key)" class="muted">{{ invNoteMeta(r.key) }}</div>
-                      </template>
-                    </td>
-                  </tr>
-                </template>
-                <tr v-if="!invRows.length"><td colspan="7" class="muted" style="text-align:left;padding:20px">{{ inv.search || inv.onlyOpen ? 'Nothing matches the filters.' : 'Nothing to review in this count.' }}</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <div class="muted">Notes are kept in this page and saved every {{ INV_SYNC_SECONDS }} seconds (or with <b>Save now</b>). An item in several sections has one note, shown in each.
-          <b>CORRECT</b>: the count is right. <b>REVIEW</b>: count or check it again. <b>ADJUST</b>: fix it in R365 (price, unit, item).</div>
-      </template>
-    </template>
   </template>
 
   <!-- ------------------------------ REPORT ------------------------------ -->
   <template v-if="inv.sub === 'report'">
-    <div v-if="!invReportOptions.length && inv.dash" class="card empty">No counts or saved reports on file.</div>
+    <div v-if="!invReportOptions.length && inv.dash" class="card empty">No inventory checks on file.</div>
     <template v-else>
       <div class="row no-print">
         <div class="controls">
           <div class="field"><label for="inv-rep">Property · month</label>
             <select id="inv-rep" v-model="inv.repKey" @change="loadInvReport">
-              <option v-for="o in invReportOptions" :key="o.key" :value="o.key">{{ propertyName(o.property) }} · {{ monthLabel(o.period) }}{{ o.live ? '' : ' (saved)' }}</option>
+              <option v-for="o in invReportOptions" :key="o.key" :value="o.key">{{ propertyName(o.property) }} · {{ monthLabel(o.period) }}</option>
             </select></div>
         </div>
         <div class="controls">
-          <button v-if="inv.rep && inv.rep.live && inv.rep.canEdit" @click="saveInvReport" :disabled="inv.repSaving">{{ inv.repSaving ? 'Saving…' : (inv.rep.saved ? 'Save report again' : 'Save report') }}</button>
-          <button class="ghost" @click="printPage" :disabled="!inv.rep || !inv.rep.report">Print / save as PDF</button>
+          <button v-if="invRep" @click="invCopy">Copy the questions</button>
+          <button class="ghost" @click="printPage" :disabled="!invRep">Print / save as PDF</button>
         </div>
       </div>
       <div v-if="inv.repLoading" class="muted"><span class="spin"></span>Loading…</div>
       <div v-else-if="inv.repError" class="banner warn">{{ inv.repError }}</div>
-      <template v-if="inv.rep && inv.rep.report && !inv.repLoading">
+      <template v-if="invRep && !inv.repLoading">
         <div>
-          <div class="muted">{{ invReportSentence }}</div>
+          <div class="muted"><template v-for="(c, i) in invRep.counts" :key="c.id">{{ i ? ' + ' : '' }}{{ c.label }} (uploaded {{ dayLabel(c.uploadedAt) }}<template v-if="c.uploadedBy"> by {{ c.uploadedBy }}</template>)</template></div>
           <h1>{{ propertyName(invRep.property) }} · {{ monthLabel(invRep.period) }} inventory
-            <span v-if="!inv.rep.live" class="badge spike">Saved copy</span>
-            <span v-else-if="invRep.review.open" class="badge preliminary">In review</span>
-            <span v-else class="badge settled">Reviewed</span></h1>
+            <span v-if="invRep.status === 'clean'" class="badge settled">Clean</span>
+            <span v-else class="badge preliminary">{{ invRep.questions.length }} question{{ invRep.questions.length === 1 ? '' : 's' }}</span></h1>
         </div>
-        <div class="banner info" v-if="!inv.rep.live">The counts for this month have been replaced. This is the report as saved {{ dayLabel(inv.rep.saved.savedAt) }} by {{ inv.rep.saved.savedBy }}.</div>
-        <div class="banner warn" v-if="inv.rep.live && invRep.review.open">
-          {{ invRep.review.open }} of {{ invRep.review.total }} items picked for review have no note yet.
-          <button class="link no-print" @click="openInvCount(invRep.counts.filter(c => c.review.noted < c.review.total)[0].id)">Continue the review</button></div>
+        <div class="banner warn" v-for="x in invRep.issues" :key="x">{{ x }}</div>
+        <div v-if="inv.copyText" class="card no-print">
+          <label for="inv-copy" class="muted">The questions as text: copy them into an email to the store manager</label>
+          <textarea id="inv-copy" readonly :value="inv.copyText" style="min-height:160px;font-size:12px"></textarea>
+        </div>
 
         <div class="row" style="align-items:stretch">
           <div class="hero" style="flex:1 1 340px">
             <div class="label">Inventory value</div>
-            <div><span class="value">{{ money(invRep.headline.value) }}</span> <span style="color:#C9CED6">{{ invRep.counts.length }} count{{ invRep.counts.length === 1 ? '' : 's' }}</span></div>
+            <div><span class="value">${{ money(invRep.headline.value) }}</span> <span style="color:#C9CED6">{{ invRep.counts.length }} count{{ invRep.counts.length === 1 ? '' : 's' }}</span></div>
             <div style="display:flex;flex-wrap:wrap;gap:6px 18px">
               <span>Last count {{ money(invRep.headline.prevValue) }} · <b :class="invRep.headline.change >= 0 ? 'good' : 'bad'">{{ signed(invRep.headline.change) }}</b><template v-if="invRep.headline.changePct != null"> ({{ signedPct(invRep.headline.changePct) }})</template></span>
               <span>Price changes {{ signed(invRep.headline.priceEffect) }} · quantities {{ signed(invRep.headline.qtyEffect) }}</span>
             </div>
-            <div class="warn" v-if="invRep.review.adjust">{{ invRep.review.adjust }} item{{ invRep.review.adjust === 1 ? '' : 's' }} to adjust in R365 before the month closes.</div>
+            <div class="warn" v-if="invRep.questions.length">{{ invRep.questions.length }} item{{ invRep.questions.length === 1 ? '' : 's' }} of ${{ money(invRep.highImpact) }} or more to ask the store about.</div>
           </div>
           <div class="grid" style="flex:999 1 560px">
             <div class="card stat" v-for="k in invRep.kpis" :key="k.key">
@@ -317,26 +178,41 @@
 
         <div class="card">
           <div class="row" style="margin-bottom:12px">
-            <h2>Action items · {{ invRep.actions.length }}</h2>
-            <span class="muted"><span class="badge st-adjust">ADJUST</span> fix in R365 · <span class="badge st-review">REVIEW</span> count or check again</span>
+            <h2>Questions for the store · {{ invRep.questions.length }}</h2>
+            <span class="muted">Items still worth ${{ money(invRep.highImpact) }} or more after the store's review, largest dollar impact first</span>
           </div>
-          <p v-if="!invRep.actions.length" class="muted">No items are marked ADJUST or REVIEW.</p>
-          <div v-if="invRep.adjustGroups.length" class="muted" style="margin-bottom:10px">
-            <span v-for="(g, i) in invRep.adjustGroups" :key="g.note">{{ i ? ' · ' : '' }}{{ g.note.replace(/^ADJUST\s*-?\s*/i, '') || 'ADJUST' }}: {{ g.items }} ({{ money(g.impact) }})</span></div>
+          <p v-if="!invRep.questions.length" class="muted">Nothing of ${{ money(invRep.highImpact) }} or more. The count looks properly audited.</p>
           <div class="grid wide">
-            <div v-for="a in invRep.actions" :key="a.countId + a.key" :class="['flag-card', 'act-' + a.status]">
+            <div v-for="q in invRep.questions" :key="q.countId + q.key" class="flag-card act-adjust">
               <div class="row" style="align-items:baseline">
-                <b>{{ a.item }}</b>
-                <span :class="a.status === 'adjust' ? 'bad' : ''" style="font-weight:700">{{ money(a.impact) }}</span>
+                <b>{{ q.item }}</b>
+                <span class="bad" style="font-weight:700">${{ money(q.impact) }}</span>
               </div>
-              <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
-                <span :class="['badge', 'st-' + a.status]">{{ a.note }}</span>
-                <span class="muted">{{ a.countLabel }} · {{ a.uom }}</span>
-              </div>
-              <div class="driver"><span>{{ a.reason }}</span></div>
-              <div class="muted">Qty {{ qty(a.prevQty) }} → {{ qty(a.curQty) }} · cost {{ cost(a.prevCost) }} → {{ cost(a.curCost) }} · value {{ money(a.value) }}<template v-if="a.by"> · {{ a.by }}</template></div>
+              <div class="muted">{{ q.uom }} · {{ q.inventoryAcct }}<template v-if="invRep.counts.length > 1"> · {{ q.countLabel }}</template></div>
+              <div v-for="(why, i) in q.reasons" :key="i" class="driver"><span>{{ why }}</span></div>
+              <div v-if="q.history" class="driver"><span><b>{{ q.history }}</b></span></div>
+              <div class="muted">Qty {{ qty(q.prevQty) }} → {{ qty(q.curQty) }} · cost {{ cost(q.prevCost) }} → {{ cost(q.curCost) }} · value {{ money(q.curTotal) }}
+                <template v-if="Math.round(q.priceEffect)"> · price {{ signed(q.priceEffect) }}</template><template v-if="Math.round(q.qtyEffect)"> · qty {{ signed(q.qtyEffect) }}</template></div>
             </div>
           </div>
+        </div>
+
+        <div class="card flush" v-if="invRep.others.length">
+          <div class="head"><h2>Smaller items the rules picked · {{ invRep.others.length }}</h2>
+            <button class="link no-print" @click="inv.showOthers = !inv.showOthers">{{ inv.showOthers ? 'Hide' : 'Show' }}</button></div>
+          <div class="scroll" v-if="inv.showOthers">
+            <table style="min-width:760px">
+              <thead><tr><th>Item</th><th>Dollar impact</th><th style="text-align:left;width:60%">Why</th></tr></thead>
+              <tbody>
+                <tr v-for="q in invRep.others" :key="q.countId + q.key">
+                  <td style="white-space:normal"><b>{{ q.item }}</b><div class="muted">{{ q.uom }}<template v-if="invRep.counts.length > 1"> · {{ q.countLabel }}</template></div></td>
+                  <td>{{ money(q.impact) }}</td>
+                  <td style="text-align:left;white-space:normal">{{ q.reasons[0] }}<div v-if="q.history" class="muted">{{ q.history }}</div></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="muted" style="padding:10px 16px">The store team reviewed these in Inventory Audit; under ${{ money(invRep.highImpact) }} each.</div>
         </div>
 
         <div class="card flush">
@@ -349,7 +225,7 @@
                   <span class="col-resize no-print" :class="{ dragging: resizing }" role="separator" aria-orientation="vertical" tabindex="0"
                     :aria-valuenow="lineColWidth" :aria-valuemin="LINE_COL_MIN" :aria-valuemax="LINE_COL_MAX" aria-label="Resize the account column"
                     title="Drag to resize · double-click to reset" @pointerdown="startResize" @dblclick="resetLineCol" @keydown="keyResize"></span></th>
-                <th>Value</th><th>Last count</th><th>Change</th><th>Change %</th><th>Price</th><th>Quantity</th><th>Items</th><th>Reviewed items</th><th>Action items</th></tr></thead>
+                <th>Value</th><th>Last count</th><th>Change</th><th>Change %</th><th>Price</th><th>Quantity</th><th>Items</th><th>Picked</th><th>High impact</th></tr></thead>
               <tbody>
                 <template v-for="a in invRep.accounts" :key="a.name">
                   <tr class="sec"><td colspan="10"><span class="sec-label">{{ a.name }}</span></td></tr>
@@ -360,7 +236,7 @@
                     <td :class="cls(l.change)">{{ l.changePct == null ? '—' : signedPct(l.changePct) }}</td>
                     <td :class="cls(l.priceEffect)">{{ signed(l.priceEffect) }}</td>
                     <td :class="cls(l.qtyEffect)">{{ signed(l.qtyEffect) }}</td>
-                    <td class="muted">{{ l.items }}</td><td class="muted">{{ l.review }}</td><td :class="{ bad: l.actions }">{{ l.actions || '' }}</td>
+                    <td class="muted">{{ l.items }}</td><td class="muted">{{ l.flagged }}</td><td :class="{ bad: l.highImpact }">{{ l.highImpact || '' }}</td>
                   </tr>
                   <tr class="total" v-if="a.lines.length > 1">
                     <td class="line-col" :style="lineColStyle">Total {{ a.name }}</td>
@@ -369,7 +245,7 @@
                     <td :class="cls(a.change)">{{ a.changePct == null ? '—' : signedPct(a.changePct) }}</td>
                     <td :class="cls(a.priceEffect)">{{ signed(a.priceEffect) }}</td>
                     <td :class="cls(a.qtyEffect)">{{ signed(a.qtyEffect) }}</td>
-                    <td class="muted">{{ a.items }}</td><td class="muted">{{ a.review }}</td><td :class="{ bad: a.actions }">{{ a.actions || '' }}</td>
+                    <td class="muted">{{ a.items }}</td><td class="muted">{{ a.flagged }}</td><td :class="{ bad: a.highImpact }">{{ a.highImpact || '' }}</td>
                   </tr>
                 </template>
                 <tr class="key">
@@ -377,66 +253,40 @@
                   <td>{{ money(invRep.headline.value) }}</td><td>{{ money(invRep.headline.prevValue) }}</td>
                   <td>{{ signed(invRep.headline.change) }}</td><td>{{ invRep.headline.changePct == null ? '—' : signedPct(invRep.headline.changePct) }}</td>
                   <td>{{ signed(invRep.headline.priceEffect) }}</td><td>{{ signed(invRep.headline.qtyEffect) }}</td>
-                  <td>{{ invRep.accounts.reduce((s, a) => s + a.items, 0) }}</td><td>{{ invRep.review.total }}</td><td>{{ invRep.actions.length || '' }}</td>
+                  <td>{{ invRep.accounts.reduce((s, a) => s + a.items, 0) }}</td><td>{{ invRep.questions.length + invRep.others.length }}</td><td>{{ invRep.questions.length || '' }}</td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <div class="muted" style="padding:10px 16px">Blue = value went up, orange = down. Items counts include anything stocked in either count.</div>
+          <div class="muted" style="padding:10px 16px">Blue = value went up, orange = down. Accounts are company-wide: a bar's cocktail ingredients can sit in a food account. Item counts include anything stocked in either count.</div>
         </div>
 
-        <div style="display:flex;flex-direction:column;gap:16px">
-          <div class="card flush" v-if="invRep.pnl">
-            <div class="head"><h2>Against the P&amp;L</h2><span class="muted">{{ monthLabel(invRep.period) }} cost of sales<template v-if="invRep.pnl.stage === 'mtd'">, month to date through {{ dayLabel(invRep.pnl.asOf) }}</template></span></div>
-            <div class="scroll">
-              <table>
-                <thead><tr><th>Line</th><th>Inventory</th><th>Cost of sales</th><th>Days on hand</th><th>Change as % of cost</th></tr></thead>
-                <tbody>
-                  <tr v-for="p in invRep.pnl.rows" :key="p.key">
-                    <td>{{ p.key }} {{ p.name }}</td><td>{{ money(p.inventory) }}</td><td class="muted">{{ p.cost == null ? 'not posted' : money(p.cost) }}</td>
-                    <td><b>{{ p.days == null ? '—' : Math.round(p.days) }}</b></td>
-                    <td :class="p.changeShare != null && Math.abs(p.changeShare) >= 10 ? 'bad' : 'muted'">{{ p.changeShare == null ? '—' : signedPct(p.changeShare) }}</td>
-                  </tr>
-                  <tr class="total" v-if="invRep.pnl.total && invRep.pnl.rows.length > 1"><td>Total</td><td>{{ money(invRep.pnl.total.inventory) }}</td><td>{{ money(invRep.pnl.total.cost) }}</td>
-                    <td><b>{{ Math.round(invRep.pnl.total.days) }}</b></td><td>{{ signedPct(invRep.pnl.total.changeShare) }}</td></tr>
-                </tbody>
-              </table>
-            </div>
-            <div class="muted" style="padding:10px 16px">Days on hand = inventory ÷ the month's daily cost of sales. A drop in inventory is cost of sales bought in earlier months; a rise is purchases not yet used.
-              A change of 10% or more of the month's cost moves the cost % noticeably. <template v-if="invRep.pnl.unmatched">Supplies and other accounts with no cost of sales line ({{ money(invRep.pnl.unmatched) }}) are left out.</template></div>
+        <div class="card flush" v-if="invRep.pnl">
+          <div class="head"><h2>Against the P&amp;L</h2><span class="muted">{{ monthLabel(invRep.period) }} cost of sales<template v-if="invRep.pnl.stage === 'mtd'">, month to date through {{ dayLabel(invRep.pnl.asOf) }}</template></span></div>
+          <div class="scroll">
+            <table>
+              <thead><tr><th>Line</th><th>Inventory</th><th>Cost of sales</th><th>Days on hand</th><th>Change as % of cost</th></tr></thead>
+              <tbody>
+                <tr v-for="p in invRep.pnl.rows" :key="p.key">
+                  <td>{{ p.key }} {{ p.name }}</td><td>{{ money(p.inventory) }}</td><td class="muted">{{ p.cost == null ? 'not posted' : money(p.cost) }}</td>
+                  <td><b>{{ p.days == null ? '—' : Math.round(p.days) }}</b></td>
+                  <td :class="p.changeShare != null && Math.abs(p.changeShare) >= 10 ? 'bad' : 'muted'">{{ p.changeShare == null ? '—' : signedPct(p.changeShare) }}</td>
+                </tr>
+                <tr class="total" v-if="invRep.pnl.total && invRep.pnl.rows.length > 1"><td>Total</td><td>{{ money(invRep.pnl.total.inventory) }}</td><td>{{ money(invRep.pnl.total.cost) }}</td>
+                  <td><b>{{ Math.round(invRep.pnl.total.days) }}</b></td><td>{{ signedPct(invRep.pnl.total.changeShare) }}</td></tr>
+              </tbody>
+            </table>
           </div>
-          <div class="card flush" v-else-if="!boot.inventoryOnly && inv.rep.live">
-            <div class="head"><h2>Against the P&amp;L</h2></div>
-            <p class="muted" style="padding:0 16px">No P&amp;L for {{ monthLabel(invRep.period) }} is on file for this property yet. Upload it to see days on hand.</p>
-          </div>
-          <div class="card flush">
-            <div class="head"><h2>Review by section</h2><span class="muted">An item can be in more than one section</span></div>
-            <div class="scroll">
-              <table>
-                <thead><tr><th>Section</th><th>Items</th><th>With a note</th><th>Correct</th><th>Review</th><th>Adjust</th></tr></thead>
-                <tbody>
-                  <tr v-for="t in invRep.triage.filter(x => x.items)" :key="t.key">
-                    <td>{{ t.label }}</td><td>{{ t.items }}</td><td :class="{ bad: t.noted < t.items }">{{ t.noted }}</td>
-                    <td class="muted">{{ t.correct }}</td><td>{{ t.review || '' }}</td><td :class="{ bad: t.adjust }">{{ t.adjust || '' }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <div class="muted" style="padding:10px 16px">
-              <span v-for="(c, i) in invRep.counts" :key="c.id">{{ i ? ' · ' : '' }}{{ c.label }}: {{ c.items }} items, {{ c.review.noted }} of {{ c.review.total }} reviewed<template v-if="c.file">, {{ c.file }}</template></span></div>
-          </div>
+          <div class="muted" style="padding:10px 16px">Days on hand = inventory ÷ the month's daily cost of sales. A drop in inventory is cost of sales bought in earlier months; a rise is purchases not yet used.
+            A change of 10% or more of the month's cost moves the cost % noticeably. <template v-if="invRep.pnl.unmatched">Supplies and other accounts with no cost of sales line ({{ money(invRep.pnl.unmatched) }}) are left out.</template></div>
+        </div>
+        <div class="card flush" v-else-if="!boot.inventoryOnly">
+          <div class="head"><h2>Against the P&amp;L</h2></div>
+          <p class="muted" style="padding:0 16px">No P&amp;L for {{ monthLabel(invRep.period) }} is on file for this property yet. Upload it to see days on hand.</p>
         </div>
 
-        <div class="card">
-          <h2 style="margin-bottom:8px">Manager summary</h2>
-          <template v-if="inv.rep.live && inv.rep.canEdit">
-            <label for="inv-summary" class="muted">Saved with the report and printed with it</label>
-            <textarea id="inv-summary" v-model="inv.summaryDraft" placeholder="What was found, what was fixed, what to watch next month"></textarea>
-            <div class="muted no-print" style="margin-top:6px">Press <b>Save report</b> to keep it.</div>
-            <p class="print-only">{{ inv.summaryDraft }}</p>
-          </template>
-          <p v-else style="white-space:pre-wrap">{{ invRep.summary || 'No summary.' }}</p>
-        </div>
+        <div class="muted">
+          <span v-for="(c, i) in invRep.counts" :key="c.id">{{ i ? ' · ' : '' }}{{ c.label }}: {{ c.items }} items, {{ c.picked }} picked, {{ c.highImpact }} high impact · {{ invFollowsText(c.follows) }}<template v-if="c.file"> · {{ c.file }}</template></span></div>
       </template>
     </template>
   </template>
