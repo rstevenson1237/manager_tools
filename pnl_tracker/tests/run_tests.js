@@ -610,3 +610,6 @@ console.log('\n' + passed + ' passed' + (process.exitCode ? ', some FAILED' : ''
 
 console.log('');
 require('./inventory_tests.js');
+
+console.log('');
+require('./labor_tests.js');

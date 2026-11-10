@@ -24,7 +24,16 @@
  *            level is kept for items that did not need a second look.
  *            Only InventoryApi.gs reads these two, so they never slow the
  *            P&L views down.
- *   _Config  settings (viewers, properties, flag rule, inventory).
+ *   Labor Weeks   one row per property and week from the labor export
+ *            (Labor.gs): sales, forecast, last year, the week's hour and pay
+ *            totals, and the stage (schedule / partial / actual).
+ *   Labor Jobs    one row per property, week and job code: hours and pay.
+ *            The dashboard reads only these two.
+ *   Labor Shifts  one row per property, week, job code and employee, with the
+ *            seven days as JSON. Kind 'final' is the latest upload; kind
+ *            'original' is the schedule as first uploaded before the week had
+ *            actuals. Only the week report reads it.
+ *   _Config  settings (viewers, properties, flag rule, inventory, labor).
  ******************************************************************************/
 
 const SHEETS = {
@@ -41,7 +50,14 @@ const SHEETS = {
     'Picked', 'High Impact', 'High Impact Value', 'Summary'] },
   invFlags: { name: 'Inventory Flags', headers: ['Count ID', 'Key', 'Item', 'UofM', 'Inventory Acct', 'Cost Acct',
     'Current Qty', 'Current Cost', 'Current Total', 'Previous Qty', 'Previous Cost', 'Previous Total',
-    'Price Effect', 'Quantity Effect', 'Impact', 'Flag', 'Sections', 'Reasons'] }
+    'Price Effect', 'Quantity Effect', 'Impact', 'Flag', 'Sections', 'Reasons'] },
+  laborWeeks: { name: 'Labor Weeks', headers: ['Week', 'Property', 'Location', 'Week End', 'Stage', 'Net Sales', 'Forecast', 'Prior Year',
+    'Actual Hrs', 'Scheduled Hrs', 'Other Hrs', 'OT Hrs', 'Actual $', 'Scheduled $', 'Other $', 'Original Schedule At',
+    'Uploaded At', 'Uploaded By', 'File', 'Upload ID'] },
+  laborJobs: { name: 'Labor Jobs', headers: ['Week', 'Property', 'Job', 'Actual Hrs', 'Scheduled Hrs', 'Other Hrs', 'OT Hrs',
+    'Actual $', 'Scheduled $', 'Other $', 'Employees'] },
+  laborShifts: { name: 'Labor Shifts', headers: ['Week', 'Property', 'Kind', 'Job', 'Employee', 'Actual Hrs', 'Scheduled Hrs', 'OT Hrs',
+    'Actual $', 'Scheduled $', 'Other Hrs', 'Other $', 'Days'] }
 };
 
 /** Key used in Tags for the manager's free-text note on a whole month. */

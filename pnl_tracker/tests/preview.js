@@ -24,7 +24,7 @@ const opt = name => { const i = args.indexOf(name); return i === -1 ? null : arg
 const extraProps = args.reduce((list, a, i) => (a === '--prop' ? list.concat([args[i + 1]]) : list), [])
   .map(s => ({ code: s.split(':')[0], name: s.split(':').slice(1).join(':') || s.split(':')[0], active: true }));
 
-const GS = ['Parse.gs', 'Budget.gs', 'Analysis.gs', 'Store.gs', 'Review.gs', 'InventoryRules.gs', 'InventoryCheck.gs', 'Code.gs', 'Import.gs', 'InventoryApi.gs'];
+const GS = ['Parse.gs', 'Budget.gs', 'Analysis.gs', 'Store.gs', 'Review.gs', 'InventoryRules.gs', 'InventoryCheck.gs', 'Labor.gs', 'Code.gs', 'Import.gs', 'InventoryApi.gs', 'LaborApi.gs'];
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 const noScriptEnd = s => s.replace(/<\/script/gi, '<\\/script');
 

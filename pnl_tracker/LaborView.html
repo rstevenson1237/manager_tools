@@ -1,0 +1,477 @@
+<!-- ============================== LABOR (included by Index.html) ============================== -->
+<template v-if="view === 'labor'">
+  <div class="row no-print">
+    <div class="subtabs" role="tablist" aria-label="Labor">
+      <button v-for="s in labSubViews" :key="s.key" role="tab" :aria-selected="lab.sub === s.key" :class="['subtab', { active: lab.sub === s.key }]" @click="labGo(s.key)">{{ s.label }}</button>
+    </div>
+  </div>
+
+  <!-- ------------------------------ DASHBOARD ------------------------------ -->
+  <template v-if="lab.sub === 'dashboard'">
+    <div class="row">
+      <div>
+        <div class="muted">Sales against forecast, and labor against the schedule and the budget, week by week</div>
+        <h1>Sales &amp; labor</h1>
+      </div>
+      <div class="controls no-print">
+        <button v-if="labIsAdmin" @click="labGo('upload')">Upload a week</button>
+        <button class="ghost" @click="loadLabDash" :disabled="lab.dashLoading">Refresh</button>
+      </div>
+    </div>
+    <div v-if="lab.dashLoading && !lab.dash" class="muted"><span class="spin"></span>Loading…</div>
+    <div v-else-if="lab.dashError" class="banner warn">{{ lab.dashError }}</div>
+    <template v-if="lab.dash">
+      <div v-if="!labAllRows.length" class="card empty">
+        No labor weeks on file yet.
+        <template v-if="labIsAdmin"><br><br>Export <b>Labor Actual vs Scheduled - Detail</b> from R365 for one week and <button class="link" @click="labGo('upload')">upload it</button>.</template>
+      </div>
+      <template v-else>
+        <div class="card no-print" style="display:flex;flex-direction:column;gap:10px">
+          <div class="controls">
+            <div class="field"><label for="lab-from">From week</label>
+              <select id="lab-from" v-model="lab.from"><option v-for="w in labWeeks" :key="w" :value="w">{{ weekLabel(w) }}</option></select></div>
+            <div class="field"><label for="lab-to">To week</label>
+              <select id="lab-to" v-model="lab.to"><option v-for="w in labWeeks" :key="w" :value="w">{{ weekLabel(w) }}</option></select></div>
+            <div class="controls" style="gap:4px">
+              <button class="ghost small" @click="labRange(4)">4 weeks</button>
+              <button class="ghost small" @click="labRange(13)">13 weeks</button>
+              <button class="ghost small" @click="labRange(0)">All</button>
+            </div>
+            <div class="field"><label for="lab-basis">Labor</label>
+              <select id="lab-basis" v-model="lab.basis"><option v-for="b in LAB_BASIS" :key="b.key" :value="b.key">{{ b.label }}</option></select></div>
+          </div>
+          <div>
+            <div class="muted" style="margin-bottom:4px">Properties <template v-if="lab.sel.length">· {{ lab.sel.length }} chosen · <button class="link small" @click="lab.sel = []">show all</button></template><template v-else>· all</template></div>
+            <div class="lab-props" role="group" aria-label="Properties">
+              <button v-for="p in labProps" :key="p.code" :class="['lab-prop', { on: lab.sel.indexOf(p.code) !== -1 }]" :aria-pressed="lab.sel.indexOf(p.code) !== -1" @click="labToggleProp(p.code)">{{ p.name }}</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid">
+          <div class="card stat"><div class="label">Net sales</div><div class="value">{{ money(labTotals.net) }}</div>
+            <div class="sub">{{ labTotals.weeks }} week{{ labTotals.weeks === 1 ? '' : 's' }} with actuals · <span :class="cls(labTotals.vsForecast)">{{ signedPct(labTotals.vsForecast) }}</span> vs forecast · <span :class="cls(labTotals.vsPy)">{{ signedPct(labTotals.vsPy) }}</span> vs last year</div></div>
+          <div class="card stat"><div class="label">Labor % of sales</div><div class="value">{{ pct(labTotals.actPct) }}</div>
+            <div class="sub">scheduled {{ pct(labTotals.schPct) }} of forecast<template v-if="labTotals.targetPct != null"> · target {{ pct(labTotals.targetPct) }}</template></div></div>
+          <div class="card stat"><div class="label">Labor against the schedule</div><div class="value" :class="overCls(labTotals.actPay - labTotals.schPay, 0.5)">{{ signed(labTotals.actPay - labTotals.schPay) }}</div>
+            <div class="sub">${{ money(labTotals.actPay) }} paid · {{ signedHrs(labTotals.actHrs - labTotals.schHrs) }} hours</div></div>
+          <div class="card stat"><div class="label">Overtime hours</div><div class="value" :class="{ bad: labTotals.otHrs > 0 }">{{ hrs(labTotals.otHrs) }}</div>
+            <div class="sub">{{ LAB_BASIS.filter(b => b.key === lab.basis)[0].label }}</div></div>
+        </div>
+
+        <div class="card" v-for="c in [{ key: 'pct', title: 'Labor % · ' + LAB_BASIS.filter(b => b.key === lab.basis)[0].label, chart: labPctChart }, { key: 'sales', title: 'Net sales', chart: labSalesChart }]" :key="c.key">
+          <div class="row" style="margin-bottom:6px">
+            <h2>{{ c.title }}</h2>
+            <div class="controls" style="gap:14px" v-if="c.chart">
+              <span v-for="l in c.chart.lines" :key="l.key" class="muted" style="display:inline-flex;align-items:center;gap:6px">
+                <svg width="26" height="8" aria-hidden="true"><line x1="1" y1="4" x2="25" y2="4" :stroke="l.color" stroke-width="2" :stroke-dasharray="l.dash || null" stroke-linecap="round"/></svg>{{ l.label }}</span>
+            </div>
+          </div>
+          <div v-if="!c.chart" class="muted">Choose at least two weeks to see the trend.</div>
+          <svg v-else v-bind="{ viewBox: '0 0 ' + c.chart.w + ' ' + c.chart.h }" :style="{ width: '100%', aspectRatio: c.chart.w + ' / ' + c.chart.h, display: 'block' }" role="img" :aria-label="c.title + ' by week'">
+            <g v-for="(gl, i) in c.chart.grid" :key="'g' + i">
+              <line :x1="c.chart.left" :x2="c.chart.w - c.chart.right" :y1="gl.y" :y2="gl.y" stroke="#EDEDE8"/>
+              <text :x="c.chart.left - 8" :y="gl.y + 4" text-anchor="end" font-size="11" fill="#5A6069">{{ gl.label }}</text>
+            </g>
+            <text v-for="(xl, i) in c.chart.xLabels" :key="'x' + i" :x="xl.x" :y="c.chart.h - 8" :text-anchor="xl.anchor" font-size="11" fill="#5A6069">{{ xl.label }}</text>
+            <g v-for="l in c.chart.lines" :key="l.key">
+              <polyline v-for="(s, i) in l.segs" :key="i" :points="s" fill="none" :stroke="l.color" stroke-width="2" :stroke-dasharray="l.dash || null" stroke-linejoin="round" stroke-linecap="round"/>
+              <circle v-for="d in l.dots.filter(x => x.alone)" :key="d.key" :cx="d.x" :cy="d.y" r="4" :fill="l.color"/>
+            </g>
+            <g v-for="hv in c.chart.hover" :key="'h' + hv.week" class="lab-hover" style="cursor:pointer" @click="labRows.filter(r => r.week === hv.week).length === 1 && openLabWeek(labRows.filter(r => r.week === hv.week)[0].property, hv.week)">
+              <rect :x="hv.x0" :width="Math.max(1, hv.x1 - hv.x0)" :y="c.chart.top" :height="c.chart.h - c.chart.top - c.chart.bottom" fill="transparent"/>
+              <line class="cross" :x1="hv.x" :x2="hv.x" :y1="c.chart.top" :y2="c.chart.h - c.chart.bottom" stroke="#1A1D21" stroke-width="1"/>
+              <title>{{ hv.text }}</title>
+            </g>
+          </svg>
+        </div>
+
+        <div class="card flush">
+          <div class="head"><h2>Weeks · {{ labTable.length }}</h2><span class="muted">One row per property and week · select a row for its detail · {{ LAB_BASIS.filter(b => b.key === lab.basis)[0].label }}</span></div>
+          <div class="scroll">
+            <table style="min-width:1080px">
+              <thead><tr><th>Week · property</th><th style="text-align:left">Stage</th><th>Net sales</th><th>Forecast</th><th>vs forecast</th><th>Last year</th>
+                <th>Scheduled $</th><th>Actual $</th><th>Sched % of fcst</th><th>Actual %</th><th>Target %</th><th>Hours vs sched</th><th>OT hrs</th><th>Mgmt sched hrs</th><th class="no-print"></th></tr></thead>
+              <tbody>
+                <tr v-for="r in labTable" :key="r.property + r.week" class="clickable" @click="openLabWeek(r.property, r.week)">
+                  <td><b>{{ weekLabel(r.week, true) }}</b> <span class="muted">{{ propertyName(r.property) }}</span></td>
+                  <td style="text-align:left"><span :class="['badge', labStageClass(r.stage)]">{{ labStage(r.stage) }}</span></td>
+                  <td>{{ r.stage === 'schedule' ? '—' : money(r.net) }}</td>
+                  <td :class="{ bad: !r.forecast }">{{ r.forecast ? money(r.forecast) : 'none' }}</td>
+                  <td :class="cls(r.net && r.forecast ? r.net - r.forecast : null)">{{ r.net && r.forecast ? signedPct((r.net / r.forecast - 1) * 100) : '—' }}</td>
+                  <td class="muted">{{ money(r.py) }}</td>
+                  <td>{{ money(r[lab.basis].schPay) }}</td>
+                  <td>{{ r.stage === 'schedule' ? '—' : money(r[lab.basis].actPay) }}</td>
+                  <td :class="r.target && r[lab.basis].schPct != null ? overCls(r[lab.basis].schPct - r.target[lab.basis], 0.99) : ''">{{ pct(r[lab.basis].schPct) }}</td>
+                  <td :class="r.target && r[lab.basis].actPct != null ? overCls(r[lab.basis].actPct - r.target[lab.basis], 0.99) : ''"><b>{{ r.stage === 'schedule' ? '—' : pct(r[lab.basis].actPct) }}</b></td>
+                  <td class="muted">{{ r.target ? pct(r.target[lab.basis]) : '—' }}</td>
+                  <td :class="overCls(r.stage === 'schedule' ? null : r[lab.basis].actHrs - r[lab.basis].schHrs, 1)">{{ r.stage === 'schedule' ? hrs(r[lab.basis].schHrs) + ' sched' : signedHrs(r[lab.basis].actHrs - r[lab.basis].schHrs) }}</td>
+                  <td :class="{ bad: r[lab.basis].otHrs > 0 }">{{ r.stage === 'schedule' ? '—' : hrs(r[lab.basis].otHrs) }}</td>
+                  <td class="muted">{{ hrs(r.mgmtSchHrs) }}</td>
+                  <td class="no-print" @click.stop><button v-if="lab.dash.isAdmin" class="link small" @click="removeLabWeek(r)" :aria-label="'Remove ' + propertyName(r.property) + ' ' + weekLabel(r.week)" title="Remove this week">×</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="muted" style="padding:10px 16px">Scheduled % is scheduled pay ÷ the sales forecast; actual % is pay ÷ net sales. Target is the budget's 6201 FOH / 6209 BOH hourly labor % of net sales for those days.
+            Orange = over target or over the schedule. Management is salaried: only its scheduled hours are shown.</div>
+        </div>
+      </template>
+    </template>
+  </template>
+
+  <!-- ------------------------------ WEEK ------------------------------ -->
+  <template v-if="lab.sub === 'week'">
+    <div v-if="lab.dash && !labWeekOptions.length" class="card empty">No labor weeks on file.</div>
+    <template v-else>
+      <div class="row no-print">
+        <div class="controls">
+          <div class="field"><label for="lab-rep">Property · week</label>
+            <select id="lab-rep" v-model="lab.repKey" @change="loadLabWeek">
+              <option v-for="o in labWeekOptions" :key="o.key" :value="o.key">{{ propertyName(o.property) }} · {{ weekLabel(o.week) }}{{ o.stage === 'schedule' ? ' (schedule)' : '' }}</option>
+            </select></div>
+          <button class="ghost" @click="labStepWeek(-1)" :disabled="!labHasStep(-1)" aria-label="Previous week">‹</button>
+          <button class="ghost" @click="labStepWeek(1)" :disabled="!labHasStep(1)" aria-label="Next week">›</button>
+        </div>
+        <div class="controls">
+          <div class="field" v-if="labRep && labRep.offOriginal"><label for="lab-against">Compare shifts with</label>
+            <select id="lab-against" v-model="lab.against">
+              <option value="final">The schedule in R365 at week end</option>
+              <option value="original">The schedule as first uploaded ({{ dayLabel(labRep.originalAt) }})</option>
+            </select></div>
+          <button class="ghost" @click="printPage" :disabled="!labRep">Print / save as PDF</button>
+        </div>
+      </div>
+      <div v-if="lab.repLoading" class="muted"><span class="spin"></span>Loading…</div>
+      <div v-else-if="lab.repError" class="banner warn">{{ lab.repError }}</div>
+      <template v-if="labRep && !lab.repLoading">
+        <div>
+          <div class="muted">{{ labRep.location }} · uploaded {{ dayLabel(labRep.uploadedAt) }}<template v-if="labRep.uploadedBy"> by {{ labRep.uploadedBy }}</template>
+            <template v-if="labRep.originalAt"> · original schedule from {{ dayLabel(labRep.originalAt) }}</template></div>
+          <h1>{{ propertyName(labRep.property) }} · week of {{ weekLabel(labRep.week) }}
+            <span :class="['badge', labStageClass(labRep.stage)]">{{ labStage(labRep.stage) }}</span></h1>
+        </div>
+        <div v-if="labRep.stage === 'schedule'" class="banner info">The week has not started: this is the schedule as written, judged against the forecast<template v-if="labRep.targetSource"> and {{ labRep.targetSource === 'budget' ? 'the budget' : labWeeksText(labRep.recentWeeks) }}</template>. Upload the week again once it is over to see actuals; this schedule is then kept as the original.</div>
+        <div v-else-if="labRep.stage === 'partial'" class="banner warn">The week is not over yet: actuals run only to the upload.</div>
+        <div v-if="!labRep.targetSource" class="banner warn">No budget for this property and no weeks on file in the 8 weeks before: labor % has no target yet.</div>
+
+        <div class="row" style="align-items:stretch">
+          <div class="hero" style="flex:1 1 340px">
+            <div class="label">{{ labRep.stage === 'schedule' ? 'Sales forecast' : 'Net sales' }}</div>
+            <div><span class="value">${{ money(labRep.stage === 'schedule' ? labRep.sales.forecast : labRep.sales.net) }}</span>
+              <span v-if="labRep.stage !== 'schedule' && labRep.sales.vsForecastPct != null" :class="labRep.sales.vsForecastPct >= 0 ? 'good' : 'bad'"> {{ signedPct(labRep.sales.vsForecastPct) }} vs forecast</span></div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px 18px">
+              <span v-if="labRep.stage !== 'schedule'">Forecast {{ labRep.sales.forecast ? money(labRep.sales.forecast) : 'none' }}</span>
+              <span>Last year {{ money(labRep.sales.py) }}<template v-if="(labRep.stage === 'schedule' ? labRep.sales.forecastVsPyPct : labRep.sales.vsPyPct) != null"> ({{ signedPct(labRep.stage === 'schedule' ? labRep.sales.forecastVsPyPct : labRep.sales.vsPyPct) }})</template></span>
+              <span v-if="labRep.sales.budget != null">Budget {{ money(labRep.sales.budget) }}<template v-if="(labRep.stage === 'schedule' ? labRep.sales.forecastVsBudgetPct : labRep.sales.vsBudgetPct) != null"> ({{ signedPct(labRep.stage === 'schedule' ? labRep.sales.forecastVsBudgetPct : labRep.sales.vsBudgetPct) }})</template></span>
+            </div>
+          </div>
+          <div class="grid" style="flex:999 1 560px">
+            <div class="card stat" v-for="g in labRep.groups.filter(x => x.key === 'HOURLY' || x.key === 'FOH' || x.key === 'BOH')" :key="g.key">
+              <div class="label">{{ g.label }}</div>
+              <div class="value" :class="g.targetPct != null ? overCls((labRep.stage === 'schedule' ? g.schPct : g.actPct) - g.targetPct, 0.99) : ''">{{ pct(labRep.stage === 'schedule' ? g.schPct : g.actPct) }}</div>
+              <div class="sub"><template v-if="labRep.stage !== 'schedule'">scheduled {{ pct(g.schPct) }} of forecast · </template>target {{ pct(g.targetPct) }}</div>
+            </div>
+            <div class="card stat">
+              <div class="label">Overtime</div>
+              <div class="value" :class="{ bad: labRep.people.otTotals.hrs > 0 }">{{ hrs(labRep.stage === 'schedule' ? labRep.people.scheduledOver.reduce((t, x) => t + x.overHrs, 0) : labRep.people.otTotals.hrs) }} hrs</div>
+              <div class="sub" v-if="labRep.stage === 'schedule'">written into the schedule</div>
+              <div class="sub" v-else>about ${{ money(labRep.people.otTotals.premium) }} premium</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="row" style="margin-bottom:12px"><h2>What stands out · {{ labRep.findings.length }}</h2>
+            <span class="muted">Most money first. Targets: {{ labRep.targetSource === 'budget' ? 'the budget' : labRep.targetSource === 'recent' ? 'the average of ' + labWeeksText(labRep.recentWeeks) : 'none' }}</span></div>
+          <p v-if="!labRep.findings.length" class="muted">Nothing outside the rules: sales within {{ labRep.rules.salesMissPct }}% of forecast, labor within {{ labRep.rules.overTargetPts }} pt of target, no overtime and no shifts added to the schedule.</p>
+          <div class="grid wide">
+            <div v-for="(f, i) in labRep.findings" :key="i" :class="['flag-card', { 'act-adjust': f.severity === 'bad' }]">
+              <div class="row" style="align-items:baseline"><b>{{ f.title }}</b>
+                <span v-if="f.impact" :class="f.severity === 'bad' ? 'bad' : 'muted'" style="font-weight:700">${{ money(f.impact) }}</span></div>
+              <div class="muted" style="font-size:13px">{{ f.detail }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card flush">
+          <div class="head"><h2>Labor by group</h2><span class="muted">Scheduled pay is judged on the forecast, actual pay on net sales</span></div>
+          <div class="scroll">
+            <table style="min-width:980px">
+              <thead><tr><th>Group</th><th>Sched hrs</th><th>Actual hrs</th><th>Hrs vs sched</th><th>OT hrs</th><th>Sched $</th><th>Actual $</th><th>$ vs sched</th>
+                <th>Sched % of fcst</th><th>Actual %</th><th>Target %</th><th>$ vs target</th></tr></thead>
+              <tbody>
+                <tr v-for="g in labRep.groups" :key="g.key" :class="{ key: g.key === 'HOURLY' }">
+                  <td>{{ g.label }}</td>
+                  <td>{{ hrs(g.schHrs) }}</td>
+                  <td>{{ labRep.stage === 'schedule' || g.key === 'MGMT' ? '—' : hrs(g.actHrs) }}</td>
+                  <td :class="overCls(labRep.stage === 'schedule' || g.key === 'MGMT' ? null : g.varHrs, 1)">{{ labRep.stage === 'schedule' || g.key === 'MGMT' ? '—' : signedHrs(g.varHrs) }}</td>
+                  <td :class="{ bad: g.otHrs > 0 }">{{ g.key === 'MGMT' || labRep.stage === 'schedule' ? '—' : hrs(g.otHrs) }}</td>
+                  <template v-if="g.key === 'MGMT'"><td colspan="7" class="muted" style="text-align:left">Salaried: no pay is listed, only the schedule</td></template>
+                  <template v-else-if="g.key === 'NONE'"><td colspan="7" class="muted" style="text-align:left">Ghost and placeholder job codes, left out of every figure<template v-if="g.actPay || g.schPay"> (${{ money(g.actPay || g.schPay) }} pay listed)</template></td></template>
+                  <template v-else>
+                    <td>{{ money(g.schPay) }}</td>
+                    <td>{{ labRep.stage === 'schedule' ? '—' : money(g.actPay) }}</td>
+                    <td :class="overCls(labRep.stage === 'schedule' ? null : g.varPay, 0.5)">{{ labRep.stage === 'schedule' ? '—' : signed(g.varPay) }}</td>
+                    <td :class="g.targetPct != null && g.schPct != null ? overCls(g.schPct - g.targetPct, 0.99) : ''">{{ pct(g.schPct) }}</td>
+                    <td :class="g.targetPct != null && g.actPct != null ? overCls(g.actPct - g.targetPct, 0.99) : ''">{{ pct(g.actPct) }}</td>
+                    <td class="muted">{{ pct(g.targetPct) }}</td>
+                    <td :class="overCls(labRep.stage === 'schedule' ? g.schOverTarget : g.actOverTarget, 0.5)">{{ signed(labRep.stage === 'schedule' ? g.schOverTarget : g.actOverTarget) }}</td>
+                  </template>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="muted" style="padding:10px 16px">$ vs target: pay above (+) or below (−) the target % at {{ labRep.stage === 'schedule' ? 'the forecast' : 'actual sales' }}.</div>
+        </div>
+
+        <div class="card flush">
+          <div class="head"><h2>Job codes</h2>
+            <span class="muted">Recent = average actual hours over {{ labRep.recentWeeks ? labWeeksText(labRep.recentWeeks) : 'earlier weeks (none on file in the 8 weeks before)' }}<template v-if="labRep.recentAvgSales"> (sales averaged ${{ money(labRep.recentAvgSales) }})</template> ·
+              <button class="link small no-print" @click="lab.jobsAll = !lab.jobsAll">{{ lab.jobsAll ? 'Hide not-counted codes' : 'Show every code' }}</button></span></div>
+          <div class="scroll">
+            <table style="min-width:960px">
+              <thead><tr><th>Job code</th><th style="text-align:left">Group</th><th>People</th><th>Sched hrs</th><th>Actual hrs</th><th>Hrs vs sched</th><th>Recent hrs</th><th>OT hrs</th><th>Sched $</th><th>Actual $</th><th style="text-align:left;width:28%">Notes</th></tr></thead>
+              <tbody>
+                <tr v-for="j in labJobs" :key="j.job">
+                  <td><b>{{ j.job }}</b></td>
+                  <td style="text-align:left" class="muted">{{ groupLabelOf(j.group) }}</td>
+                  <td class="muted">{{ j.employees }}</td>
+                  <td>{{ hrs(j.schHrs) }}</td>
+                  <td>{{ labRep.stage === 'schedule' || j.group === 'MGMT' ? '—' : hrs(j.actHrs) }}</td>
+                  <td :class="overCls(labRep.stage === 'schedule' || j.group === 'MGMT' ? null : j.varHrs, 1)">{{ labRep.stage === 'schedule' || j.group === 'MGMT' ? '—' : signedHrs(j.varHrs) }}</td>
+                  <td class="muted">{{ j.recentHrs == null || j.group === 'MGMT' ? '—' : hrs(j.recentHrs) }}</td>
+                  <td :class="{ bad: j.otHrs > 0 }">{{ j.otHrs ? hrs(j.otHrs) : '' }}</td>
+                  <td>{{ j.group === 'MGMT' ? '' : money(j.schPay) }}</td>
+                  <td>{{ j.group === 'MGMT' || labRep.stage === 'schedule' ? '' : money(j.actPay) }}</td>
+                  <td style="text-align:left;white-space:normal"><span v-for="(n, i) in j.notes" :key="i" :class="n.kind === 'aboveRecent' ? 'muted' : 'bad'" style="display:block">{{ n.text }}</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <template v-if="labRep.stage !== 'schedule' && labOff">
+          <div class="card flush">
+            <div class="head"><h2>People off the schedule · {{ labPeople.length }}</h2>
+              <span class="muted">Against {{ lab.against === 'original' && labRep.offOriginal ? 'the schedule as first uploaded' : 'the schedule in R365 at week end' }} ·
+                {{ labOff.totals.unscheduledShifts }} unscheduled shifts ({{ labOff.totals.coveredShifts }} covers) · {{ hrs(labOff.totals.addedHrs + labOff.totals.overHrs) }} hours added, about ${{ money(labOff.totals.addedPay + labOff.totals.overPay) }}</span></div>
+            <p v-if="!labPeople.length" class="muted" style="padding:0 16px">Nobody worked hours beyond the schedule.</p>
+            <div class="scroll" v-else>
+              <table style="min-width:900px">
+                <thead><tr><th>Employee</th><th>Sched hrs</th><th>Actual hrs</th><th>Added hrs</th><th>Added $</th><th style="text-align:left;width:50%">Shifts</th></tr></thead>
+                <tbody>
+                  <tr v-for="p in labPeople" :key="p.employee">
+                    <td style="white-space:normal"><b>{{ p.employee }}</b><div class="muted">{{ p.jobs.join(', ') }}</div></td>
+                    <td>{{ hrs(p.schHrs) }}</td><td>{{ hrs(p.actHrs) }}</td>
+                    <td class="bad"><b>{{ hrs(p.extraHrs) }}</b></td><td>{{ money(p.extraPay) }}</td>
+                    <td style="text-align:left;white-space:normal">
+                      <div v-if="p.notOnSchedule"><b>Not on the schedule at all this week.</b></div>
+                      <div v-for="u in p.unscheduled" :key="'u' + u.day">
+                        {{ dayName(labRep.week, u.day) }}: worked {{ hrs(u.hrs) }} hrs unscheduled ({{ u.jobs.join(', ') }})<template v-if="u.coveredHrs"><span class="muted"> · covered {{ u.coveredFor.join(', ') }}<template v-if="u.addedHrs"> plus {{ hrs(u.addedHrs) }} hrs</template></span></template></div>
+                      <div v-for="o in p.over" :key="'o' + o.day">{{ dayName(labRep.week, o.day) }}: {{ hrs(o.worked) }} hrs worked, {{ hrs(o.scheduled) }} scheduled (+{{ hrs(o.hrs) }})</div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="muted no-print" style="padding:10px 16px">
+              <button v-if="labOff.list.filter(p => p.extraHrs > 0 || p.notOnSchedule).length > 25" class="link small" @click="lab.peopleAll = !lab.peopleAll">{{ lab.peopleAll ? 'Show the top 25' : 'Show all' }}</button>
+              <template v-if="labRep.namePairs.length">Read as one person (scheduled name / clock-in name): {{ labRep.namePairs.map(p => p.scheduled + ' / ' + p.worked).join(', ') }}. </template>
+              A cover is a day worked unscheduled in a job code where someone scheduled that day did not work; only hours beyond the missed shift count as added.
+              Days at least {{ labRep.rules.shiftOverHrs }} hours longer than scheduled are listed. Front and back of house only.</div>
+          </div>
+
+          <div class="grid wide" style="align-items:start">
+            <div class="card flush">
+              <div class="head"><h2>Covers · {{ labCovered.length }}</h2><span class="muted">Worked a shift someone else was scheduled for</span></div>
+              <p v-if="!labCovered.length" class="muted" style="padding:0 16px">None.</p>
+              <div class="scroll" v-else style="max-height:360px">
+                <table><thead><tr><th>Employee</th><th style="text-align:left">Covered</th></tr></thead>
+                  <tbody><tr v-for="p in labCovered" :key="p.employee"><td><b>{{ p.employee }}</b></td>
+                    <td style="text-align:left;white-space:normal"><span v-for="u in p.unscheduled.filter(x => x.coveredHrs)" :key="u.day" style="display:block">{{ dayName(labRep.week, u.day) }}: {{ u.coveredFor.join(', ') }}</span></td></tr></tbody></table>
+              </div>
+            </div>
+            <div class="card flush">
+              <div class="head"><h2>Scheduled, did not work · {{ labMissed.length }}</h2><span class="muted">No one in the same job code covered it</span></div>
+              <p v-if="!labMissed.length" class="muted" style="padding:0 16px">None.</p>
+              <div class="scroll" v-else style="max-height:360px">
+                <table><thead><tr><th>Employee</th><th style="text-align:left">Shifts</th></tr></thead>
+                  <tbody><tr v-for="p in labMissed" :key="p.employee"><td><b>{{ p.employee }}</b></td>
+                    <td style="text-align:left;white-space:normal">{{ p.missed.filter(m => !m.coveredBy.length).map(m => dayName(labRep.week, m.day) + ' ' + hrs(m.hrs) + ' hrs').join(', ') }}</td></tr></tbody></table>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <div class="card flush" v-if="labRep.people.overtime.length || labRep.people.scheduledOver.length">
+          <div class="head"><h2>Overtime</h2><span class="muted">Over {{ labRep.rules.weeklyOtHrs }} hours in the week at this property. Premium = half the straight-time rate per overtime hour (an estimate)</span></div>
+          <div class="scroll">
+            <table style="min-width:820px">
+              <thead><tr><th>Employee</th><th>Sched hrs</th><th>Actual hrs</th><th>OT hrs</th><th>Premium</th><th style="text-align:left">Why</th></tr></thead>
+              <tbody>
+                <tr v-for="o in labRep.people.overtime" :key="'ot' + o.employee">
+                  <td style="white-space:normal"><b>{{ o.employee }}</b><div class="muted">{{ o.jobs.join(', ') }}</div></td>
+                  <td>{{ hrs(o.schHrs) }}</td><td>{{ hrs(o.actHrs) }}</td><td class="bad"><b>{{ hrs(o.otHrs) }}</b></td><td>{{ money(o.premium) }}</td>
+                  <td style="text-align:left">{{ o.cause === 'scheduled' ? 'Scheduled over ' + labRep.rules.weeklyOtHrs + ' hours' : 'Worked beyond the schedule' }}</td>
+                </tr>
+                <tr v-for="o in labRep.people.scheduledOver.filter(x => !labRep.people.overtime.some(y => y.employee === x.employee))" :key="'so' + o.employee">
+                  <td style="white-space:normal"><b>{{ o.employee }}</b><div class="muted">{{ o.jobs.join(', ') }}</div></td>
+                  <td class="bad"><b>{{ hrs(o.schHrs) }}</b></td><td>—</td><td class="muted">{{ hrs(o.overHrs) }} scheduled</td><td>—</td>
+                  <td style="text-align:left">{{ labRep.stage === 'schedule' ? 'Scheduled over ' + labRep.rules.weeklyOtHrs + ' hours, ' + o.shifts + ' shifts' : 'Scheduled over ' + labRep.rules.weeklyOtHrs + ', did not reach overtime' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card flush" v-if="labRep.scheduleChanges">
+          <div class="head"><h2>Schedule changes since {{ dayLabel(labRep.originalAt) }}</h2>
+            <span class="muted">Hourly: {{ hrs(labRep.scheduleChanges.hourly.original) }} → {{ hrs(labRep.scheduleChanges.hourly.final) }} hours ({{ signed(labRep.scheduleChanges.hourly.finalPay - labRep.scheduleChanges.hourly.originalPay) }}) ·
+              {{ labRep.scheduleChanges.hourly.added }} shifts added, {{ labRep.scheduleChanges.hourly.removed }} removed</span></div>
+          <div v-if="labRep.scheduleChanges.jobsNotInOriginal.length" class="banner warn" style="margin:12px 16px 0">Not on the schedule when it was first uploaded: {{ labRep.scheduleChanges.jobsNotInOriginal.join(', ') }}. The schedule may not have been finished then.</div>
+          <p v-if="!labRep.scheduleChanges.jobs.length" class="muted" style="padding:0 16px">The schedule did not change.</p>
+          <div class="scroll" v-else>
+            <table style="min-width:700px">
+              <thead><tr><th>Job code</th><th style="text-align:left">Group</th><th>First upload hrs</th><th>Week end hrs</th><th>Change</th><th>Shifts added</th><th>Shifts removed</th></tr></thead>
+              <tbody><tr v-for="j in labRep.scheduleChanges.jobs" :key="j.job">
+                <td><b>{{ j.job }}</b></td><td style="text-align:left" class="muted">{{ groupLabelOf(j.group) }}</td>
+                <td>{{ hrs(j.original) }}</td><td>{{ hrs(j.final) }}</td><td :class="overCls(j.change, 0.5)">{{ signedHrs(j.change) }}</td>
+                <td>{{ j.added || '' }}</td><td>{{ j.removed || '' }}</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card flush">
+          <div class="head"><h2>By day</h2><span class="muted">Hours scheduled{{ labRep.stage === 'schedule' ? '' : ' / worked' }}</span></div>
+          <div class="scroll">
+            <table style="min-width:760px">
+              <thead><tr><th>Group</th><th v-for="(d, i) in labRep.dates" :key="d">{{ dayName(labRep.week, i) }}</th></tr></thead>
+              <tbody>
+                <tr v-for="k in ['FOH', 'BOH', 'MGMT']" :key="k">
+                  <td>{{ groupLabelOf(k) }}</td>
+                  <td v-for="d in labRep.daily" :key="d.date">{{ hrs(d[k].s) }}<template v-if="labRep.stage !== 'schedule' && k !== 'MGMT'"> / <b :class="overCls(d[k].a - d[k].s, 2)">{{ hrs(d[k].a) }}</b></template></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card flush" v-if="labRep.management.length">
+          <div class="head"><h2>Management schedule · {{ labRep.management.length }}</h2><span class="muted">Scheduled hours only: management is salaried and does not clock in</span></div>
+          <div class="scroll">
+            <table style="min-width:760px">
+              <thead><tr><th>Manager</th><th v-for="(d, i) in labRep.dates" :key="d">{{ dayName(labRep.week, i) }}</th><th>Shifts</th><th>Hours</th></tr></thead>
+              <tbody>
+                <tr v-for="m in labRep.management" :key="m.employee">
+                  <td style="white-space:normal"><b>{{ m.employee }}</b><div class="muted">{{ m.jobs.join(', ') }}</div></td>
+                  <td v-for="(h, i) in m.days" :key="i" :class="{ muted: !h }">{{ h ? hrs(h) : 'off' }}</td>
+                  <td>{{ m.shifts }}</td><td><b>{{ hrs(m.schHrs) }}</b></td>
+                </tr>
+                <tr class="total"><td>Total</td><td v-for="(d, i) in labRep.daily" :key="d.date">{{ hrs(d.MGMT.s) }}</td><td></td><td>{{ hrs(labRep.management.reduce((t, m) => t + m.schHrs, 0)) }}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="muted">{{ labRep.file }}</div>
+      </template>
+    </template>
+  </template>
+
+  <!-- ------------------------------ UPLOAD ------------------------------ -->
+  <template v-if="lab.sub === 'upload'">
+    <div class="row"><h1>Upload a week</h1></div>
+    <div v-if="!labIsAdmin" class="banner warn">Only an administrator can upload labor.</div>
+    <div v-else class="card" style="display:flex;flex-direction:column;gap:12px">
+      <p class="muted" style="margin:0">From R365, run <b>Labor Actual vs Scheduled - Detail</b> for one week (Monday to Sunday) and as many locations as you like, and export it as CSV.
+        Upload the coming week once its schedule is written, and the past week once it is over. When a week was uploaded as a schedule first, that schedule is kept as the original, to show what changed.
+        Uploading a property's week again replaces it.</p>
+      <label class="drop" for="lab-file">
+        <b>Choose a CSV</b><br><span class="muted">{{ lab.up.fileName || 'One week, any number of locations' }}</span>
+        <input id="lab-file" type="file" accept=".csv" @change="onLabFile">
+      </label>
+      <div v-if="lab.up.stage === 'reading'" class="muted"><span class="spin"></span>Reading the file…</div>
+      <div v-if="lab.up.error" class="banner warn">{{ lab.up.error }}</div>
+      <template v-if="lab.up.preview">
+        <div><b>Week of {{ weekLabel(lab.up.preview.week) }}</b> <span class="muted">· {{ lab.up.preview.rows }} rows · {{ lab.up.preview.locations.length }} locations</span></div>
+        <ul class="checks">
+          <li v-if="!lab.up.preview.tieOuts.length"><span class="good">✓</span> Every employee row adds up to its job code, and every job code to its location.</li>
+          <li v-for="t in lab.up.preview.tieOuts.slice(0, 6)" :key="t"><span class="bad">✗</span> {{ t }}</li>
+          <li v-for="t in lab.up.preview.warnings" :key="t"><span class="bad">!</span> {{ t }}</li>
+          <li v-if="lab.up.preview.newJobs.length"><span class="muted">i</span><span>{{ lab.up.preview.newJobs.length }} new job code{{ lab.up.preview.newJobs.length === 1 ? '' : 's' }}, grouped by name (change in Job codes):
+            <span class="muted">{{ lab.up.preview.newJobs.map(j => j.job + ' → ' + groupLabelOf(j.group)).join(' · ') }}</span></span></li>
+        </ul>
+        <div class="card flush">
+          <div class="scroll">
+            <table style="min-width:900px">
+              <thead><tr><th>Location</th><th style="text-align:left">Property</th><th style="text-align:left">Stage</th><th>Net sales</th><th>Forecast</th><th>Hourly sched $</th><th>Hourly actual $</th><th>People</th><th style="text-align:left;width:28%">On file</th></tr></thead>
+              <tbody>
+                <tr v-for="l in lab.up.preview.locations" :key="l.location">
+                  <td style="white-space:normal"><b>{{ l.location }}</b></td>
+                  <td style="text-align:left">
+                    <select v-model="lab.up.mapping[l.location]" @change="previewLab(false)" :disabled="lab.up.stage === 'saving' || lab.up.stage === 'saved'" :aria-label="'Property for ' + l.location">
+                      <option value="">Skip: do not save</option>
+                      <option v-for="p in labPropChoices(l.location)" :key="p.code" :value="p.code">{{ p.name }}</option>
+                    </select>
+                    <div v-if="!l.matched && l.property" class="muted">No P&amp;L property matched this name</div></td>
+                  <td style="text-align:left"><span :class="['badge', labStageClass(l.stage)]">{{ labStage(l.stage) }}</span></td>
+                  <td>{{ l.stage === 'schedule' ? '—' : money(l.summary.net) }}</td>
+                  <td :class="{ bad: !l.summary.forecast }">{{ l.summary.forecast ? money(l.summary.forecast) : 'none' }}</td>
+                  <td>{{ money(l.summary.HOURLY.schPay) }}</td>
+                  <td>{{ l.stage === 'schedule' ? '—' : money(l.summary.HOURLY.actPay) }}</td>
+                  <td class="muted">{{ l.employees }}</td>
+                  <td style="text-align:left;white-space:normal">
+                    <span v-if="l.twice" class="bad">Another location is set to this property.</span>
+                    <span v-else-if="!l.existing" class="muted">New week</span>
+                    <span v-else>Replaces the {{ labStage(l.existing.stage).toLowerCase() }} uploaded {{ dayLabel(l.existing.uploadedAt) }}<template v-if="l.makesOriginal">; that schedule is kept as the original</template><template v-else-if="l.existing.originalAt">; the original schedule from {{ dayLabel(l.existing.originalAt) }} stays</template>.</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="controls">
+          <button v-if="lab.up.stage !== 'saved'" @click="commitLab" :disabled="lab.up.stage !== 'preview' || !labUpSaveable || lab.up.preview.tieOuts.length > 0">{{ lab.up.stage === 'saving' ? 'Saving…' : 'Save ' + labUpSaveable + ' location' + (labUpSaveable === 1 ? '' : 's') }}</button>
+          <template v-else><b class="good">✓ Saved.</b> <button class="ghost" @click="labGo('dashboard')">Open the dashboard</button></template>
+          <button class="ghost" @click="labResetUpload" :disabled="lab.up.stage === 'saving'">Start over</button>
+        </div>
+      </template>
+    </div>
+  </template>
+
+  <!-- ------------------------------ JOB CODES ------------------------------ -->
+  <template v-if="lab.sub === 'codes'">
+    <div class="row">
+      <div><div class="muted">Which group each job code counts in. A change applies to every week on file.</div><h1>Job codes</h1></div>
+      <div class="controls no-print">
+        <div class="field"><label for="lab-cf">Find</label><input id="lab-cf" type="text" v-model="lab.codesFilter" placeholder="Job code or property"></div>
+        <button v-if="labIsAdmin" @click="saveLabCodes" :disabled="!labDraftCount || lab.codesSaving">{{ lab.codesSaving ? 'Saving…' : 'Save ' + labDraftCount + ' change' + (labDraftCount === 1 ? '' : 's') }}</button>
+      </div>
+    </div>
+    <div v-if="lab.codesLoading" class="muted"><span class="spin"></span>Loading…</div>
+    <div v-else-if="lab.codesError" class="banner warn">{{ lab.codesError }}</div>
+    <div v-else-if="lab.codes && !lab.codes.jobs.length" class="card empty">No job codes yet: upload a week first.</div>
+    <div v-else-if="lab.codes" class="card flush">
+      <div class="scroll">
+        <table style="min-width:860px">
+          <thead><tr><th>Job code</th><th style="text-align:left">Group</th><th style="text-align:left">Properties</th><th>Sched hrs</th><th>Actual hrs</th><th>Actual $</th><th>Last week</th></tr></thead>
+          <tbody>
+            <tr v-for="j in labCodes" :key="j.key">
+              <td><b>{{ j.job }}</b></td>
+              <td style="text-align:left">
+                <select v-if="labIsAdmin" :value="lab.draft[j.job] || j.group" @change="labSetGroup(j, $event.target.value)" :aria-label="'Group for ' + j.job">
+                  <option v-for="g in lab.codes.groups" :key="g.key" :value="g.key">{{ g.label }}</option>
+                </select>
+                <span v-else>{{ lab.codes.groups.filter(g => g.key === j.group)[0].label }}</span>
+                <span v-if="lab.draft[j.job]" class="badge pace" style="margin-left:6px">changed</span></td>
+              <td style="text-align:left;white-space:normal" class="muted">{{ j.properties.map(p => propertyName(p)).join(', ') }}</td>
+              <td>{{ hrs(j.schHrs) }}</td><td>{{ hrs(j.actHrs) }}</td><td>{{ money(j.actPay) }}</td>
+              <td class="muted">{{ weekLabel(j.lastWeek, true) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="muted" style="padding:10px 16px">Hours and pay over the last {{ lab.codes.weeks }} weeks on file. <b>Management</b>: salaried, scheduled hours only. <b>Not counted</b>: ghost and placeholder codes, left out of every figure.
+        New codes are grouped by their name when first uploaded.</div>
+    </div>
+  </template>
+</template>
