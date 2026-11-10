@@ -28,17 +28,11 @@
  *            (Labor.gs): sales, forecast, last year, the week's hour and pay
  *            totals, and the stage (schedule / partial / actual).
  *   Labor Jobs    one row per property, week and job code: hours and pay,
- *            overtime premium, hours added on top of the schedule, and the
- *            original schedule's hours. The long-term record; the dashboard
- *            reads only these two.
+ *            overtime premium, hours added on top of the schedule. The
+ *            long-term record; the dashboard reads only these two.
  *   Labor Items   what a week report names, and nothing else: the people off
  *            the schedule, on overtime, scheduled over 40 hours, the managers'
  *            schedule, and one summary row. About 60 rows a property-week.
- *   Labor Shifts  the schedule of a week that has no actuals yet, one row per
- *            job code and employee with the seven days as JSON: the original
- *            schedule the actuals will be compared with. Deleted once the
- *            week is saved with actuals (and after 5 weeks regardless), so it
- *            only ever holds a few weeks.
  *   _Config  settings (viewers, properties, flag rule, inventory, labor).
  ******************************************************************************/
 
@@ -58,15 +52,12 @@ const SHEETS = {
     'Current Qty', 'Current Cost', 'Current Total', 'Previous Qty', 'Previous Cost', 'Previous Total',
     'Price Effect', 'Quantity Effect', 'Impact', 'Flag', 'Sections', 'Reasons'] },
   laborWeeks: { name: 'Labor Weeks', headers: ['Week', 'Property', 'Location', 'Week End', 'Stage', 'Net Sales', 'Forecast', 'Prior Year',
-    'Actual Hrs', 'Scheduled Hrs', 'Other Hrs', 'OT Hrs', 'Actual $', 'Scheduled $', 'Other $', 'Original Schedule At',
+    'Actual Hrs', 'Scheduled Hrs', 'Other Hrs', 'OT Hrs', 'Actual $', 'Scheduled $', 'Other $',
     'Uploaded At', 'Uploaded By', 'File', 'Upload ID'] },
   laborJobs: { name: 'Labor Jobs', headers: ['Week', 'Property', 'Job', 'Actual Hrs', 'Scheduled Hrs', 'Other Hrs', 'OT Hrs',
-    'Actual $', 'Scheduled $', 'Other $', 'Employees', 'OT Premium $', 'Added Hrs', 'Added $',
-    'Original Sched Hrs', 'Original Sched $', 'Shifts Added', 'Shifts Removed'] },
+    'Actual $', 'Scheduled $', 'Other $', 'Employees', 'OT Premium $', 'Added Hrs', 'Added $'] },
   laborItems: { name: 'Labor Items', headers: ['Week', 'Property', 'Section', 'Employee', 'Jobs', 'Group', 'Sched Hrs', 'Actual Hrs',
-    'Hours', 'Amount', 'Detail'] },
-  laborShifts: { name: 'Labor Shifts', headers: ['Week', 'Property', 'Kind', 'Job', 'Employee', 'Actual Hrs', 'Scheduled Hrs', 'OT Hrs',
-    'Actual $', 'Scheduled $', 'Other Hrs', 'Other $', 'Days'] }
+    'Hours', 'Amount', 'Detail'] }
 };
 
 /** Key used in Tags for the manager's free-text note on a whole month. */

@@ -14,11 +14,9 @@
  *                   the end of the week.
  *   The labor goal % columns are ignored.
  *
- * THE ORIGINAL SCHEDULE. R365's scheduled figures are the schedule at the time
- * of the export, edits included. When a week is uploaded before it starts and
- * again once it has actuals, the first upload is kept as the "original
- * schedule", so the report can show shifts that were added or changed after
- * it was written.
+ * Each upload replaces the week: actuals are compared with the schedule R365
+ * holds at the time of the export. Schedules rarely change once finalised a
+ * week or two ahead, so no earlier version is kept.
  *
  * GROUPS. Every job code belongs to one group:
  *   FOH   front of house, hourly
@@ -250,50 +248,40 @@ function laborWeekRow_(w) {
   const t = w.totals;
   return [w.week, w.property, w.location, w.end, w.stage, laborRound_(w.sales.net), laborRound_(w.sales.forecast), laborRound_(w.sales.py),
     laborRound_(t.a), laborRound_(t.s), laborRound_(t.o), laborRound_(t.ot), laborRound_(t.aa), laborRound_(t.sa), laborRound_(t.oa),
-    w.originalAt || '', w.uploadedAt || '', w.uploadedBy || '', w.file || '', w.uploadId || ''];
+    w.uploadedAt || '', w.uploadedBy || '', w.file || '', w.uploadId || ''];
 }
 function laborWeekFromRow_(r) {
   const n = function (i) { return Number(r[i]) || 0; };
   return { week: laborDate_(r[0]), property: String(r[1]), location: String(r[2]), end: laborDate_(r[3]), stage: String(r[4] || 'actual'),
     sales: { net: n(5), forecast: n(6), py: n(7) }, totals: { a: n(8), s: n(9), o: n(10), ot: n(11), aa: n(12), sa: n(13), oa: n(14) },
-    originalAt: String(r[15] || ''), uploadedAt: String(r[16] || ''), uploadedBy: String(r[17] || ''), file: String(r[18] || ''), uploadId: String(r[19] || '') };
+    uploadedAt: String(r[15] || ''), uploadedBy: String(r[16] || ''), file: String(r[17] || ''), uploadId: String(r[18] || '') };
 }
 /**
  * Labor Jobs rows for one location: R365's totals per job code, and from the
- * week's analysis the overtime premium, hours and pay added on top of the
- * schedule, and the original schedule's hours (blank without one). A job
- * code only on the original schedule gets a row with zero totals.
- * @param {Object=} carry  { job: original } kept from an earlier upload when no original schedule is on file any more
+ * week's analysis the overtime premium and the hours and pay added on top of
+ * the schedule.
  */
-function laborJobRows_(week, property, loc, analysis, carry) {
+function laborJobRows_(week, property, loc, analysis) {
   const people = {};
   loc.shifts.forEach(function (s) { people[s.job] = (people[s.job] || 0) + 1; });
   const extras = (analysis && analysis.jobExtras) || {};
-  const orig = {};
-  if (analysis && analysis.scheduleChanges) {
-    analysis.scheduleChanges.all.forEach(function (j) { orig[j.job] = { hrs: j.original, pay: j.originalPay, added: j.added, removed: j.removed }; });
-  } else if (carry) Object.keys(carry).forEach(function (j) { orig[j] = carry[j]; });
-  const names = {};
-  Object.keys(loc.jobs).concat(Object.keys(orig)).forEach(function (j) { names[j] = true; });
-  return Object.keys(names).sort().map(function (j) {
-    const t = loc.jobs[j] || laborZero_(), e = extras[j] || {}, o = orig[j];
+  return Object.keys(loc.jobs).sort().map(function (j) {
+    const t = loc.jobs[j], e = extras[j] || {};
     return [week, property, j, laborRound_(t.a), laborRound_(t.s), laborRound_(t.o), laborRound_(t.ot), laborRound_(t.aa), laborRound_(t.sa), laborRound_(t.oa), people[j] || 0,
-      laborRound_(e.otPremium), laborRound_(e.addedHrs), laborRound_(e.addedPay),
-      o ? laborRound_(o.hrs) : '', o ? laborRound_(o.pay) : '', o ? o.added || 0 : '', o ? o.removed || 0 : ''];
+      laborRound_(e.otPremium), laborRound_(e.addedHrs), laborRound_(e.addedPay)];
   });
 }
 function laborJobFromRow_(r) {
   const n = function (i) { return Number(r[i]) || 0; };
   return { week: laborDate_(r[0]), property: String(r[1]), job: String(r[2]),
     totals: { a: n(3), s: n(4), o: n(5), ot: n(6), aa: n(7), sa: n(8), oa: n(9) }, employees: n(10),
-    extra: { otPremium: n(11), addedHrs: n(12), addedPay: n(13) },
-    original: r[14] === '' || r[14] == null ? null : { hrs: n(14), pay: n(15), added: n(16), removed: n(17) } };
+    extra: { otPremium: n(11), addedHrs: n(12), addedPay: n(13) } };
 }
 
 /**
  * Labor Items rows: only what the week report names. One row per person
- * (off the schedule, against the original schedule, overtime, scheduled over
- * 40 hours, managers' schedule) and one summary row.
+ * (off the schedule, overtime, scheduled over 40 hours, managers' schedule)
+ * and one summary row.
  */
 function laborItemRows_(week, property, a) {
   const rows = [];
@@ -311,13 +299,11 @@ function laborItemRows_(week, property, a) {
     });
   };
   offRows('off', a.people.off);
-  if (a.offOriginal) offRows('offOriginal', a.offOriginal);
   a.people.overtime.forEach(function (o) { row('overtime', o.employee, o.jobs, o.group, o.schHrs, o.actHrs, o.otHrs, o.premium, { cause: o.cause }); });
   a.people.scheduledOver.forEach(function (o) { row('scheduledOver', o.employee, o.jobs, o.group, o.schHrs, 0, o.overHrs, '', { shifts: o.shifts }); });
   a.management.forEach(function (m) { row('management', m.employee, m.jobs, 'MGMT', m.schHrs, m.actHrs, '', '', { days: m.days, shifts: m.shifts }); });
-  row('summary', '', [], '', 0, 0, '', '', { off: a.people.off.totals, offOriginal: a.offOriginal ? a.offOriginal.totals : null,
-    daily: a.daily.map(function (d) { return [d.FOH.s, d.FOH.a, d.BOH.s, d.BOH.a, d.MGMT.s, d.MGMT.a]; }),
-    names: a.namePairs, original: a.hasOriginal ? 1 : 0 });
+  row('summary', '', [], '', 0, 0, '', '', { off: a.people.off.totals,
+    daily: a.daily.map(function (d) { return [d.FOH.s, d.FOH.a, d.BOH.s, d.BOH.a, d.MGMT.s, d.MGMT.a]; }), names: a.namePairs });
   return rows;
 }
 
@@ -328,16 +314,14 @@ function laborAnalysisFromRows_(rows) {
     return { employee: String(r[3]), jobs: String(r[4] || '').split(' | ').filter(Boolean), group: String(r[5] || ''), schHrs: Number(r[6]) || 0, actHrs: Number(r[7]) || 0 };
   };
   const out = { namePairs: [], people: { off: { list: [], totals: {} }, overtime: [], otTotals: { hrs: 0, premium: 0, scheduledHrs: 0 }, scheduledOver: [] },
-    offOriginal: null, scheduleChanges: null, daily: [], management: [], hasOriginal: false };
+    daily: [], management: [] };
   const offPerson = function (r) {
     const d = detail(r);
     return Object.assign(base(r), { unscheduled: d.u || [], over: d.o || [], missed: d.m || [], otherJob: [], extraHrs: Number(r[8]) || 0, extraPay: Number(r[9]) || 0, notOnSchedule: !!d.n });
   };
-  let origList = [];
   rows.forEach(function (r) {
     const section = String(r[2]);
     if (section === 'off') out.people.off.list.push(offPerson(r));
-    else if (section === 'offOriginal') origList.push(offPerson(r));
     else if (section === 'overtime') {
       const o = Object.assign(base(r), { otHrs: Number(r[8]) || 0, premium: Number(r[9]) || 0, cause: detail(r).cause || 'extra' });
       out.people.overtime.push(o);
@@ -348,46 +332,17 @@ function laborAnalysisFromRows_(rows) {
       const d = detail(r);
       out.people.off.totals = d.off || {};
       out.namePairs = d.names || [];
-      out.hasOriginal = !!d.original;
-      if (d.offOriginal) out.offOriginal = { list: [], totals: d.offOriginal };
       out.daily = (d.daily || []).map(function (x) { return { FOH: { s: x[0], a: x[1] }, BOH: { s: x[2], a: x[3] }, MGMT: { s: x[4], a: x[5] } }; });
     }
   });
-  if (out.offOriginal) out.offOriginal.list = origList;
   Object.keys(out.people.otTotals).forEach(function (k) { out.people.otTotals[k] = laborRound_(out.people.otTotals[k]); });
   const sortOff = function (x, y) { return y.extraPay - x.extraPay || y.extraHrs - x.extraHrs || x.employee.localeCompare(y.employee); };
   out.people.off.list.sort(sortOff);
-  if (out.offOriginal) out.offOriginal.list.sort(sortOff);
   out.people.overtime.sort(function (x, y) { return y.otHrs - x.otHrs || x.employee.localeCompare(y.employee); });
   out.people.scheduledOver.sort(function (x, y) { return y.schHrs - x.schHrs || x.employee.localeCompare(y.employee); });
   out.management.sort(function (x, y) { return y.schHrs - x.schHrs || x.employee.localeCompare(y.employee); });
   while (out.daily.length < 7) out.daily.push({ FOH: { s: 0, a: 0 }, BOH: { s: 0, a: 0 }, MGMT: { s: 0, a: 0 } });
   return out;
-}
-
-/** Labor Shifts rows: one per job code and employee, the seven days as JSON [[s, a, ot, sa, aa, o, oa], …] (0 for a day with nothing). */
-function laborShiftRows_(week, property, kind, shifts) {
-  return shifts.map(function (s) {
-    const days = s.days.map(function (d) {
-      const v = [d.s, d.a, d.ot, d.sa, d.aa, d.o, d.oa].map(laborRound_);
-      return v.some(function (x) { return x; }) ? v : 0;
-    });
-    const t = s.totals;
-    return [week, property, kind, s.job, s.employee, laborRound_(t.a), laborRound_(t.s), laborRound_(t.ot), laborRound_(t.aa), laborRound_(t.sa),
-      laborRound_(t.o), laborRound_(t.oa), JSON.stringify(days)];
-  });
-}
-function laborShiftFromRow_(r) {
-  let days = [];
-  try { days = JSON.parse(String(r[12] || '[]')); } catch (e) { days = []; }
-  const out = [];
-  for (let i = 0; i < 7; i++) {
-    const d = days[i];
-    out.push(Array.isArray(d) ? { s: +d[0] || 0, a: +d[1] || 0, ot: +d[2] || 0, sa: +d[3] || 0, aa: +d[4] || 0, o: +d[5] || 0, oa: +d[6] || 0 } : laborZero_());
-  }
-  const n = function (i) { return Number(r[i]) || 0; };
-  return { week: laborDate_(r[0]), property: String(r[1]), kind: String(r[2]), job: String(r[3]), employee: String(r[4]),
-    totals: { a: n(5), s: n(6), ot: n(7), aa: n(8), sa: n(9), o: n(10), oa: n(11) }, days: out };
 }
 
 /* ----------------------------------------------------------- expectations */
@@ -457,7 +412,7 @@ function laborSummary_(w, jobs, groupOf, budget) {
         laborRound_(e.otPremium), laborRound_(e.addedHrs)];
     }),
     mgmtSchHrs: laborRound_(g.MGMT.s), noneHrs: laborRound_(g.NONE.a + g.NONE.s),
-    uploadedAt: w.uploadedAt, originalAt: w.originalAt
+    uploadedAt: w.uploadedAt
   };
 }
 
@@ -533,30 +488,20 @@ function laborRenamed_(shifts, map) {
 /**
  * Everything about a week that needs the employee-by-day detail, worked out
  * once when it is uploaded. Only this is kept: the people it names, a small
- * summary, and per job code the overtime premium, the hours added on top of
- * the schedule and the original schedule's hours. The day-by-day rows are
- * not kept once a week has actuals (see LaborApi.gs).
- * @param {Object[]} shifts    laborShiftFromRow_ / parsed shifts of the upload
- * @param {Object[]} original  the original schedule's shifts, or []
- * @return {{ namePairs, people: { off, overtime, otTotals, scheduledOver }, offOriginal, scheduleChanges, daily,
- *   management, jobExtras: { job: { otPremium, addedHrs, addedPay } }, hasOriginal }}
+ * summary, and per job code the overtime premium and the hours added on top
+ * of the schedule. The employee-by-day rows are not kept (see LaborApi.gs).
+ * @param {Object[]} shifts  the upload's shifts (parseLaborCsv_)
+ * @return {{ namePairs, people: { off, overtime, otTotals, scheduledOver }, daily,
+ *   management, jobExtras: { job: { otPremium, addedHrs, addedPay } } }}
  */
-function laborAnalyzeWeek_(shifts, original, groupOf, rules, stage, week) {
+function laborAnalyzeWeek_(shifts, groupOf, rules, stage, week) {
   rules = Object.assign({}, LABOR_RULES, rules || {});
   const hasActuals = stage !== 'schedule';
   // One person under two spellings (schedule and time clock) is one person.
   const hourly = function (list) { return list.filter(function (s) { const g = groupOf(s.job); return g === 'FOH' || g === 'BOH'; }); };
   const aliases = laborNameAliases_(hourly(shifts));
   shifts = laborRenamed_(shifts, aliases.map);
-  // The original schedule against the names that clocked in.
-  original = laborRenamed_(original || [], aliases.map);
-  const worked = hourly(shifts).filter(function (s) { return s.totals.a + s.totals.o > 0; })
-    .map(function (s) { return { employee: s.employee, totals: { s: 0, a: s.totals.a + s.totals.o, o: 0 } }; });
-  original = laborRenamed_(original, laborNameAliases_(worked.concat(hourly(original))).map);
-
   const people = laborPeople_(shifts, groupOf, rules, hasActuals);
-  const offOriginal = original.length ? laborOffSchedule_(shifts, original, groupOf, rules, hasActuals) : null;
-  const scheduleChanges = original.length ? laborScheduleChanges_(original, shifts, groupOf) : null;
 
   // By day.
   const daily = [0, 1, 2, 3, 4, 5, 6].map(function (i) {
@@ -597,21 +542,20 @@ function laborAnalyzeWeek_(shifts, original, groupOf, rules, stage, week) {
   });
   Object.keys(jobExtras).forEach(function (j) { const e = jobExtras[j]; e.otPremium = laborRound_(e.otPremium); e.addedHrs = laborRound_(e.addedHrs); e.addedPay = laborRound_(e.addedPay); });
 
-  return { namePairs: aliases.pairs, people: people, offOriginal: offOriginal, scheduleChanges: scheduleChanges,
-    daily: daily, management: management, jobExtras: jobExtras, hasOriginal: !!original.length };
+  return { namePairs: aliases.pairs, people: people, daily: daily, management: management, jobExtras: jobExtras };
 }
 
 /**
  * The week report for one property.
  * @param {Object} ctx {
- *   week: laborWeekFromRow_, jobs: laborJobFromRow_[] (with .extra and .original from a saved week),
- *   analysis: laborAnalysisFromRows_ (a saved week) — or shifts + original to work it out here,
+ *   week: laborWeekFromRow_, jobs: laborJobFromRow_[] (with .extra from a saved week),
+ *   analysis: laborAnalysisFromRows_ (a saved week) — or shifts to work it out here,
  *   recent: [{ week, jobs }] previous past weeks, newest first, groupOf, budget: laborBudgetWeek_ or null, rules }
  */
 function buildLaborWeekReport_(ctx) {
   const rules = Object.assign({}, LABOR_RULES, ctx.rules || {});
   const w = ctx.week, groupOf = ctx.groupOf;
-  const an = ctx.analysis || laborAnalyzeWeek_(ctx.shifts || [], ctx.original || [], groupOf, rules, w.stage, w.week);
+  const an = ctx.analysis || laborAnalyzeWeek_(ctx.shifts || [], groupOf, rules, w.stage, w.week);
   const stage = w.stage;
   const hasActuals = stage !== 'schedule';
   const dates = laborWeekDates_(w.week);
@@ -683,15 +627,14 @@ function buildLaborWeekReport_(ctx) {
     return order[a.group] - order[b.group] || b.actHrs + b.schHrs - a.actHrs - a.schHrs || a.job.localeCompare(b.job);
   });
 
-  const people = an.people, offOriginal = an.offOriginal;
-  const scheduleChanges = an.scheduleChanges || (an.hasOriginal ? laborScheduleChangesFromJobs_(ctx.jobs, groupOf) : null);
+  const people = an.people;
 
   const findings = laborFindings_({ stage: stage, sales: sales, groups: groups, hourly: hourlyRow, namePairs: an.namePairs, targetSource: targetSource, jobs: jobs,
-    people: people, offOriginal: offOriginal, rules: rules, recentWeeks: recent.length });
+    people: people, rules: rules, recentWeeks: recent.length });
 
   return {
     property: w.property, location: w.location, week: w.week, end: w.end, dates: dates, stage: stage,
-    uploadedAt: w.uploadedAt, uploadedBy: w.uploadedBy, file: w.file, originalAt: w.originalAt || null,
+    uploadedAt: w.uploadedAt, uploadedBy: w.uploadedBy, file: w.file,
     sales: Object.assign({}, sales, {
       vsForecastPct: sales.net && sales.forecast ? (sales.net / sales.forecast - 1) * 100 : null,
       vsPyPct: sales.net && sales.py ? (sales.net / sales.py - 1) * 100 : null,
@@ -700,7 +643,7 @@ function buildLaborWeekReport_(ctx) {
       forecastVsBudgetPct: sales.forecast && sales.budget ? (sales.forecast / sales.budget - 1) * 100 : null
     }),
     targetSource: targetSource, recentWeeks: recent.length, recentAvgSales: recentAvgSales == null ? null : laborRound_(recentAvgSales),
-    groups: groups, jobs: jobs, people: people, offOriginal: offOriginal, scheduleChanges: scheduleChanges,
+    groups: groups, jobs: jobs, people: people,
     daily: an.daily.map(function (d, i) { return Object.assign({}, d, { date: dates[i] }); }), management: an.management,
     findings: findings, rules: rules, namePairs: an.namePairs
   };
@@ -726,9 +669,7 @@ function laborEmployees_(shifts, groupOf) {
 }
 
 /**
- * Shifts worked against a schedule. `scheduleShifts` holds the scheduled
- * hours: the same list (R365's schedule at the end of the week) or the
- * original schedule upload.
+ * Shifts worked against R365's schedule at the time of the export.
  *
  * A day worked with nothing scheduled is matched against scheduled shifts in
  * the same job code that day that nobody worked: that is a cover (a swap or a
@@ -836,55 +777,6 @@ function laborPeople_(shifts, groupOf, rules, hasActuals) {
   return { off: off, overtime: overtime, otTotals: otTotals, scheduledOver: scheduledOver };
 }
 
-/** What changed between the original schedule and R365's schedule at the end of the week, by job code. */
-function laborScheduleChanges_(original, finalShifts, groupOf) {
-  const by = {};
-  const add = function (list, k) {
-    list.forEach(function (s) {
-      const grp = groupOf(s.job);
-      if (grp === 'NONE') return;
-      const j = by[s.job] = by[s.job] || { job: s.job, group: grp, original: 0, final: 0, originalPay: 0, finalPay: 0, added: 0, removed: 0 };
-      j[k] += s.totals.s; j[k + 'Pay'] += s.totals.sa;
-    });
-  };
-  add(original, 'original'); add(finalShifts, 'final');
-  // Shifts (employee-day in a job) added or removed.
-  const key = function (s, i) { return s.job + '\u0001' + s.employee + '\u0001' + i; };
-  const o = {}, f = {};
-  original.forEach(function (s) { s.days.forEach(function (d, i) { if (d.s > 0) o[key(s, i)] = s.job; }); });
-  finalShifts.forEach(function (s) { s.days.forEach(function (d, i) { if (d.s > 0) f[key(s, i)] = s.job; }); });
-  Object.keys(f).forEach(function (k) { if (!o[k] && by[f[k]]) by[f[k]].added++; });
-  Object.keys(o).forEach(function (k) { if (!f[k] && by[o[k]]) by[o[k]].removed++; });
-  return laborChangesSummary_(Object.keys(by).map(function (k) { return by[k]; }));
-}
-
-/** The same, from the original schedule's hours kept per job code (a saved week). */
-function laborScheduleChangesFromJobs_(jobs, groupOf) {
-  return laborChangesSummary_(jobs.filter(function (j) { return j.original && groupOf(j.job) !== 'NONE'; }).map(function (j) {
-    return { job: j.job, group: groupOf(j.job), original: j.original.hrs, originalPay: j.original.pay, final: j.totals.s, finalPay: j.totals.sa,
-      added: j.original.added, removed: j.original.removed };
-  }));
-}
-
-/** @param {Object[]} list  per job code: { job, group, original, final, originalPay, finalPay, added, removed } */
-function laborChangesSummary_(list) {
-  const by = {};
-  list.forEach(function (j) { by[j.job] = j; });
-  const all = Object.keys(by).map(function (k) {
-    const j = by[k];
-    ['original', 'final', 'originalPay', 'finalPay'].forEach(function (x) { j[x] = laborRound_(j[x]); });
-    j.change = laborRound_(j.final - j.original);
-    return j;
-  });
-  const jobs = all.filter(function (j) { return j.change || j.added || j.removed || j.original !== j.final; })
-    .sort(function (a, b) { return Math.abs(b.change) - Math.abs(a.change) || a.job.localeCompare(b.job); });
-  const tot = function (k, grp) { return laborRound_(Object.keys(by).filter(function (x) { return !grp || grp.indexOf(by[x].group) !== -1; }).reduce(function (s, x) { return s + by[x][k]; }, 0)); };
-  return { jobs: jobs, all: all, hourly: { original: tot('original', ['FOH', 'BOH']), final: tot('final', ['FOH', 'BOH']),
-    originalPay: tot('originalPay', ['FOH', 'BOH']), finalPay: tot('finalPay', ['FOH', 'BOH']),
-    added: tot('added', ['FOH', 'BOH']), removed: tot('removed', ['FOH', 'BOH']) },
-    jobsNotInOriginal: Object.keys(by).filter(function (k) { return by[k].original === 0 && by[k].final > 0 && by[k].group !== 'MGMT'; }) };
-}
-
 function laborWeeksText_(n) { return n === 1 ? 'the week before' : 'the last ' + n + ' weeks'; }
 
 /** The headline findings, most money first. */
@@ -963,13 +855,6 @@ function laborFindings_(r) {
     out.push({ kind: 'schedule', severity: 'warn',
       title: aboveRecent.length + ' job code' + (aboveRecent.length === 1 ? '' : 's') + ' scheduled well above recent weeks',
       detail: aboveRecent.map(function (j) { return j.job + ' ' + j.schHrs + ' hrs vs ' + j.recentHrs; }).join(', ') + '.' });
-  }
-  if (r.offOriginal && r.offOriginal.totals.addedHrs - off.addedHrs >= rules.jobOverHrs) {
-    const o = r.offOriginal.totals;
-    out.push({ kind: 'people', severity: 'warn', impact: o.addedPay - off.addedPay,
-      title: laborRound_(o.addedHrs - off.addedHrs) + ' more hours off the original schedule',
-      detail: 'Against the schedule as first uploaded, ' + laborRound_(o.addedHrs) + ' hours (about ' + money(o.addedPay) + ') were worked on top of it. ' +
-        laborRound_(o.addedHrs - off.addedHrs) + ' of them were added to the schedule in R365 during the week.' });
   }
   if (r.namePairs && r.namePairs.length) {
     out.push({ kind: 'people', severity: 'info',

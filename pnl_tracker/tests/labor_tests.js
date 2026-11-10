@@ -33,7 +33,7 @@ function reportFor(loc, opts) {
   const jobs = Object.keys(loc.jobs).map(j => ({ job: j, totals: loc.jobs[j], employees: 1 }));
   const week = { week: p.week, end: p.end, property: 'TST1', location: loc.location, stage: g.laborStage_(loc, p.end, '2026-11-20'),
     sales: loc.sales, totals: loc.totals, uploadedAt: '2026-11-10T12:00:00Z' };
-  return g.buildLaborWeekReport_({ week, jobs, shifts: loc.shifts, original: opts.original || [], recent: opts.recent || [],
+  return g.buildLaborWeekReport_({ week, jobs, shifts: loc.shifts, recent: opts.recent || [],
     groupOf: opts.groupOf || groupOf, budget: opts.budget || null });
 }
 
@@ -113,8 +113,6 @@ test('a location is matched to a property by name', () => {
 test('sheet rows round-trip', () => {
   const p = parse(S.laborCsv(WEEK, [S.sampleGrill()]));
   const L = p.locations[0];
-  const back = g.laborShiftRows_(WEEK, 'TST1', 'final', L.shifts).map(g.laborShiftFromRow_);
-  same(back.map(s => [s.job, s.employee, s.totals.a, s.days.map(d => d.a)]), L.shifts.map(s => [s.job, s.employee, s.totals.a, s.days.map(d => d.a)]));
   const w = g.laborWeekFromRow_(g.laborWeekRow_({ week: WEEK, end: p.end, property: 'TST1', location: L.location, stage: 'actual', sales: L.sales, totals: L.totals }));
   same([w.week, w.sales.forecast, w.totals.s], [WEEK, 33000, L.totals.s]);
   const j = g.laborJobRows_(WEEK, 'TST1', L).map(g.laborJobFromRow_).filter(x => x.job === 'Server')[0];
@@ -221,18 +219,6 @@ test('a schedule (upcoming week): judged on the forecast; overtime written into 
   assert.ok(reportFor(noFc.locations[0], { parsed: noFc }).findings.some(f => f.title === 'No sales forecast'));
 });
 
-test('against the original schedule: shifts added during the week and what changed', () => {
-  const orig = S.asSchedule(S.sampleGrill());
-  orig.rows = orig.rows.filter(r => !(r[1] === 'Bea Bell'));                // Bea's Saturday was added later
-  const o = parse(S.laborCsv(WEEK, [orig])).locations[0].shifts;
-  const r = reportFor(P.locations[0], { parsed: P, original: o });
-  const ann = r.offOriginal.list.filter(p => p.employee === 'Ann Able')[0];
-  same([ann.unscheduled[0].coveredHrs, ann.unscheduled[0].addedHrs], [0, 8], 'nobody was scheduled Saturday on the original');
-  same([r.scheduleChanges.hourly.added, r.scheduleChanges.hourly.removed, r.scheduleChanges.hourly.final - r.scheduleChanges.hourly.original], [1, 0, 8]);
-  same(r.scheduleChanges.jobs.map(j => [j.job, j.change]), [['Server', 8]]);
-  assert.ok(r.findings.some(f => /8 more hours off the original schedule/.test(f.title)), r.findings.map(f => f.title).join(' | '));
-});
-
 test('one person scheduled and clocked in under two spellings is one person', () => {
   same([g.laborSameName_('Rodriguez, Bernadino', 'Rodriguez, Bernardino'), g.laborSameName_('Swilling, Kenya Megan', 'Swilling, Kenya'),
     g.laborSameName_('Efrain Rivera', 'Rivera, Efrain'), g.laborSameName_('Rivera, Efrain', 'Rivera, Ruben'), g.laborSameName_('Lee, Al', 'Lee, Ali'),
@@ -288,7 +274,8 @@ const past = S.laborCsv(WEEK, [S.sampleGrill(), S.harborHouse(), S.unknownPlace(
 
 test('setup makes the three labor tabs', () => {
   const names = app().dataSpreadsheet_().getSheets().map(s => s.getName());
-  ['Labor Weeks', 'Labor Jobs', 'Labor Shifts'].forEach(n => assert.ok(names.indexOf(n) !== -1, n));
+  ['Labor Weeks', 'Labor Jobs', 'Labor Items'].forEach(n => assert.ok(names.indexOf(n) !== -1, n));
+  assert.ok(names.indexOf('Labor Shifts') === -1);
 });
 
 test('preview: matches locations to properties, writes nothing', () => {
@@ -300,12 +287,12 @@ test('preview: matches locations to properties, writes nothing', () => {
   same(rows(a, 'laborWeeks'), []);
 });
 
-test('save: weeks, job codes, shifts; skip a location; remember the mapping and the job code groups', () => {
+test('save: weeks and job codes; skip a location; remember the mapping and the job code groups', () => {
   const a = app();
   const res = a.commitLaborUpload(past, 'labor.csv', { 'Sample Grill Baltimore': 'TST1', 'Harbor House': 'TST2', 'Pop-up Kiosk': '' });
   same([res.saved.map(s => s.property), res.skipped], [['TST1', 'TST2'], ['Pop-up Kiosk']]);
   same([rows(a, 'laborWeeks').length, rows(a, 'laborJobs').length], [2, 8]);
-  same(rows(a, 'laborShifts'), [], 'a week with actuals keeps no employee-by-day rows');
+  assert.ok(!a.dataSpreadsheet_().getSheetByName('Labor Shifts'), 'no employee-by-day rows are kept');
   const cfg = a.readConfig_(a.dataSpreadsheet_());
   same([cfg.labor.locations['Harbor House'], cfg.labor.jobs.chef, cfg.labor.jobs['bartender ghost (pm)']], ['TST2', 'MGMT', 'NONE']);
   const up = rows(a, 'uploads').filter(r => r[4] === 'labor')[0];
@@ -330,7 +317,7 @@ test('only what the report names is kept: people named, a summary, and the job c
   same(by.off.sort(), ['Ann Able', 'Cy Cole', 'Dee Dunn'], 'Eli and Hal worked their schedule, and Bea\'s missed shift was covered (named in Ann\'s row): not kept');
   same([by.overtime, by.scheduledOver, by.management.sort(), by.summary.length], [['Dee Dunn', 'Eli Egan'], ['Eli Egan'], ['Kim Kerr', 'Max Moss'], 1]);
   const cook = rows(a, 'laborJobs').map(g.laborJobFromRow_).filter(j => j.property === 'TST1' && j.job === 'Line Cook')[0];
-  same([cook.extra.otPremium, cook.extra.addedHrs, cook.original], [125, 7.5, null]);
+  same([cook.extra.otPremium, cook.extra.addedHrs], [125, 7.5]);
   // The report read back from those rows matches the one worked out from every shift.
   const stored = a.getLaborWeek('TST1', WEEK).report;
   same([stored.people.off.totals, stored.people.otTotals, stored.people.overtime.map(o => o.employee), stored.management.length, stored.daily[0].BOH],
@@ -339,54 +326,17 @@ test('only what the report names is kept: people named, a summary, and the job c
   same(stored.jobs.filter(j => j.job === 'Line Cook')[0].otPremium, 125);
 });
 
-test('a schedule keeps its employee-by-day rows until the week has actuals, then they go', () => {
-  const a = app();
-  const sched = S.asSchedule(S.sampleGrill());
-  sched.rows = sched.rows.filter(r => r[1] !== 'Bea Bell');
-  a.commitLaborUpload(S.laborCsv(WEEK, [sched]), 'schedule.csv');
-  same(a.getLaborDashboard().rows.map(r => r.stage), ['schedule']);
-  assert.ok(rows(a, 'laborShifts').length > 0 && rows(a, 'laborShifts').every(r => r[2] === 'original'));
-  const sr = a.getLaborWeek('TST1', WEEK).report;
-  same([sr.stage, sr.people.scheduledOver.map(x => x.employee)], ['schedule', ['Eli Egan']]);
-  const again = a.previewLaborUpload(S.laborCsv(WEEK, [S.sampleGrill()]), 'actual.csv');
-  same([again.locations[0].existing.stage, again.locations[0].makesOriginal], ['schedule', true]);
-  a.commitLaborUpload(S.laborCsv(WEEK, [S.sampleGrill()]), 'actual.csv');
-  same(rows(a, 'laborShifts'), []);
-  const w = rows(a, 'laborWeeks');
-  same([w.length, w[0][4], !!w[0][15]], [1, 'actual', true]);
-  const rep = a.getLaborWeek('TST1', WEEK).report;
-  same([rep.scheduleChanges.hourly.added, !!rep.offOriginal, !!rep.originalAt], [1, true, true]);
-  same(rep.scheduleChanges.jobs.map(j => [j.job, j.change]), [['Server', 8]]);
-  const ann = rep.offOriginal.list.filter(p => p.employee === 'Ann Able')[0];
-  same(ann.unscheduled[0].addedHrs, 8);
-  // The actuals uploaded once more: the comparison with the original is kept.
-  a.commitLaborUpload(S.laborCsv(WEEK, [S.sampleGrill()]), 'actual2.csv');
-  const rep2 = a.getLaborWeek('TST1', WEEK).report;
-  same([rep2.scheduleChanges.hourly.added, rep2.offOriginal.totals.addedHrs, rep2.offOriginal.list.length, rows(a, 'laborJobs').length],
-    [1, rep.offOriginal.totals.addedHrs, rep.offOriginal.list.length, 6]);
-});
-
-test('a week in progress keeps the original schedule for the final upload', () => {
+test('a schedule, then the actuals: each upload replaces the week', () => {
   const a = app();
   a.commitLaborUpload(S.laborCsv(WEEK, [S.asSchedule(S.sampleGrill())]), 'schedule.csv');
-  const n = rows(a, 'laborShifts').length;
-  // Upload the week before it ends: a's clock says 2026-11-10 or later, so move the week forward.
-  const cur = a.today_(), wk = S.addDays(cur, -((new Date(cur + 'T12:00:00Z').getUTCDay() + 6) % 7));
-  a.commitLaborUpload(S.laborCsv(wk, [S.asSchedule(S.sampleGrill())]), 'schedule.csv');
-  a.commitLaborUpload(S.laborCsv(wk, [S.sampleGrill()]), 'partial.csv');
-  same(a.getLaborDashboard().rows.filter(r => r.week === wk)[0].stage, 'partial');
-  same(rows(a, 'laborShifts').filter(r => r[0] === wk).length, n, 'still there for the comparison');
-});
-
-test('schedules that never got actuals are dropped after 5 weeks', () => {
-  const a = app();
-  const old = S.addDays(a.today_(), -60);
-  const monday = S.addDays(old, -((new Date(old + 'T12:00:00Z').getUTCDay() + 6) % 7));
-  a.commitLaborUpload(S.laborCsv(monday, [S.asSchedule(S.harborHouse())]), 'old.csv');
-  assert.ok(rows(a, 'laborShifts').length > 0);
-  a.commitLaborUpload(past, 'labor.csv', { 'Pop-up Kiosk': '' });
-  same(rows(a, 'laborShifts'), []);
-  same(rows(a, 'laborWeeks').length, 3, 'the week itself stays');
+  same(a.getLaborDashboard().rows.map(r => r.stage), ['schedule']);
+  const sr = a.getLaborWeek('TST1', WEEK).report;
+  same([sr.stage, sr.people.scheduledOver.map(x => x.employee), sr.management.length], ['schedule', ['Eli Egan'], 2]);
+  const again = a.previewLaborUpload(S.laborCsv(WEEK, [S.sampleGrill()]), 'actual.csv');
+  same(again.locations[0].existing.stage, 'schedule');
+  a.commitLaborUpload(S.laborCsv(WEEK, [S.sampleGrill()]), 'actual.csv');
+  same([rows(a, 'laborWeeks').length, rows(a, 'laborWeeks')[0][4], rows(a, 'laborJobs').length], [1, 'actual', 6]);
+  same(a.getLaborWeek('TST1', WEEK).report.people.off.totals, R.people.off.totals);
 });
 
 test('the dashboard carries overtime $, added hours and every job code for long-term views', () => {
@@ -420,7 +370,7 @@ test('remove a week', () => {
   const a = app();
   a.commitLaborUpload(past, 'labor.csv', { 'Pop-up Kiosk': '' });
   same(a.removeLaborWeek('TST1', WEEK), { removed: true });
-  same([rows(a, 'laborWeeks').length, rows(a, 'laborJobs').every(r => r[1] === 'TST2'), rows(a, 'laborShifts').every(r => r[1] === 'TST2')], [1, true, true]);
+  same([rows(a, 'laborWeeks').length, rows(a, 'laborJobs').every(r => r[1] === 'TST2'), rows(a, 'laborItems').every(r => r[1] === 'TST2')], [1, true, true]);
 });
 
 test('access: viewers read; only admins upload or change groups; the inventory-only role sees nothing', () => {

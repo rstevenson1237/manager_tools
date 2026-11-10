@@ -45,7 +45,7 @@ const DEFAULT_GLOBAL_ADMINS = ['robert.stevenson@atlasrestaurantgroup.com'];
 /** Columns kept as plain text so Sheets never turns '2026-10' or '7312.1' into a date or number. */
 const TEXT_COLUMNS = { actuals: [1, 2, 3, 10], detail: [1, 2, 3, 4], budget: [2, 4], tags: [1, 2, 3], uploads: [1],
   invChecks: [1, 2, 3, 4, 5, 6, 7, 18], invFlags: [1, 2, 3, 4, 5, 6, 16, 17, 18],
-  laborWeeks: [1, 2, 3, 4, 5, 16, 17, 18, 19, 20], laborJobs: [1, 2, 3], laborItems: [1, 2, 3, 4, 5, 6, 11], laborShifts: [1, 2, 3, 4, 5, 13] };
+  laborWeeks: [1, 2, 3, 4, 5, 16, 17, 18, 19], laborJobs: [1, 2, 3], laborItems: [1, 2, 3, 4, 5, 6, 11] };
 
 const CONFIG_SHEET_NAME = '_Config';
 const CONFIG_ROWS = [

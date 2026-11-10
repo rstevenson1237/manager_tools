@@ -42,7 +42,7 @@ embeddable in Google Sites.
 6. Adding the labor review to an existing install: add `Labor.gs`,
    `LaborApi.gs`, `LaborView` and `LaborScript`, replace `Code.gs`,
    `Store.gs`, `Index`, then run **`setup()`** once more. It adds the
-   *Labor Weeks*, *Labor Jobs*, *Labor Items* and *Labor Shifts* tabs and
+   *Labor Weeks*, *Labor Jobs* and *Labor Items* tabs and
    changes nothing else.
 
 Properties register themselves the first time an upload contains them
@@ -94,7 +94,7 @@ app rewrites them.
 | `Tags` | Manager notes on a month, and "timing / accrual" tags on a line. |
 | `Uploads` | Who uploaded what and when. |
 | `Inventory Checks`, `Inventory Flags` | The inventory check: one row per count, plus the items the rules picked (section 6). |
-| `Labor Weeks`, `Labor Jobs`, `Labor Items`, `Labor Shifts` | The labor review: per property and week, the totals, one row per job code, and the people the week report names. Day-by-day schedules only while a week has no actuals (section 7). |
+| `Labor Weeks`, `Labor Jobs`, `Labor Items` | The labor review: per property and week, the totals, one row per job code, and the people the week report names (section 7). |
 | `_Config` (hidden) | Viewers, properties, flag rule, inventory reviewers, labor locations and job code groups. |
 
 ### Budget mapping
@@ -344,11 +344,10 @@ is refused when the employee rows do not add up to their job code, or the
 job codes to their location. R365 rounds each row to the cent, so half a
 cent a row is allowed.
 
-Uploading a property's week again replaces it. **The original schedule:**
-when a week on file is a schedule and the new upload has actuals, the
-schedule is kept as the original. R365's own scheduled figures include every
-edit made during the week; the original shows what was written before the
-week started. The labor goal % columns in the export are not used.
+Uploading a property's week again replaces it, schedule or actuals. Actuals
+are compared with the schedule R365 holds when you export: schedules rarely
+change once finalised a week or two ahead, so earlier versions are not kept.
+The labor goal % columns in the export are not used.
 
 ### What is kept
 
@@ -358,19 +357,15 @@ property. The week is analysed when it is uploaded, and only this is saved:
 | Tab | Holds | Size |
 |---|---|---|
 | `Labor Weeks` | Sales, forecast, last year, the week's hour and pay totals | 1 row per property-week |
-| `Labor Jobs` | Per job code: hours and pay (scheduled and actual), overtime hours and premium $, hours and pay added on top of the schedule, the original schedule's hours and shifts added or removed. **The long-term record**: the dashboard reads only this and Labor Weeks | about 16 rows per property-week |
+| `Labor Jobs` | Per job code: hours and pay (scheduled and actual), overtime hours and premium $, hours and pay added on top of the schedule. **The long-term record**: the dashboard reads only this and Labor Weeks | about 16 rows per property-week |
 | `Labor Items` | Only the people the week report names (off the schedule, covers, shifts nobody worked, overtime, scheduled over 40 hours, the managers' schedule) and one summary row (totals, the by-day table, names read as one person) | about 40 rows per property-week |
-| `Labor Shifts` | The employee-by-day schedule of a week with **no actuals yet**: what the actuals will be compared with | Deleted once the week is saved with actuals; any left after 5 weeks are dropped |
 
-For 10 properties, a 2,700-row export keeps about 550 rows, a fifth of its
-size. Employees who worked their schedule are not kept by name.
+No employee-by-day rows are kept. For 10 properties, a 2,700-row export
+keeps about 550 rows, a fifth of its size. Employees who worked their
+schedule are not kept by name.
 
-Two consequences:
-- Uploading a week's actuals again (a payroll correction) keeps the
-  comparison with the original schedule worked out the first time. It
-  cannot be redone, because the day-by-day schedule is gone.
-- Changing a job code's group re-totals every week on file. The people
-  already named in a past week stay as they were.
+Changing a job code's group re-totals every week on file. The people already
+named in a past week stay as they were until that week is uploaded again.
 
 ### Groups
 
@@ -436,14 +431,9 @@ One property and week:
     beyond the missed shift count as added;
   - a day worked 1.5+ hours longer than scheduled;
   - also listed: covers, and scheduled shifts nobody worked.
-  With an original schedule on file, choose to compare with it or with
-  R365's schedule at week end.
 - **Overtime**: hours over 40 in the week at this property, the estimated
   premium (half the straight-time rate per overtime hour), and whether the
   schedule wrote it in.
-- **Schedule changes** since the original, by job code: hours, shifts added
-  and removed, and job codes not on the original at all (the schedule may not
-  have been finished when it was uploaded).
 - **By day**, and the **management schedule**: each manager's scheduled
   hours by day.
 

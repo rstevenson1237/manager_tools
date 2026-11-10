@@ -158,11 +158,6 @@
           <button class="ghost" @click="labStepWeek(1)" :disabled="!labHasStep(1)" aria-label="Next week">›</button>
         </div>
         <div class="controls">
-          <div class="field" v-if="labRep && labRep.offOriginal"><label for="lab-against">Compare shifts with</label>
-            <select id="lab-against" v-model="lab.against">
-              <option value="final">The schedule in R365 at week end</option>
-              <option value="original">The schedule as first uploaded ({{ dayLabel(labRep.originalAt) }})</option>
-            </select></div>
           <button class="ghost" @click="printPage" :disabled="!labRep">Print / save as PDF</button>
         </div>
       </div>
@@ -170,12 +165,11 @@
       <div v-else-if="lab.repError" class="banner warn">{{ lab.repError }}</div>
       <template v-if="labRep && !lab.repLoading">
         <div>
-          <div class="muted">{{ labRep.location }} · uploaded {{ dayLabel(labRep.uploadedAt) }}<template v-if="labRep.uploadedBy"> by {{ labRep.uploadedBy }}</template>
-            <template v-if="labRep.originalAt"> · original schedule from {{ dayLabel(labRep.originalAt) }}</template></div>
+          <div class="muted">{{ labRep.location }} · uploaded {{ dayLabel(labRep.uploadedAt) }}<template v-if="labRep.uploadedBy"> by {{ labRep.uploadedBy }}</template></div>
           <h1>{{ propertyName(labRep.property) }} · week of {{ weekLabel(labRep.week) }}
             <span :class="['badge', labStageClass(labRep.stage)]">{{ labStage(labRep.stage) }}</span></h1>
         </div>
-        <div v-if="labRep.stage === 'schedule'" class="banner info">The week has not started: this is the schedule as written, judged against the forecast<template v-if="labRep.targetSource"> and {{ labRep.targetSource === 'budget' ? 'the budget' : labWeeksText(labRep.recentWeeks) }}</template>. Upload the week again once it is over to see actuals; this schedule is then kept as the original.</div>
+        <div v-if="labRep.stage === 'schedule'" class="banner info">The week has not started: this is the schedule as written, judged against the forecast<template v-if="labRep.targetSource"> and {{ labRep.targetSource === 'budget' ? 'the budget' : labWeeksText(labRep.recentWeeks) }}</template>. Upload the week again once it is over to see actuals.</div>
         <div v-else-if="labRep.stage === 'partial'" class="banner warn">The week is not over yet: actuals run only to the upload.</div>
         <div v-if="!labRep.targetSource" class="banner warn">No budget for this property and no weeks on file in the 8 weeks before: labor % has no target yet.</div>
 
@@ -280,7 +274,7 @@
         <template v-if="labRep.stage !== 'schedule' && labOff">
           <div class="card flush">
             <div class="head"><h2>People off the schedule · {{ labPeople.length }}</h2>
-              <span class="muted">Against {{ lab.against === 'original' && labRep.offOriginal ? 'the schedule as first uploaded' : 'the schedule in R365 at week end' }} ·
+              <span class="muted">Against the schedule in R365 when the week was exported ·
                 {{ labOff.totals.unscheduledShifts }} unscheduled shifts ({{ labOff.totals.coveredShifts }} covers) · {{ hrs(labOff.totals.addedHrs + labOff.totals.overHrs) }} hours added, about ${{ money(labOff.totals.addedPay + labOff.totals.overPay) }}</span></div>
             <p v-if="!labPeople.length" class="muted" style="padding:0 16px">Nobody worked hours beyond the schedule.</p>
             <div class="scroll" v-else>
@@ -351,23 +345,6 @@
           </div>
         </div>
 
-        <div class="card flush" v-if="labRep.scheduleChanges">
-          <div class="head"><h2>Schedule changes since {{ dayLabel(labRep.originalAt) }}</h2>
-            <span class="muted">Hourly: {{ hrs(labRep.scheduleChanges.hourly.original) }} → {{ hrs(labRep.scheduleChanges.hourly.final) }} hours ({{ signed(labRep.scheduleChanges.hourly.finalPay - labRep.scheduleChanges.hourly.originalPay) }}) ·
-              {{ labRep.scheduleChanges.hourly.added }} shifts added, {{ labRep.scheduleChanges.hourly.removed }} removed</span></div>
-          <div v-if="labRep.scheduleChanges.jobsNotInOriginal.length" class="banner warn" style="margin:12px 16px 0">Not on the schedule when it was first uploaded: {{ labRep.scheduleChanges.jobsNotInOriginal.join(', ') }}. The schedule may not have been finished then.</div>
-          <p v-if="!labRep.scheduleChanges.jobs.length" class="muted" style="padding:0 16px">The schedule did not change.</p>
-          <div class="scroll" v-else>
-            <table style="min-width:700px">
-              <thead><tr><th>Job code</th><th style="text-align:left">Group</th><th>First upload hrs</th><th>Week end hrs</th><th>Change</th><th>Shifts added</th><th>Shifts removed</th></tr></thead>
-              <tbody><tr v-for="j in labRep.scheduleChanges.jobs" :key="j.job">
-                <td><b>{{ j.job }}</b></td><td style="text-align:left" class="muted">{{ groupLabelOf(j.group) }}</td>
-                <td>{{ hrs(j.original) }}</td><td>{{ hrs(j.final) }}</td><td :class="overCls(j.change, 0.5)">{{ signedHrs(j.change) }}</td>
-                <td>{{ j.added || '' }}</td><td>{{ j.removed || '' }}</td></tr></tbody>
-            </table>
-          </div>
-        </div>
-
         <div class="card flush">
           <div class="head"><h2>By day</h2><span class="muted">Hours scheduled{{ labRep.stage === 'schedule' ? '' : ' / worked' }}</span></div>
           <div class="scroll">
@@ -410,7 +387,7 @@
     <div v-if="!labIsAdmin" class="banner warn">Only an administrator can upload labor.</div>
     <div v-else class="card" style="display:flex;flex-direction:column;gap:12px">
       <p class="muted" style="margin:0">From R365, run <b>Labor Actual vs Scheduled - Detail</b> for one week (Monday to Sunday) and as many locations as you like, and export it as CSV.
-        Upload the coming week once its schedule is written, and the past week once it is over. When a week was uploaded as a schedule first, that schedule is kept as the original, to show what changed.
+        Upload the coming week once its schedule is written, and the past week once it is over. Actuals are compared with the schedule R365 holds when you export.
         Uploading a property's week again replaces it.</p>
       <label class="drop" for="lab-file">
         <b>Choose a CSV</b><br><span class="muted">{{ lab.up.fileName || 'One week, any number of locations' }}</span>
@@ -449,7 +426,7 @@
                   <td style="text-align:left;white-space:normal">
                     <span v-if="l.twice" class="bad">Another location is set to this property.</span>
                     <span v-else-if="!l.existing" class="muted">New week</span>
-                    <span v-else>Replaces the {{ labStage(l.existing.stage).toLowerCase() }} uploaded {{ dayLabel(l.existing.uploadedAt) }}<template v-if="l.makesOriginal">; that schedule is kept as the original</template><template v-else-if="l.existing.originalAt">; the original schedule from {{ dayLabel(l.existing.originalAt) }} stays</template>.</span></td>
+                    <span v-else>Replaces the {{ labStage(l.existing.stage).toLowerCase() }} uploaded {{ dayLabel(l.existing.uploadedAt) }}.</span></td>
                 </tr>
               </tbody>
             </table>

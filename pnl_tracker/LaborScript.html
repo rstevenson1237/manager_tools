@@ -19,7 +19,7 @@
         lab: {
           sub: 'dashboard', dash: null, dashLoading: false, dashError: '',
           sel: [], from: '', to: '', basis: 'HOURLY',
-          repKey: null, rep: null, repLoading: false, repError: '', against: 'final', peopleAll: false, jobsAll: false,
+          repKey: null, rep: null, repLoading: false, repError: '', peopleAll: false, jobsAll: false,
           jobsShowAll: false,
           up: { fileName: '', text: null, stage: null, preview: null, mapping: {}, error: '', result: null },
           codes: null, codesLoading: false, codesError: '', draft: {}, codesSaving: false, codesFilter: ''
@@ -130,7 +130,7 @@
       labRep() { return this.lab.rep && this.lab.rep.report; },
       labOff() {
         const r = this.labRep; if (!r) return null;
-        return this.lab.against === 'original' && r.offOriginal ? r.offOriginal : r.people.off;
+        return r.people.off;
       },
       labPeople() {
         const o = this.labOff; if (!o) return [];
@@ -276,7 +276,6 @@
         this.lab.repLoading = true; this.lab.repError = ''; this.lab.peopleAll = false; this.lab.jobsAll = false;
         try {
           this.lab.rep = await gas('getLaborWeek', this.lab.repKey.slice(0, i), this.lab.repKey.slice(i + 1));
-          if (this.labRep && !this.labRep.offOriginal) this.lab.against = 'final';
         } catch (err) { this.lab.rep = null; this.lab.repError = err.message; }
         this.lab.repLoading = false;
       },
@@ -293,7 +292,7 @@
         return i >= 0 && i < weeks.length;
       },
       async removeLabWeek(row) {
-        if (!confirm('Remove ' + this.propertyName(row.property) + ', week of ' + this.weekLabel(row.week) + '? The original schedule kept for it is removed too.')) return;
+        if (!confirm('Remove ' + this.propertyName(row.property) + ', week of ' + this.weekLabel(row.week) + '?')) return;
         try { await gas('removeLaborWeek', row.property, row.week); this.toast('Week removed.', 'success'); await this.loadLabDash(); }
         catch (err) { this.toast(err.message, 'error'); }
       },

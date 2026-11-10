@@ -1,7 +1,7 @@
 /*******************************************************************************
  * LaborApi.gs — the weekly sales and labor review's endpoints. The logic is
  * in Labor.gs; this file reads and writes the three labor sheets (Store.gs
- * SHEETS.laborWeeks / laborJobs / laborItems / laborShifts) and the labor settings in
+ * SHEETS.laborWeeks / laborJobs / laborItems) and the labor settings in
  * _Config (which property each export location is, the group of each job
  * code).
  *
@@ -17,14 +17,10 @@
  * (laborAnalyzeWeek_), and only this is written:
  *   Labor Weeks  the week's totals (one row);
  *   Labor Jobs   per job code: hours, pay, overtime premium, hours added on
- *                top of the schedule, original schedule hours. The long-term
- *                record;
+ *                top of the schedule. The long-term record;
  *   Labor Items  the people the week report names, and a summary row.
- * Labor Shifts holds the employee-by-day schedule of a week only while it has
- * no actuals: it is the original schedule the actuals are compared with. It is
- * deleted when the week is saved with actuals, and after 5 weeks regardless.
- * Uploading the actuals again later keeps the comparison with the original
- * worked out the first time (its job code hours and the people it named).
+ * No employee-by-day rows are kept. An upload replaces the week; actuals are
+ * compared with the schedule R365 holds at the time of the export.
  *
  * New job codes get their guessed group saved, so a later change to the guess
  * never reclassifies past weeks. Changing a group (Job codes) re-totals every
@@ -95,11 +91,9 @@ function laborUploadPlan_(ss, csvText, mapping) {
     const code = Object.prototype.hasOwnProperty.call(mapping, loc.location) ? String(mapping[loc.location] || '').trim() : (guess || loc.location);
     const existing = code ? weeks.filter(function (w) { return w.property === code && w.week === parsed.week; })[0] || null : null;
     const stage = laborStage_(loc, parsed.end, today);
-    const keepsOriginal = !!(existing && (existing.originalAt || (existing.stage === 'schedule' && stage !== 'schedule')));
     const twice = !!(code && seen[code]);
     if (code) seen[code] = true;
-    return { loc: loc, code: code, guess: guess, matched: !!guess, existing: existing, stage: stage, keepsOriginal: keepsOriginal,
-      makesOriginal: !!(existing && !existing.originalAt && existing.stage === 'schedule' && stage !== 'schedule'), twice: twice };
+    return { loc: loc, code: code, guess: guess, matched: !!guess, existing: existing, stage: stage, twice: twice };
   });
   const known = config.labor.jobs;
   const newJobs = {};
@@ -126,8 +120,8 @@ function previewLaborUpload(csvText, fileName, mapping) {
         sales: l.loc.sales, totals: l.loc.totals }, jobs, groupOf, l.code ? laborBudgetWeek_(store, l.code, plan.parsed.week) : null);
       return { location: l.loc.location, property: l.code, guess: l.guess, matched: l.matched, stage: l.stage, rows: l.loc.rows,
         employees: Object.keys(l.loc.shifts.reduce(function (o, s) { o[s.employee] = 1; return o; }, {})).length,
-        jobs: jobs.length, summary: sum, twice: l.twice, makesOriginal: l.makesOriginal,
-        existing: l.existing ? { stage: l.existing.stage, uploadedAt: l.existing.uploadedAt, uploadedBy: l.existing.uploadedBy, originalAt: l.existing.originalAt } : null };
+        jobs: jobs.length, summary: sum, twice: l.twice,
+        existing: l.existing ? { stage: l.existing.stage, uploadedAt: l.existing.uploadedAt, uploadedBy: l.existing.uploadedBy } : null };
     })
   });
 }
@@ -151,51 +145,23 @@ function commitLaborUpload(csvText, fileName, mapping) {
     const groups = Object.assign({}, plan.config.labor.jobs);
     Object.keys(plan.newJobs).forEach(function (k) { if (!groups[k]) groups[k] = guessLaborGroup_(plan.newJobs[k]); });
     const groupOf = laborGroupFn_(groups);
-    const here = function (r, code) { return String(r[1]) === code && laborDate_(r[0]) === week; };
-    const oldShifts = readDataRows_(ss, 'laborShifts');
-    const oldJobs = readDataRows_(ss, 'laborJobs');
-    const oldItems = readDataRows_(ss, 'laborItems');
-
-    const weekRows = [], jobRows = [], itemRows = [], shiftRows = [], drop = {}, dropShifts = {};
+    const weekRows = [], jobRows = [], itemRows = [], drop = {};
     save.forEach(function (l) {
-      const code = l.code;
-      if (l.existing) drop[code] = true;
-      // The original schedule: the schedule on file while the week had no actuals.
-      const original = l.stage === 'schedule' ? [] : oldShifts.filter(function (r) { return here(r, code); }).map(laborShiftFromRow_);
-      const analysis = laborAnalyzeWeek_(l.loc.shifts, original, groupOf, LABOR_RULES, l.stage, week);
-      // Actuals uploaded again: the schedule rows are gone, so keep the comparison worked out the first time.
-      let carry = null;
-      if (!original.length && l.stage !== 'schedule' && l.existing && l.existing.originalAt) {
-        carry = {};
-        oldJobs.filter(function (r) { return here(r, code); }).map(laborJobFromRow_).forEach(function (j) { if (j.original) carry[j.job] = j.original; });
-        const before = laborAnalysisFromRows_(oldItems.filter(function (r) { return here(r, code); }));
-        analysis.hasOriginal = true;
-        analysis.offOriginal = before.offOriginal;
-      }
-      weekRows.push(laborWeekRow_({ week: week, end: plan.parsed.end, property: code, location: l.loc.location, stage: l.stage,
-        sales: l.loc.sales, totals: l.loc.totals,
-        originalAt: l.existing ? (l.existing.originalAt || (l.makesOriginal ? l.existing.uploadedAt : '')) : '',
-        uploadedAt: at, uploadedBy: who, file: String(fileName || ''), uploadId: id }));
-      laborJobRows_(week, code, l.loc, analysis, carry).forEach(function (r) { jobRows.push(r); });
-      laborItemRows_(week, code, analysis).forEach(function (r) { itemRows.push(r); });
-      if (l.stage === 'schedule') {
-        dropShifts[code] = true;
-        laborShiftRows_(week, code, 'original', l.loc.shifts).forEach(function (r) { shiftRows.push(r); });
-      } else if (l.stage === 'actual') dropShifts[code] = true;      // compared; the day-by-day rows are not kept
-      // 'partial': the original schedule stays until the week is saved complete.
+      if (l.existing) drop[l.code] = true;
+      const analysis = laborAnalyzeWeek_(l.loc.shifts, groupOf, LABOR_RULES, l.stage, week);
+      weekRows.push(laborWeekRow_({ week: week, end: plan.parsed.end, property: l.code, location: l.loc.location, stage: l.stage,
+        sales: l.loc.sales, totals: l.loc.totals, uploadedAt: at, uploadedBy: who, file: String(fileName || ''), uploadId: id }));
+      laborJobRows_(week, l.code, l.loc, analysis).forEach(function (r) { jobRows.push(r); });
+      laborItemRows_(week, l.code, analysis).forEach(function (r) { itemRows.push(r); });
     });
-    const has = function (map) { return function (r) { return Object.prototype.hasOwnProperty.call(map, String(r[1])) && laborDate_(r[0]) === week; }; };
-    const put = function (key, current, isDropped, rows) {
+    // Replacing a week rewrites the sheet; a new week is added at the end.
+    const isDropped = function (r) { return Object.prototype.hasOwnProperty.call(drop, String(r[1])) && laborDate_(r[0]) === week; };
+    ['laborWeeks', 'laborJobs', 'laborItems'].forEach(function (key, i) {
+      const rows = [weekRows, jobRows, itemRows][i];
+      const current = readDataRows_(ss, key);
       if (current.some(isDropped)) writeDataRows_(ss, key, current.filter(function (r) { return !isDropped(r); }).concat(rows));
       else appendDataRows_(ss, key, rows);
-    };
-    put('laborWeeks', readDataRows_(ss, 'laborWeeks'), has(drop), weekRows);
-    put('laborJobs', oldJobs, has(drop), jobRows);
-    put('laborItems', oldItems, has(drop), itemRows);
-    // Schedules of weeks that never got actuals are dropped after 5 weeks.
-    const stale = laborAddDays_(plan.today, -35);
-    const shiftGone = function (r) { return has(dropShifts)(r) || laborDate_(r[0]) < stale; };
-    put('laborShifts', oldShifts, shiftGone, shiftRows);
+    });
 
     // Remember the location mapping and the group of every new job code.
     const config = readConfig_(ss);
@@ -206,14 +172,14 @@ function commitLaborUpload(csvText, fileName, mapping) {
     appendDataRow_(ss, 'uploads', [id, at, who, String(fileName || ''), 'labor', '', week, save.map(function (l) { return l.code; }).join(', '),
       plan.parsed.rows, save.map(function (l) { return l.code + ' ' + l.stage + (l.existing ? ' (replaced ' + String(l.existing.uploadedAt).slice(0, 10) + ')' : ''); }).join('; ')]);
     SpreadsheetApp.flush();
-    return safe_({ week: week, saved: save.map(function (l) { return { property: l.code, location: l.loc.location, stage: l.stage, replaced: !!l.existing, original: l.makesOriginal }; }),
+    return safe_({ week: week, saved: save.map(function (l) { return { property: l.code, location: l.loc.location, stage: l.stage, replaced: !!l.existing }; }),
       skipped: plan.locations.filter(function (l) { return !l.code; }).map(function (l) { return l.loc.location; }) });
   } finally {
     lock.releaseLock();
   }
 }
 
-/** Admin. Remove one property's week (and its original schedule). */
+/** Admin. Remove one property's week. */
 function removeLaborWeek(property, week) {
   const ss = dataSpreadsheet_();
   requireAdmin_(ss);
@@ -227,7 +193,6 @@ function removeLaborWeek(property, week) {
     writeDataRows_(ss, 'laborWeeks', rows.filter(keep));
     writeDataRows_(ss, 'laborJobs', readDataRows_(ss, 'laborJobs').filter(keep));
     writeDataRows_(ss, 'laborItems', readDataRows_(ss, 'laborItems').filter(keep));
-    writeDataRows_(ss, 'laborShifts', readDataRows_(ss, 'laborShifts').filter(keep));
     return { removed: true };
   } finally {
     lock.releaseLock();
