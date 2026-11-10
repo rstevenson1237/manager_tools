@@ -305,7 +305,7 @@ test('save: weeks, job codes, shifts; skip a location; remember the mapping and 
   const res = a.commitLaborUpload(past, 'labor.csv', { 'Sample Grill Baltimore': 'TST1', 'Harbor House': 'TST2', 'Pop-up Kiosk': '' });
   same([res.saved.map(s => s.property), res.skipped], [['TST1', 'TST2'], ['Pop-up Kiosk']]);
   same([rows(a, 'laborWeeks').length, rows(a, 'laborJobs').length], [2, 8]);
-  assert.ok(rows(a, 'laborShifts').every(r => r[2] === 'final'));
+  same(rows(a, 'laborShifts'), [], 'a week with actuals keeps no employee-by-day rows');
   const cfg = a.readConfig_(a.dataSpreadsheet_());
   same([cfg.labor.locations['Harbor House'], cfg.labor.jobs.chef, cfg.labor.jobs['bartender ghost (pm)']], ['TST2', 'MGMT', 'NONE']);
   const up = rows(a, 'uploads').filter(r => r[4] === 'labor')[0];
@@ -322,25 +322,80 @@ test('dashboard rows and the week report', () => {
   same(a.getLaborWeek('TST1', '2026-10-26').report, null);
 });
 
-test('the schedule uploaded before the week is kept as the original when actuals arrive', () => {
+test('only what the report names is kept: people named, a summary, and the job code record', () => {
+  const a = app();
+  a.commitLaborUpload(past, 'labor.csv', { 'Pop-up Kiosk': '' });
+  const items = rows(a, 'laborItems').filter(r => r[1] === 'TST1');
+  const by = items.reduce((o, r) => { o[r[2]] = (o[r[2]] || []).concat([r[3]]); return o; }, {});
+  same(by.off.sort(), ['Ann Able', 'Cy Cole', 'Dee Dunn'], 'Eli and Hal worked their schedule, and Bea\'s missed shift was covered (named in Ann\'s row): not kept');
+  same([by.overtime, by.scheduledOver, by.management.sort(), by.summary.length], [['Dee Dunn', 'Eli Egan'], ['Eli Egan'], ['Kim Kerr', 'Max Moss'], 1]);
+  const cook = rows(a, 'laborJobs').map(g.laborJobFromRow_).filter(j => j.property === 'TST1' && j.job === 'Line Cook')[0];
+  same([cook.extra.otPremium, cook.extra.addedHrs, cook.original], [125, 7.5, null]);
+  // The report read back from those rows matches the one worked out from every shift.
+  const stored = a.getLaborWeek('TST1', WEEK).report;
+  same([stored.people.off.totals, stored.people.otTotals, stored.people.overtime.map(o => o.employee), stored.management.length, stored.daily[0].BOH],
+    [R.people.off.totals, R.people.otTotals, R.people.overtime.map(o => o.employee), R.management.length, R.daily[0].BOH]);
+  same(stored.findings.map(f => f.title), R.findings.map(f => f.title));
+  same(stored.jobs.filter(j => j.job === 'Line Cook')[0].otPremium, 125);
+});
+
+test('a schedule keeps its employee-by-day rows until the week has actuals, then they go', () => {
   const a = app();
   const sched = S.asSchedule(S.sampleGrill());
   sched.rows = sched.rows.filter(r => r[1] !== 'Bea Bell');
   a.commitLaborUpload(S.laborCsv(WEEK, [sched]), 'schedule.csv');
   same(a.getLaborDashboard().rows.map(r => r.stage), ['schedule']);
+  assert.ok(rows(a, 'laborShifts').length > 0 && rows(a, 'laborShifts').every(r => r[2] === 'original'));
+  const sr = a.getLaborWeek('TST1', WEEK).report;
+  same([sr.stage, sr.people.scheduledOver.map(x => x.employee)], ['schedule', ['Eli Egan']]);
   const again = a.previewLaborUpload(S.laborCsv(WEEK, [S.sampleGrill()]), 'actual.csv');
   same([again.locations[0].existing.stage, again.locations[0].makesOriginal], ['schedule', true]);
   a.commitLaborUpload(S.laborCsv(WEEK, [S.sampleGrill()]), 'actual.csv');
-  const kinds = rows(a, 'laborShifts').reduce((o, r) => { o[r[2]] = (o[r[2]] || 0) + 1; return o; }, {});
-  assert.ok(kinds.original > 0 && kinds.final > 0, JSON.stringify(kinds));
+  same(rows(a, 'laborShifts'), []);
   const w = rows(a, 'laborWeeks');
   same([w.length, w[0][4], !!w[0][15]], [1, 'actual', true]);
   const rep = a.getLaborWeek('TST1', WEEK).report;
   same([rep.scheduleChanges.hourly.added, !!rep.offOriginal, !!rep.originalAt], [1, true, true]);
-  // Uploading the actuals once more replaces them and keeps the same original.
+  same(rep.scheduleChanges.jobs.map(j => [j.job, j.change]), [['Server', 8]]);
+  const ann = rep.offOriginal.list.filter(p => p.employee === 'Ann Able')[0];
+  same(ann.unscheduled[0].addedHrs, 8);
+  // The actuals uploaded once more: the comparison with the original is kept.
   a.commitLaborUpload(S.laborCsv(WEEK, [S.sampleGrill()]), 'actual2.csv');
-  same(rows(a, 'laborShifts').filter(r => r[2] === 'original').length, kinds.original);
-  same(rows(a, 'laborShifts').filter(r => r[2] === 'final').length, kinds.final);
+  const rep2 = a.getLaborWeek('TST1', WEEK).report;
+  same([rep2.scheduleChanges.hourly.added, rep2.offOriginal.totals.addedHrs, rep2.offOriginal.list.length, rows(a, 'laborJobs').length],
+    [1, rep.offOriginal.totals.addedHrs, rep.offOriginal.list.length, 6]);
+});
+
+test('a week in progress keeps the original schedule for the final upload', () => {
+  const a = app();
+  a.commitLaborUpload(S.laborCsv(WEEK, [S.asSchedule(S.sampleGrill())]), 'schedule.csv');
+  const n = rows(a, 'laborShifts').length;
+  // Upload the week before it ends: a's clock says 2026-11-10 or later, so move the week forward.
+  const cur = a.today_(), wk = S.addDays(cur, -((new Date(cur + 'T12:00:00Z').getUTCDay() + 6) % 7));
+  a.commitLaborUpload(S.laborCsv(wk, [S.asSchedule(S.sampleGrill())]), 'schedule.csv');
+  a.commitLaborUpload(S.laborCsv(wk, [S.sampleGrill()]), 'partial.csv');
+  same(a.getLaborDashboard().rows.filter(r => r.week === wk)[0].stage, 'partial');
+  same(rows(a, 'laborShifts').filter(r => r[0] === wk).length, n, 'still there for the comparison');
+});
+
+test('schedules that never got actuals are dropped after 5 weeks', () => {
+  const a = app();
+  const old = S.addDays(a.today_(), -60);
+  const monday = S.addDays(old, -((new Date(old + 'T12:00:00Z').getUTCDay() + 6) % 7));
+  a.commitLaborUpload(S.laborCsv(monday, [S.asSchedule(S.harborHouse())]), 'old.csv');
+  assert.ok(rows(a, 'laborShifts').length > 0);
+  a.commitLaborUpload(past, 'labor.csv', { 'Pop-up Kiosk': '' });
+  same(rows(a, 'laborShifts'), []);
+  same(rows(a, 'laborWeeks').length, 3, 'the week itself stays');
+});
+
+test('the dashboard carries overtime $, added hours and every job code for long-term views', () => {
+  const a = app();
+  a.commitLaborUpload(past, 'labor.csv', { 'Pop-up Kiosk': '' });
+  const d = a.getLaborDashboard().rows.filter(r => r.property === 'TST1')[0];
+  same([d.HOURLY.otPremium, d.BOH.otPremium, d.HOURLY.addedHrs, d.FOH.addedHrs], [125, 125, 15.5, 8]);
+  same(d.jobs.filter(j => j[0] === 'Line Cook')[0], ['Line Cook', 'BOH', 85, 92.5, 1750, 1975, 12.5, 125, 7.5]);
+  assert.ok(d.jobs.some(j => j[0] === 'Chef' && j[1] === 'MGMT'));
 });
 
 test('job code groups can be changed, and apply to every week on file', () => {

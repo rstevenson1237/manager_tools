@@ -50,13 +50,14 @@
 
         <div class="grid">
           <div class="card stat"><div class="label">Net sales</div><div class="value">{{ money(labTotals.net) }}</div>
-            <div class="sub">{{ labTotals.weeks }} week{{ labTotals.weeks === 1 ? '' : 's' }} with actuals · <span :class="cls(labTotals.vsForecast)">{{ signedPct(labTotals.vsForecast) }}</span> vs forecast · <span :class="cls(labTotals.vsPy)">{{ signedPct(labTotals.vsPy) }}</span> vs last year</div></div>
+            <div class="sub">{{ labTotals.weeks }} week{{ labTotals.weeks === 1 ? '' : 's' }} with actuals · <span :class="cls(labTotals.vsForecast)">{{ signedPct(labTotals.vsForecast) }}</span> vs forecast · <span :class="cls(labTotals.vsPy)">{{ signedPct(labTotals.vsPy) }}</span> vs last year</div>
+            <div class="sub" v-if="labTotals.forecastMiss != null">Forecasts were off by {{ pct(labTotals.forecastMiss) }} on average (each property-week, either way)</div></div>
           <div class="card stat"><div class="label">Labor % of sales</div><div class="value">{{ pct(labTotals.actPct) }}</div>
             <div class="sub">scheduled {{ pct(labTotals.schPct) }} of forecast<template v-if="labTotals.targetPct != null"> · target {{ pct(labTotals.targetPct) }}</template></div></div>
           <div class="card stat"><div class="label">Labor against the schedule</div><div class="value" :class="overCls(labTotals.actPay - labTotals.schPay, 0.5)">{{ signed(labTotals.actPay - labTotals.schPay) }}</div>
-            <div class="sub">${{ money(labTotals.actPay) }} paid · {{ signedHrs(labTotals.actHrs - labTotals.schHrs) }} hours</div></div>
-          <div class="card stat"><div class="label">Overtime hours</div><div class="value" :class="{ bad: labTotals.otHrs > 0 }">{{ hrs(labTotals.otHrs) }}</div>
-            <div class="sub">{{ LAB_BASIS.filter(b => b.key === lab.basis)[0].label }}</div></div>
+            <div class="sub">${{ money(labTotals.actPay) }} paid · {{ signedHrs(labTotals.actHrs - labTotals.schHrs) }} hours · {{ hrs(labTotals.addedHrs) }} hours added on top of the schedule (${{ money(labTotals.addedPay) }})</div></div>
+          <div class="card stat"><div class="label">Overtime</div><div class="value" :class="{ bad: labTotals.otPremium > 0 }">${{ money(labTotals.otPremium) }}</div>
+            <div class="sub">{{ hrs(labTotals.otHrs) }} hours · premium, estimated · {{ LAB_BASIS.filter(b => b.key === lab.basis)[0].label }}</div></div>
         </div>
 
         <div class="card" v-for="c in [{ key: 'pct', title: 'Labor % · ' + LAB_BASIS.filter(b => b.key === lab.basis)[0].label, chart: labPctChart }, { key: 'sales', title: 'Net sales', chart: labSalesChart }]" :key="c.key">
@@ -87,11 +88,33 @@
         </div>
 
         <div class="card flush">
+          <div class="head"><h2>Job codes · {{ labJobTable.length }}</h2>
+            <span class="muted">Weeks with actuals in the range, chosen properties · % of sales = the code's pay ÷ net sales of the property-weeks it was used in ·
+              <button v-if="labJobTable.length > 15" class="link small no-print" @click="lab.jobsShowAll = !lab.jobsShowAll">{{ lab.jobsShowAll ? 'Show the top 15' : 'Show all' }}</button></span></div>
+          <p v-if="!labJobTable.length" class="muted" style="padding:0 16px">No weeks with actuals in the range.</p>
+          <div class="scroll" v-else>
+            <table style="min-width:900px">
+              <thead><tr><th>Job code</th><th style="text-align:left">Group</th><th>Properties</th><th>Sched hrs</th><th>Actual hrs</th><th>Hrs vs sched</th><th>Actual $</th><th>% of sales</th><th>OT hrs</th><th>OT $</th><th>Added hrs</th></tr></thead>
+              <tbody>
+                <tr v-for="j in (lab.jobsShowAll ? labJobTable : labJobTable.slice(0, 15))" :key="j.key">
+                  <td><b>{{ j.job }}</b></td><td style="text-align:left" class="muted">{{ groupLabelOf(j.group) }}</td><td class="muted">{{ j.properties }}</td>
+                  <td>{{ hrs(j.schHrs) }}</td><td>{{ hrs(j.actHrs) }}</td><td :class="overCls(j.actHrs - j.schHrs, 1)">{{ signedHrs(j.actHrs - j.schHrs) }}</td>
+                  <td>{{ money(j.actPay) }}</td><td><b>{{ pct(j.pct, 2) }}</b></td>
+                  <td :class="{ bad: j.otHrs > 0 }">{{ j.otHrs ? hrs(j.otHrs) : '' }}</td><td :class="{ bad: j.otPremium > 0.5 }">{{ j.otPremium > 0.5 ? money(j.otPremium) : '' }}</td>
+                  <td :class="{ bad: j.addedHrs > 0 }">{{ j.addedHrs ? hrs(j.addedHrs) : '' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="muted" style="padding:10px 16px">Added hours: worked on days with nothing scheduled (beyond a shift they covered) or 1.5+ hours past a scheduled shift. OT $ is the overtime premium, estimated at half the straight-time rate.</div>
+        </div>
+
+        <div class="card flush">
           <div class="head"><h2>Weeks · {{ labTable.length }}</h2><span class="muted">One row per property and week · select a row for its detail · {{ LAB_BASIS.filter(b => b.key === lab.basis)[0].label }}</span></div>
           <div class="scroll">
-            <table style="min-width:1080px">
+            <table style="min-width:1160px">
               <thead><tr><th>Week · property</th><th style="text-align:left">Stage</th><th>Net sales</th><th>Forecast</th><th>vs forecast</th><th>Last year</th>
-                <th>Scheduled $</th><th>Actual $</th><th>Sched % of fcst</th><th>Actual %</th><th>Target %</th><th>Hours vs sched</th><th>OT hrs</th><th>Mgmt sched hrs</th><th class="no-print"></th></tr></thead>
+                <th>Scheduled $</th><th>Actual $</th><th>Sched % of fcst</th><th>Actual %</th><th>Target %</th><th>Hours vs sched</th><th>OT hrs</th><th>OT $</th><th>Mgmt sched hrs</th><th class="no-print"></th></tr></thead>
               <tbody>
                 <tr v-for="r in labTable" :key="r.property + r.week" class="clickable" @click="openLabWeek(r.property, r.week)">
                   <td><b>{{ weekLabel(r.week, true) }}</b> <span class="muted">{{ propertyName(r.property) }}</span></td>
@@ -107,6 +130,7 @@
                   <td class="muted">{{ r.target ? pct(r.target[lab.basis]) : '—' }}</td>
                   <td :class="overCls(r.stage === 'schedule' ? null : r[lab.basis].actHrs - r[lab.basis].schHrs, 1)">{{ r.stage === 'schedule' ? hrs(r[lab.basis].schHrs) + ' sched' : signedHrs(r[lab.basis].actHrs - r[lab.basis].schHrs) }}</td>
                   <td :class="{ bad: r[lab.basis].otHrs > 0 }">{{ r.stage === 'schedule' ? '—' : hrs(r[lab.basis].otHrs) }}</td>
+                  <td>{{ r.stage === 'schedule' ? '—' : money(r[lab.basis].otPremium) }}</td>
                   <td class="muted">{{ hrs(r.mgmtSchHrs) }}</td>
                   <td class="no-print" @click.stop><button v-if="lab.dash.isAdmin" class="link small" @click="removeLabWeek(r)" :aria-label="'Remove ' + propertyName(r.property) + ' ' + weekLabel(r.week)" title="Remove this week">×</button></td>
                 </tr>
@@ -230,8 +254,8 @@
             <span class="muted">Recent = average actual hours over {{ labRep.recentWeeks ? labWeeksText(labRep.recentWeeks) : 'earlier weeks (none on file in the 8 weeks before)' }}<template v-if="labRep.recentAvgSales"> (sales averaged ${{ money(labRep.recentAvgSales) }})</template> ·
               <button class="link small no-print" @click="lab.jobsAll = !lab.jobsAll">{{ lab.jobsAll ? 'Hide not-counted codes' : 'Show every code' }}</button></span></div>
           <div class="scroll">
-            <table style="min-width:960px">
-              <thead><tr><th>Job code</th><th style="text-align:left">Group</th><th>People</th><th>Sched hrs</th><th>Actual hrs</th><th>Hrs vs sched</th><th>Recent hrs</th><th>OT hrs</th><th>Sched $</th><th>Actual $</th><th style="text-align:left;width:28%">Notes</th></tr></thead>
+            <table style="min-width:1080px">
+              <thead><tr><th>Job code</th><th style="text-align:left">Group</th><th>People</th><th>Sched hrs</th><th>Actual hrs</th><th>Hrs vs sched</th><th>Recent hrs</th><th>OT hrs</th><th>OT $</th><th>Added hrs</th><th>Sched $</th><th>Actual $</th><th style="text-align:left;width:28%">Notes</th></tr></thead>
               <tbody>
                 <tr v-for="j in labJobs" :key="j.job">
                   <td><b>{{ j.job }}</b></td>
@@ -242,6 +266,8 @@
                   <td :class="overCls(labRep.stage === 'schedule' || j.group === 'MGMT' ? null : j.varHrs, 1)">{{ labRep.stage === 'schedule' || j.group === 'MGMT' ? '—' : signedHrs(j.varHrs) }}</td>
                   <td class="muted">{{ j.recentHrs == null || j.group === 'MGMT' ? '—' : hrs(j.recentHrs) }}</td>
                   <td :class="{ bad: j.otHrs > 0 }">{{ j.otHrs ? hrs(j.otHrs) : '' }}</td>
+                  <td>{{ j.otPremium > 0.5 ? money(j.otPremium) : '' }}</td>
+                  <td :class="{ bad: j.addedHrs > 0 }">{{ j.addedHrs ? hrs(j.addedHrs) : '' }}</td>
                   <td>{{ j.group === 'MGMT' ? '' : money(j.schPay) }}</td>
                   <td>{{ j.group === 'MGMT' || labRep.stage === 'schedule' ? '' : money(j.actPay) }}</td>
                   <td style="text-align:left;white-space:normal"><span v-for="(n, i) in j.notes" :key="i" :class="n.kind === 'aboveRecent' ? 'muted' : 'bad'" style="display:block">{{ n.text }}</span></td>

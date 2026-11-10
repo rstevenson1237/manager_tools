@@ -42,8 +42,8 @@ embeddable in Google Sites.
 6. Adding the labor review to an existing install: add `Labor.gs`,
    `LaborApi.gs`, `LaborView` and `LaborScript`, replace `Code.gs`,
    `Store.gs`, `Index`, then run **`setup()`** once more. It adds the
-   *Labor Weeks*, *Labor Jobs* and *Labor Shifts* tabs and changes nothing
-   else.
+   *Labor Weeks*, *Labor Jobs*, *Labor Items* and *Labor Shifts* tabs and
+   changes nothing else.
 
 Properties register themselves the first time an upload contains them
 (code and name come from R365, e.g. `ARG1M - Bygone`). Rename or hide them
@@ -94,7 +94,7 @@ app rewrites them.
 | `Tags` | Manager notes on a month, and "timing / accrual" tags on a line. |
 | `Uploads` | Who uploaded what and when. |
 | `Inventory Checks`, `Inventory Flags` | The inventory check: one row per count, plus the items the rules picked (section 6). |
-| `Labor Weeks`, `Labor Jobs`, `Labor Shifts` | The labor review: one row per property and week, per job code, and per employee and job code with the seven days (section 7). |
+| `Labor Weeks`, `Labor Jobs`, `Labor Items`, `Labor Shifts` | The labor review: per property and week, the totals, one row per job code, and the people the week report names. Day-by-day schedules only while a week has no actuals (section 7). |
 | `_Config` (hidden) | Viewers, properties, flag rule, inventory reviewers, labor locations and job code groups. |
 
 ### Budget mapping
@@ -350,6 +350,28 @@ schedule is kept as the original. R365's own scheduled figures include every
 edit made during the week; the original shows what was written before the
 week started. The labor goal % columns in the export are not used.
 
+### What is kept
+
+An export holds every employee, job code and day: about 300 rows per
+property. The week is analysed when it is uploaded, and only this is saved:
+
+| Tab | Holds | Size |
+|---|---|---|
+| `Labor Weeks` | Sales, forecast, last year, the week's hour and pay totals | 1 row per property-week |
+| `Labor Jobs` | Per job code: hours and pay (scheduled and actual), overtime hours and premium $, hours and pay added on top of the schedule, the original schedule's hours and shifts added or removed. **The long-term record**: the dashboard reads only this and Labor Weeks | about 16 rows per property-week |
+| `Labor Items` | Only the people the week report names (off the schedule, covers, shifts nobody worked, overtime, scheduled over 40 hours, the managers' schedule) and one summary row (totals, the by-day table, names read as one person) | about 40 rows per property-week |
+| `Labor Shifts` | The employee-by-day schedule of a week with **no actuals yet**: what the actuals will be compared with | Deleted once the week is saved with actuals; any left after 5 weeks are dropped |
+
+For 10 properties, a 2,700-row export keeps about 550 rows, a fifth of its
+size. Employees who worked their schedule are not kept by name.
+
+Two consequences:
+- Uploading a week's actuals again (a payroll correction) keeps the
+  comparison with the original schedule worked out the first time. It
+  cannot be redone, because the day-by-day schedule is gone.
+- Changing a job code's group re-totals every week on file. The people
+  already named in a past week stay as they were.
+
 ### Groups
 
 Every job code belongs to one group. New codes are grouped by name when first
@@ -380,8 +402,11 @@ pay ÷ the sales forecast.
 
 Choose a date range and one or more properties (none chosen = all), and
 FOH, BOH or both. The cards add up the weeks with actuals: sales against
-forecast and last year, labor % against scheduled % and target, pay against
-the schedule, and overtime. Two charts show each week: labor % (actual,
+forecast and last year, and how far off forecasts were on average; labor %
+against scheduled % and target; pay against the schedule and hours added on
+top of it; overtime $ and hours. A **job code** table covers the same weeks
+and properties: hours against the schedule, pay, % of sales (of the
+property-weeks the code was used in), overtime hours and $, and added hours. Two charts show each week: labor % (actual,
 scheduled, target) and net sales (actual, forecast, last year). Hover a week
 for its figures. The table has one row per property and week; select a row
 for its week.

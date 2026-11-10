@@ -20,6 +20,7 @@
           sub: 'dashboard', dash: null, dashLoading: false, dashError: '',
           sel: [], from: '', to: '', basis: 'HOURLY',
           repKey: null, rep: null, repLoading: false, repError: '', against: 'final', peopleAll: false, jobsAll: false,
+          jobsShowAll: false,
           up: { fileName: '', text: null, stage: null, preview: null, mapping: {}, error: '', result: null },
           codes: null, codesLoading: false, codesError: '', draft: {}, codesSaving: false, codesFilter: ''
         }
@@ -64,6 +65,8 @@
             actHrs: done.length ? labSum(done, r => r[b].actHrs) : null, schHrs: labSum(rows, r => r[b].schHrs),
             schHrsDone: labSum(done, r => r[b].schHrs), schPayDone: labSum(done, r => r[b].schPay),
             otHrs: done.length ? labSum(done, r => r[b].otHrs) : null,
+            otPremium: done.length ? labSum(done, r => r[b].otPremium) : null,
+            addedHrs: done.length ? labSum(done, r => r[b].addedHrs) : null, addedPay: done.length ? labSum(done, r => r[b].addedPay) : null,
             actPct: net ? labSum(done, r => r[b].actPay) / net * 100 : null,
             schPct: forecastAll ? labSum(fc, r => r[b].schPay) / forecastAll * 100 : null,
             targetPct: tgt.length ? labSum(tgt, r => r.target[b] * r.net) / labSum(tgt, r => r.net)
@@ -86,7 +89,10 @@
           actPay: act, schPay: sch, actPct: net ? act / net * 100 : null,
           schPct: fc ? sch / fc * 100 : null,
           targetPct: tgtRows.length ? labSum(tgtRows, r => r.target[this.lab.basis] * r.net) / labSum(tgtRows, r => r.net) : null,
-          actHrs: labSum(done, s => s.actHrs), schHrs: labSum(done, s => s.schHrsDone), otHrs: labSum(done, s => s.otHrs)
+          actHrs: labSum(done, s => s.actHrs), schHrs: labSum(done, s => s.schHrsDone), otHrs: labSum(done, s => s.otHrs),
+          otPremium: labSum(done, s => s.otPremium), addedHrs: labSum(done, s => s.addedHrs), addedPay: labSum(done, s => s.addedPay),
+          // Forecast accuracy: the average miss of each property-week, either way.
+          forecastMiss: (() => { const m = []; done.forEach(s => s.rows.forEach(r => { if (r.net && r.forecast) m.push(Math.abs(r.net / r.forecast - 1) * 100); })); return m.length ? labSum(m, x => x) / m.length : null; })()
         };
       },
       labPctChart() {
@@ -102,6 +108,22 @@
           { key: 'plan', label: 'Forecast', color: LAB_COLORS.plan, dash: '6 4', get: s => s.forecast },
           { key: 'ref', label: 'Last year', color: LAB_COLORS.ref, dash: '2 4', get: s => s.py }
         ], false);
+      },
+      /** Job codes over the chosen weeks and properties (weeks with actuals), largest pay first. */
+      labJobTable() {
+        const b = this.lab.basis, by = {};
+        const rows = this.labRows.filter(r => r.stage !== 'schedule' && r.net);
+        rows.forEach(r => (r.jobs || []).forEach(j => {
+          const [job, grp, sh, ah, sp, ap, oh, op, xh] = j;
+          if (b === 'HOURLY' ? (grp !== 'FOH' && grp !== 'BOH') : grp !== b) return;
+          const k = job.toLowerCase().replace(/\s+/g, ' ').trim();
+          const x = by[k] = by[k] || { key: k, job, group: grp, props: {}, weeks: {}, sales: {}, schHrs: 0, actHrs: 0, schPay: 0, actPay: 0, otHrs: 0, otPremium: 0, addedHrs: 0 };
+          x.props[r.property] = true; x.weeks[r.week] = true; x.sales[r.property + '|' + r.week] = r.net;
+          x.schHrs += sh; x.actHrs += ah; x.schPay += sp; x.actPay += ap; x.otHrs += oh; x.otPremium += op; x.addedHrs += xh;
+        }));
+        // % of sales: pay ÷ the net sales of the property-weeks the code was used in.
+        return Object.values(by).map(x => { const net = labSum(Object.values(x.sales), v => v);
+          return Object.assign(x, { properties: Object.keys(x.props).length, weekCount: Object.keys(x.weeks).length, pct: net ? x.actPay / net * 100 : null }); }).sort((a, c) => c.actPay - a.actPay || c.actHrs - a.actHrs);
       },
       labTable() { return this.labRows.slice().sort((a, b) => b.week.localeCompare(a.week) || this.propertyName(a.property).localeCompare(this.propertyName(b.property))); },
       labWeekOptions() { return this.labAllRows.map(r => ({ key: r.property + '|' + r.week, property: r.property, week: r.week, stage: r.stage })); },
