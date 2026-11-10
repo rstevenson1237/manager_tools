@@ -1,0 +1,364 @@
+<script>
+  /* Weekly sales and labor review (included by Index.html before the main
+   * script). The main app mixes this in: it shares boot, go(), toast() and the
+   * number formatting. The server sends every property-week on file; the
+   * dashboard filters by property and date range here, in the page. */
+  const LAB_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const LAB_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const LAB_BASIS = [{ key: 'HOURLY', label: 'Hourly (FOH + BOH)' }, { key: 'FOH', label: 'Front of house' }, { key: 'BOH', label: 'Back of house' }];
+  const LAB_STAGES = { schedule: 'Schedule', partial: 'In progress', actual: 'Actual' };
+  /** Chart colours: actual, scheduled / forecast, target / last year. */
+  const LAB_COLORS = { actual: '#1F5FAD', plan: '#B5651D', ref: '#5F656E' };
+  const labAddDays = (d, n) => { const t = new Date(Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10) + n)); return t.toISOString().slice(0, 10); };
+  const labSum = (rows, f) => rows.reduce((s, r) => s + (f(r) || 0), 0);
+
+  const LaborMixin = {
+    data() {
+      return {
+        LAB_BASIS, LAB_COLORS, LAB_DAYS,
+        lab: {
+          sub: 'dashboard', dash: null, dashLoading: false, dashError: '',
+          sel: [], from: '', to: '', basis: 'HOURLY',
+          repKey: null, rep: null, repLoading: false, repError: '', peopleAll: false, jobsAll: false,
+          jobsShowAll: false,
+          up: { fileName: '', text: null, stage: null, preview: null, mapping: {}, error: '', result: null },
+          codes: null, codesLoading: false, codesError: '', draft: {}, codesSaving: false, codesFilter: ''
+        }
+      };
+    },
+    computed: {
+      labIsAdmin() { return !!this.boot.isAdmin; },
+      labSubViews() {
+        const v = [{ key: 'dashboard', label: 'Dashboard' }, { key: 'week', label: 'Week' }, { key: 'codes', label: 'Job codes' }];
+        return this.labIsAdmin ? v.concat([{ key: 'upload', label: 'Upload' }]) : v;
+      },
+      labAllRows() { return this.lab.dash ? this.lab.dash.rows : []; },
+      labProps() {
+        const has = {}; this.labAllRows.forEach(r => { has[r.property] = true; });
+        return (this.lab.dash ? this.lab.dash.properties : []).filter(p => has[p.code]);
+      },
+      labWeeks() { return Array.from(new Set(this.labAllRows.map(r => r.week))).sort().reverse(); },
+      labRows() {
+        const sel = this.lab.sel, from = this.lab.from || '0000', to = this.lab.to || '9999';
+        return this.labAllRows.filter(r => (!sel.length || sel.indexOf(r.property) !== -1) && r.week >= from && r.week <= to);
+      },
+      /** One point per week across the chosen properties, oldest first. */
+      labSeries() {
+        const by = {};
+        this.labRows.forEach(r => { (by[r.week] = by[r.week] || []).push(r); });
+        const b = this.lab.basis;
+        return Object.keys(by).sort().map(week => {
+          const rows = by[week];
+          const done = rows.filter(r => r.stage !== 'schedule' && r.net);
+          const fc = rows.filter(r => r.forecast);
+          const tgt = done.filter(r => r.target && r.target[b] != null);
+          const tgtF = fc.filter(r => r.target && r.target[b] != null);
+          const net = labSum(done, r => r.net), forecastAll = labSum(fc, r => r.forecast);
+          return {
+            week, rows, properties: rows.length,
+            stage: rows.some(r => r.stage === 'schedule') ? 'schedule' : rows.some(r => r.stage === 'partial') ? 'partial' : 'actual',
+            net: done.length ? net : null, forecast: fc.length ? forecastAll : null,
+            forecastDone: labSum(done, r => r.forecast) || null,
+            py: labSum(rows, r => r.py) || null, budget: labSum(rows, r => r.budgetNet) || null,
+            actPay: done.length ? labSum(done, r => r[b].actPay) : null, schPay: labSum(rows, r => r[b].schPay),
+            schPayFc: labSum(fc, r => r[b].schPay),
+            actHrs: done.length ? labSum(done, r => r[b].actHrs) : null, schHrs: labSum(rows, r => r[b].schHrs),
+            schHrsDone: labSum(done, r => r[b].schHrs), schPayDone: labSum(done, r => r[b].schPay),
+            otHrs: done.length ? labSum(done, r => r[b].otHrs) : null,
+            otPremium: done.length ? labSum(done, r => r[b].otPremium) : null,
+            addedHrs: done.length ? labSum(done, r => r[b].addedHrs) : null, addedPay: done.length ? labSum(done, r => r[b].addedPay) : null,
+            actPct: net ? labSum(done, r => r[b].actPay) / net * 100 : null,
+            schPct: forecastAll ? labSum(fc, r => r[b].schPay) / forecastAll * 100 : null,
+            targetPct: tgt.length ? labSum(tgt, r => r.target[b] * r.net) / labSum(tgt, r => r.net)
+              : (tgtF.length ? labSum(tgtF, r => r.target[b] * r.forecast) / labSum(tgtF, r => r.forecast) : null),
+            mgmtSchHrs: labSum(rows, r => r.mgmtSchHrs)
+          };
+        });
+      },
+      /** Totals over the past weeks in range (weeks with actuals). */
+      labTotals() {
+        const done = this.labSeries.filter(s => s.net != null);
+        const next = this.labSeries.filter(s => s.stage === 'schedule');
+        const net = labSum(done, s => s.net), fc = labSum(done, s => s.forecastDone), py = labSum(done, s => s.rows.filter(r => r.net).reduce((t, r) => t + (r.py || 0), 0));
+        const act = labSum(done, s => s.actPay), sch = labSum(done, s => s.schPayDone);
+        const tgtRows = [];
+        done.forEach(s => s.rows.forEach(r => { if (r.net && r.target && r.target[this.lab.basis] != null) tgtRows.push(r); }));
+        return {
+          weeks: done.length, upcoming: next.length, net, forecast: fc, py,
+          vsForecast: fc ? (net / fc - 1) * 100 : null, vsPy: py ? (net / py - 1) * 100 : null,
+          actPay: act, schPay: sch, actPct: net ? act / net * 100 : null,
+          schPct: fc ? sch / fc * 100 : null,
+          targetPct: tgtRows.length ? labSum(tgtRows, r => r.target[this.lab.basis] * r.net) / labSum(tgtRows, r => r.net) : null,
+          actHrs: labSum(done, s => s.actHrs), schHrs: labSum(done, s => s.schHrsDone), otHrs: labSum(done, s => s.otHrs),
+          otPremium: labSum(done, s => s.otPremium), addedHrs: labSum(done, s => s.addedHrs), addedPay: labSum(done, s => s.addedPay),
+          // Forecast accuracy: the average miss of each property-week, either way.
+          forecastMiss: (() => { const m = []; done.forEach(s => s.rows.forEach(r => { if (r.net && r.forecast) m.push(Math.abs(r.net / r.forecast - 1) * 100); })); return m.length ? labSum(m, x => x) / m.length : null; })()
+        };
+      },
+      labPctChart() {
+        return this.labChart([
+          { key: 'actual', label: 'Actual % of sales', color: LAB_COLORS.actual, get: s => s.actPct },
+          { key: 'plan', label: 'Scheduled % of forecast', color: LAB_COLORS.plan, dash: '6 4', get: s => s.schPct },
+          { key: 'ref', label: 'Target (budget)', color: LAB_COLORS.ref, dash: '2 4', get: s => s.targetPct }
+        ], true);
+      },
+      labSalesChart() {
+        return this.labChart([
+          { key: 'actual', label: 'Net sales', color: LAB_COLORS.actual, get: s => s.net },
+          { key: 'plan', label: 'Forecast', color: LAB_COLORS.plan, dash: '6 4', get: s => s.forecast },
+          { key: 'ref', label: 'Last year', color: LAB_COLORS.ref, dash: '2 4', get: s => s.py }
+        ], false);
+      },
+      /** Job codes over the chosen weeks and properties (weeks with actuals), largest pay first. */
+      labJobTable() {
+        const b = this.lab.basis, by = {};
+        const rows = this.labRows.filter(r => r.stage !== 'schedule' && r.net);
+        rows.forEach(r => (r.jobs || []).forEach(j => {
+          const [job, grp, sh, ah, sp, ap, oh, op, xh] = j;
+          if (b === 'HOURLY' ? (grp !== 'FOH' && grp !== 'BOH') : grp !== b) return;
+          const k = job.toLowerCase().replace(/\s+/g, ' ').trim();
+          const x = by[k] = by[k] || { key: k, job, group: grp, props: {}, weeks: {}, sales: {}, schHrs: 0, actHrs: 0, schPay: 0, actPay: 0, otHrs: 0, otPremium: 0, addedHrs: 0 };
+          x.props[r.property] = true; x.weeks[r.week] = true; x.sales[r.property + '|' + r.week] = r.net;
+          x.schHrs += sh; x.actHrs += ah; x.schPay += sp; x.actPay += ap; x.otHrs += oh; x.otPremium += op; x.addedHrs += xh;
+        }));
+        // % of sales: pay ÷ the net sales of the property-weeks the code was used in.
+        return Object.values(by).map(x => { const net = labSum(Object.values(x.sales), v => v);
+          return Object.assign(x, { properties: Object.keys(x.props).length, weekCount: Object.keys(x.weeks).length, pct: net ? x.actPay / net * 100 : null }); }).sort((a, c) => c.actPay - a.actPay || c.actHrs - a.actHrs);
+      },
+      labTable() { return this.labRows.slice().sort((a, b) => b.week.localeCompare(a.week) || this.propertyName(a.property).localeCompare(this.propertyName(b.property))); },
+      labWeekOptions() { return this.labAllRows.map(r => ({ key: r.property + '|' + r.week, property: r.property, week: r.week, stage: r.stage })); },
+      labRep() { return this.lab.rep && this.lab.rep.report; },
+      labOff() {
+        const r = this.labRep; if (!r) return null;
+        return r.people.off;
+      },
+      labPeople() {
+        const o = this.labOff; if (!o) return [];
+        const list = o.list.filter(p => p.extraHrs > 0 || p.notOnSchedule);
+        return this.lab.peopleAll ? list : list.slice(0, 25);
+      },
+      labCovered() {
+        const o = this.labOff; if (!o) return [];
+        return o.list.filter(p => p.unscheduled.some(u => u.coveredHrs > 0));
+      },
+      labMissed() {
+        const o = this.labOff; if (!o) return [];
+        return o.list.filter(p => p.missed.some(m => !m.coveredBy.length));
+      },
+      labJobs() {
+        const r = this.labRep; if (!r) return [];
+        return this.lab.jobsAll ? r.jobs : r.jobs.filter(j => j.group !== 'NONE' && (j.schHrs || j.actHrs));
+      },
+      labCodes() {
+        if (!this.lab.codes) return [];
+        const q = this.lab.codesFilter.trim().toLowerCase();
+        return this.lab.codes.jobs.filter(j => !q || j.job.toLowerCase().indexOf(q) !== -1 || j.properties.some(p => this.propertyName(p).toLowerCase().indexOf(q) !== -1));
+      },
+      labDraftCount() { return Object.keys(this.lab.draft).length; },
+      labUpSaveable() {
+        const p = this.lab.up.preview;
+        return p ? p.locations.filter(l => this.lab.up.mapping[l.location]).length : 0;
+      }
+    },
+    methods: {
+      /* ---------- formatting ---------- */
+      weekLabel(w, short) {
+        if (!w) return '';
+        const e = labAddDays(w, 6);
+        const a = LAB_MONTHS[+w.slice(5, 7) - 1] + ' ' + (+w.slice(8, 10));
+        const b = (e.slice(5, 7) === w.slice(5, 7) ? '' : LAB_MONTHS[+e.slice(5, 7) - 1] + ' ') + (+e.slice(8, 10));
+        return a + '–' + b + (short ? '' : ', ' + e.slice(0, 4));
+      },
+      dayName(week, i) { const d = labAddDays(week, i); return LAB_DAYS[i] + ' ' + (+d.slice(5, 7)) + '/' + (+d.slice(8, 10)); },
+      hrs(v) { if (v == null || isNaN(v)) return '—'; return (Math.round(v * 10) / 10).toLocaleString('en-US', { maximumFractionDigits: 1 }); },
+      signedHrs(v) { if (v == null || isNaN(v)) return '—'; const n = Math.round(v * 10) / 10; return (n > 0 ? '+' : n < 0 ? '−' : '') + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 1 }); },
+      labStage(s) { return LAB_STAGES[s] || s; },
+      labWeeksText(n) { return n === 1 ? 'the week before' : 'the last ' + n + ' weeks'; },
+      labStageClass(s) { return s === 'schedule' ? 'mtd' : s === 'partial' ? 'preliminary' : 'settled'; },
+      /** Colour for a cost against plan: over is bad. */
+      overCls(v, tol) { if (v == null || Math.abs(v) <= (tol || 0.05)) return 'muted'; return v > 0 ? 'bad' : 'good'; },
+      groupLabelOf(k) { return { FOH: 'FOH', BOH: 'BOH', MGMT: 'Mgmt', NONE: 'Not counted' }[k] || k; },
+      labDaysText(list, week, key) { return list.map(x => LAB_DAYS[x.day] + ' ' + this.hrs(x[key || 'hrs'])).join(', '); },
+
+      /** A line chart with one y-axis; points carry their own hover text. */
+      labChart(series, isPct) {
+        const pts = this.labSeries;
+        if (pts.length < 2) return null;
+        const w = 900, h = 240, left = 60, right = 18, top = 14, bottom = 28;
+        const vals = [];
+        series.forEach(s => pts.forEach(p => { const v = s.get(p); if (v != null) vals.push(v); }));
+        if (!vals.length) return null;
+        let lo = Math.min(...vals), hi = Math.max(...vals);
+        if (!isPct) lo = Math.min(lo, 0);
+        if (hi === lo) { hi += 1; lo -= 1; }
+        const pad = (hi - lo) * 0.1; hi += pad; if (isPct) lo = Math.max(0, lo - pad);
+        const n = pts.length;
+        // Weeks sit at their dates; a line breaks across weeks that are not on file.
+        const day = p => Date.UTC(+p.week.slice(0, 4), +p.week.slice(5, 7) - 1, +p.week.slice(8, 10)) / 86400000;
+        const d0 = day(pts[0]), span = Math.max(7, day(pts[n - 1]) - d0);
+        const X = i => left + (day(pts[i]) - d0) * (w - left - right) / span;
+        const gap = i => i > 0 && day(pts[i]) - day(pts[i - 1]) > 7;
+        const Y = v => top + (hi - v) / (hi - lo) * (h - top - bottom);
+        const fmt = v => isPct ? this.pct(v) : '$' + this.money(v);
+        const lines = series.map(s => {
+          const segs = []; let cur = [];
+          pts.forEach((p, i) => {
+            const v = s.get(p);
+            if (v == null || gap(i)) { if (cur.length > 1) segs.push(cur.join(' ')); cur = []; }
+            if (v != null) cur.push(X(i).toFixed(1) + ',' + Y(v).toFixed(1));
+          });
+          if (cur.length > 1) segs.push(cur.join(' '));
+          // A dot for a week with no neighbour on the line, so it is not lost.
+          const dots = pts.map((p, i) => {
+            const v = s.get(p); if (v == null) return null;
+            const prev = i > 0 && !gap(i) && s.get(pts[i - 1]) != null, next = i < n - 1 && !gap(i + 1) && s.get(pts[i + 1]) != null;
+            return { x: X(i), y: Y(v), key: p.week, alone: !prev && !next };
+          }).filter(Boolean);
+          const lastDot = dots[dots.length - 1];
+          return Object.assign({}, s, { segs, dots, last: lastDot ? { x: lastDot.x, y: lastDot.y, text: fmt(s.get(pts.filter(p => p.week === lastDot.key)[0])) } : null });
+        });
+        const grid = []; for (let g = 0; g <= 4; g++) { const v = lo + (hi - lo) * g / 4; grid.push({ y: Y(v), label: isPct ? v.toFixed(0) + '%' : this.compact(v) }); }
+        let lastLabel = -1e9;
+        const xLabels = pts.map((p, i) => {
+          const show = X(i) - lastLabel >= 80 && (i === n - 1 || X(n - 1) - X(i) >= 80 || n === 1);
+          if (show) lastLabel = X(i);
+          return { x: X(i), label: show ? this.weekLabel(p.week, true) : '', anchor: i === n - 1 && n > 1 ? 'end' : i === 0 ? 'start' : 'middle' };
+        });
+        return {
+          w, h, left, right, top, bottom, lines, grid,
+          xLabels,
+          hover: pts.map((p, i) => ({ x: X(i), x0: i ? (X(i - 1) + X(i)) / 2 : left, x1: i < n - 1 ? (X(i) + X(i + 1)) / 2 : w - right, week: p.week,
+            text: this.weekLabel(p.week) + (p.stage === 'schedule' ? ' (schedule)' : '') + '\n' + series.map(s => s.label + ': ' + (s.get(p) == null ? '—' : fmt(s.get(p)))).join('\n') }))
+        };
+      },
+
+      /* ---------- navigation ---------- */
+      labEnter() { this.labGo(this.lab.sub); },
+      async labGo(sub) {
+        this.lab.sub = sub;
+        if (sub === 'dashboard' || !this.lab.dash) await this.loadLabDash();
+        if (sub === 'week') this.loadLabWeek();
+        if (sub === 'codes') this.loadLabCodes();
+      },
+      async loadLabDash() {
+        this.lab.dashLoading = true; this.lab.dashError = '';
+        try {
+          this.lab.dash = await gas('getLaborDashboard');
+          const weeks = this.labWeeks;
+          if (!this.lab.to && weeks.length) this.lab.to = weeks[0];
+          if (!this.lab.from && weeks.length) this.lab.from = weeks[Math.min(weeks.length - 1, 12)];
+        } catch (err) { this.lab.dashError = err.message; }
+        this.lab.dashLoading = false;
+      },
+      labToggleProp(code) {
+        const i = this.lab.sel.indexOf(code);
+        if (i === -1) this.lab.sel.push(code); else this.lab.sel.splice(i, 1);
+      },
+      labRange(n) {
+        const weeks = this.labWeeks; if (!weeks.length) return;
+        this.lab.to = weeks[0]; this.lab.from = n ? weeks[Math.min(weeks.length - 1, n - 1)] : weeks[weeks.length - 1];
+      },
+      openLabWeek(property, week) {
+        this.lab.repKey = property + '|' + week;
+        if (this.view !== 'labor') this.view = 'labor';
+        this.labGo('week');
+      },
+
+      /* ---------- week report ---------- */
+      async loadLabWeek() {
+        const opts = this.labWeekOptions;
+        if (!opts.length) { this.lab.rep = null; return; }
+        if (!opts.some(o => o.key === this.lab.repKey)) {
+          const past = opts.filter(o => o.stage !== 'schedule').sort((a, b) => b.week.localeCompare(a.week))[0];
+          this.lab.repKey = (past || opts[0]).key;
+        }
+        const i = this.lab.repKey.indexOf('|');
+        this.lab.repLoading = true; this.lab.repError = ''; this.lab.peopleAll = false; this.lab.jobsAll = false;
+        try {
+          this.lab.rep = await gas('getLaborWeek', this.lab.repKey.slice(0, i), this.lab.repKey.slice(i + 1));
+        } catch (err) { this.lab.rep = null; this.lab.repError = err.message; }
+        this.lab.repLoading = false;
+      },
+      labStepWeek(dir) {
+        const r = this.labRep; if (!r) return;
+        const weeks = this.labWeekOptions.filter(o => o.property === r.property).map(o => o.week).sort();
+        const i = weeks.indexOf(r.week) + dir;
+        if (i >= 0 && i < weeks.length) { this.lab.repKey = r.property + '|' + weeks[i]; this.loadLabWeek(); }
+      },
+      labHasStep(dir) {
+        const r = this.labRep; if (!r) return false;
+        const weeks = this.labWeekOptions.filter(o => o.property === r.property).map(o => o.week).sort();
+        const i = weeks.indexOf(r.week) + dir;
+        return i >= 0 && i < weeks.length;
+      },
+      async removeLabWeek(row) {
+        if (!confirm('Remove ' + this.propertyName(row.property) + ', week of ' + this.weekLabel(row.week) + '?')) return;
+        try { await gas('removeLaborWeek', row.property, row.week); this.toast('Week removed.', 'success'); await this.loadLabDash(); }
+        catch (err) { this.toast(err.message, 'error'); }
+      },
+
+      /* ---------- upload ---------- */
+      onLabFile(e) {
+        const f = (e.target.files || [])[0];
+        e.target.value = '';
+        if (!f) return;
+        const up = this.lab.up;
+        Object.assign(up, { fileName: f.name, text: null, stage: 'reading', preview: null, mapping: {}, error: '', result: null });
+        const reader = new FileReader();
+        reader.onload = ev => { up.text = ev.target.result; this.previewLab(true); };
+        reader.readAsText(f);
+      },
+      async previewLab(first) {
+        const up = this.lab.up;
+        up.stage = 'reading'; up.error = '';
+        try {
+          const p = await gas('previewLaborUpload', up.text, up.fileName, first ? null : up.mapping);
+          if (first) { const m = {}; p.locations.forEach(l => { m[l.location] = l.property; }); up.mapping = m; }
+          up.preview = p; up.stage = 'preview';
+        } catch (err) { up.stage = 'error'; up.error = err.message; up.preview = null; }
+      },
+      labPropChoices(loc) {
+        const list = (this.lab.up.preview ? this.lab.up.preview.properties : []).filter(p => p.active !== false && !p.laborOnly);
+        const own = list.some(p => p.code === loc) ? [] : [{ code: loc, name: loc + ' (its own, not on the P&L)' }];
+        return list.concat(own);
+      },
+      async commitLab() {
+        const up = this.lab.up;
+        up.stage = 'saving';
+        try {
+          up.result = await gas('commitLaborUpload', up.text, up.fileName, up.mapping);
+          up.stage = 'saved';
+          this.toast('Saved ' + up.result.saved.length + ' location' + (up.result.saved.length === 1 ? '' : 's') + ' for the week of ' + this.weekLabel(up.result.week) + '.', 'success');
+          this.lab.from = ''; this.lab.to = '';
+          await this.loadLabDash();
+          this.lab.codes = null;
+        } catch (err) { up.stage = 'preview'; up.error = err.message; this.toast(err.message, 'error'); }
+      },
+      labResetUpload() { Object.assign(this.lab.up, { fileName: '', text: null, stage: null, preview: null, mapping: {}, error: '', result: null }); },
+
+      /* ---------- job codes ---------- */
+      async loadLabCodes() {
+        if (this.lab.codes && !this.labDraftCount) return;
+        this.lab.codesLoading = true; this.lab.codesError = '';
+        try { this.lab.codes = await gas('getLaborJobCodes'); this.lab.draft = {}; }
+        catch (err) { this.lab.codesError = err.message; }
+        this.lab.codesLoading = false;
+      },
+      labSetGroup(j, g) {
+        if (g === j.group) delete this.lab.draft[j.job]; else this.lab.draft[j.job] = g;
+        this.lab.draft = Object.assign({}, this.lab.draft);
+      },
+      async saveLabCodes() {
+        this.lab.codesSaving = true;
+        try {
+          this.lab.codes = await gas('saveLaborJobGroups', this.lab.draft);
+          this.lab.draft = {};
+          this.toast('Job code groups saved. Every week on file uses them.', 'success');
+          this.lab.rep = null;
+          await this.loadLabDash();
+        } catch (err) { this.toast(err.message, 'error'); }
+        this.lab.codesSaving = false;
+      }
+    }
+  };
+</script>

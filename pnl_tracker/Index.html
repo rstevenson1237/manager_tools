@@ -122,6 +122,12 @@
     .subtab:hover:not(:disabled){background:#F1F2EF;}
     .subtab.active,.subtab.active:hover:not(:disabled){background:var(--brand-soft);color:var(--brand-dark);}
     .print-only{display:none;}
+    /* labor */
+    .lab-hover .cross{opacity:0;} .lab-hover:hover .cross{opacity:.35;}
+    .lab-props{display:flex;flex-wrap:wrap;gap:6px;}
+    .lab-prop{background:#fff;color:#3D434B;border:1px solid #C9CCD1;min-height:32px;padding:0 12px;font-size:13px;border-radius:999px;}
+    .lab-prop:hover:not(:disabled){background:#F1F2EF;}
+    .lab-prop.on,.lab-prop.on:hover:not(:disabled){background:var(--brand-soft);color:var(--brand-dark);border-color:var(--brand);}
     @media print{nav.top,.no-print,.toast-stack{display:none !important;} body{background:#fff;} main{padding:0;} .card{break-inside:avoid;}
       .pl-scroll{max-height:none;overflow:visible;} .pl-scroll .line-col,.pl-scroll th{position:static;} .col-resize{display:none;}
     </style>
@@ -152,7 +158,7 @@
     </nav>
 
     <main>
-      <div v-if="!periods.length && view !== 'upload' && view !== 'inventory'" class="card empty">
+      <div v-if="!periods.length && view !== 'upload' && view !== 'inventory' && view !== 'labor'" class="card empty">
         Nothing uploaded yet.
         <template v-if="boot.isAdmin"><br><br><button @click="go('upload')">Upload a P&amp;L</button></template>
       </div>
@@ -402,7 +408,7 @@
         <template v-if="chart && !loading.trends">
           <div class="card">
             <h2 style="margin-bottom:8px">{{ chart.label }} · last 24 months</h2>
-            <svg :viewBox="'0 0 ' + chart.w + ' ' + chart.h" :style="{ width: '100%', aspectRatio: chart.w + ' / ' + chart.h, display: 'block' }" role="img" :aria-label="chart.label + ' by month, actual against budget and last year'">
+            <svg v-bind="{ viewBox: '0 0 ' + chart.w + ' ' + chart.h }" :style="{ width: '100%', aspectRatio: chart.w + ' / ' + chart.h, display: 'block' }" role="img" :aria-label="chart.label + ' by month, actual against budget and last year'">
               <g v-for="g in chart.grid" :key="g.y">
                 <line :x1="chart.left" :x2="chart.w - 10" :y1="g.y" :y2="g.y" stroke="#EDEDE8"></line>
                 <text :x="chart.left - 6" :y="g.y + 4" font-size="11" fill="#5A6069" text-anchor="end">{{ g.label }}</text>
@@ -611,6 +617,7 @@
       </template>
 
 <?!= include('InventoryView'); ?>
+<?!= include('LaborView'); ?>
 
       <!-- ============================== UPLOAD & SETTINGS ============================== -->
       <template v-if="view === 'upload' && boot.isAdmin">
@@ -801,6 +808,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/vue@3.4.31/dist/vue.global.prod.js"></script>
 <?!= include('InventoryScript'); ?>
+<?!= include('LaborScript'); ?>
 <script>
   const VIEWS = [
     { key: 'portfolio', label: 'Portfolio' },
@@ -808,6 +816,7 @@
     { key: 'trends', label: 'Trends' },
     { key: 'budget', label: 'Budget review' },
     { key: 'inventory', label: 'Inventory' },
+    { key: 'labor', label: 'Labor' },
     { key: 'upload', label: 'Upload & settings', admin: true }
   ];
   const TREND_KEYS = [
@@ -844,7 +853,7 @@
   const addMonths = (p, n) => { const y = +p.slice(0, 4), m = +p.slice(5, 7) - 1 + n; const yy = y + Math.floor(m / 12), mm = ((m % 12) + 12) % 12 + 1; return yy + '-' + String(mm).padStart(2, '0'); };
 
   Vue.createApp({
-    mixins: [InventoryMixin],
+    mixins: [InventoryMixin, LaborMixin],
     data() {
       return {
         VIEWS, TREND_KEYS, GROUPINGS, LINE_COL_MIN, LINE_COL_MAX,
@@ -1105,6 +1114,7 @@
         if (view === 'trends') this.loadTrends();
         if (view === 'budget') this.loadReview();
         if (view === 'inventory') this.invEnter();
+        if (view === 'labor') this.labEnter();
       },
       openReview(code, year) { this.reviewProperty = code; this.reviewYear = year; this.go('budget'); },
       async loadReview() {

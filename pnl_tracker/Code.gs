@@ -19,11 +19,15 @@
  *     InventoryCheck.gs  the regional inventory check: summary, report rows
  *     Import.gs    upload endpoints (preview, then save)
  *     InventoryApi.gs  inventory endpoints (upload, dashboard, report)
+ *     Labor.gs     the weekly sales and labor review: reads R365's Labor Actual
+ *                  vs Scheduled export, dashboard rows, the week report
+ *     LaborApi.gs  labor endpoints (upload, dashboard, week report, job codes)
  *     Code.gs      this file: setup, access, settings, read endpoints
- *   Parse/Budget/Store/Analysis/Review/InventoryRules/InventoryCheck use no
+ *   Parse/Budget/Store/Analysis/Review/InventoryRules/InventoryCheck/Labor use no
  *   Apps Script services,
  *   so tests/ runs them in Node against sample exports. Index.html pulls in
- *   InventoryView.html and InventoryScript.html with include().
+ *   InventoryView.html, InventoryScript.html, LaborView.html and
+ *   LaborScript.html with include().
  *
  * ACCESS
  *   Global admins (Script Properties, same list mechanism as the sibling
@@ -40,14 +44,16 @@ const DEFAULT_GLOBAL_ADMINS = ['robert.stevenson@atlasrestaurantgroup.com'];
 
 /** Columns kept as plain text so Sheets never turns '2026-10' or '7312.1' into a date or number. */
 const TEXT_COLUMNS = { actuals: [1, 2, 3, 10], detail: [1, 2, 3, 4], budget: [2, 4], tags: [1, 2, 3], uploads: [1],
-  invChecks: [1, 2, 3, 4, 5, 6, 7, 18], invFlags: [1, 2, 3, 4, 5, 6, 16, 17, 18] };
+  invChecks: [1, 2, 3, 4, 5, 6, 7, 18], invFlags: [1, 2, 3, 4, 5, 6, 16, 17, 18],
+  laborWeeks: [1, 2, 3, 4, 5, 16, 17, 18, 19], laborJobs: [1, 2, 3], laborItems: [1, 2, 3, 4, 5, 6, 11] };
 
 const CONFIG_SHEET_NAME = '_Config';
 const CONFIG_ROWS = [
   { key: 'viewers', label: 'Viewers', type: 'list' },
   { key: 'properties', label: 'Properties', type: 'json' },
   { key: 'rules', label: 'Flag Rules', type: 'json' },
-  { key: 'inventory', label: 'Inventory', type: 'json' }
+  { key: 'inventory', label: 'Inventory', type: 'json' },
+  { key: 'labor', label: 'Labor', type: 'json' }
 ];
 
 /** ------------------------------------------------------------ WEB APP ENTRY */
@@ -184,7 +190,12 @@ function appendDataRows_(ss, key, rows) {
 
 /** --------------------------------------------------------------- _CONFIG */
 function defaultConfig_() {
-  return { viewers: [], properties: [], rules: JSON.parse(JSON.stringify(DEFAULT_RULES)), inventory: defaultInventoryConfig_() };
+  return { viewers: [], properties: [], rules: JSON.parse(JSON.stringify(DEFAULT_RULES)), inventory: defaultInventoryConfig_(),
+    labor: defaultLaborConfig_() };
+}
+/** locations: export location name → property code; jobs: job code (lower case) → FOH | BOH | MGMT | NONE. */
+function defaultLaborConfig_() {
+  return { locations: {}, jobs: {} };
 }
 function defaultInventoryConfig_() {
   return { reviewers: [] };
@@ -231,6 +242,9 @@ function readConfig_(ss) {
   out.inventory = {
     reviewers: Array.isArray(inv.reviewers) ? inv.reviewers.map(String).filter(Boolean) : []
   };
+  const lab = out.labor && typeof out.labor === 'object' ? out.labor : {};
+  const obj = function (v) { return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; };
+  out.labor = { locations: obj(lab.locations), jobs: obj(lab.jobs) };
   return out;
 }
 
