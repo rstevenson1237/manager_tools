@@ -158,8 +158,6 @@
           <button class="ghost" @click="labStepWeek(1)" :disabled="!labHasStep(1)" aria-label="Next week">›</button>
         </div>
         <div class="controls">
-          <qs-mode v-if="labQs"></qs-mode>
-          <button v-if="labQs && !qsInline()" class="ghost" @click="qsToggle(labQs)">{{ qsIsOpen(labQs) ? 'Hide the questions' : 'Choose the questions' }}</button>
           <button v-if="labQs" @click="qsCopy(labQs)">Copy the questions ({{ qsPickedItems(labQs).length }})</button>
           <button class="ghost" @click="printPage" :disabled="!labRep">Print / save as PDF</button>
         </div>
@@ -172,7 +170,7 @@
           <h1>{{ propertyName(labRep.property) }} · week of {{ weekLabel(labRep.week) }}
             <span :class="['badge', labStageClass(labRep.stage)]">{{ labStage(labRep.stage) }}</span></h1>
         </div>
-        <question-panel :set="labQs"></question-panel>
+        <question-overview :set="labQs"></question-overview>
         <div v-if="labRep.stage === 'schedule'" class="banner info">The week has not started: this is the schedule as written, judged against the forecast<template v-if="labRep.targetSource"> and {{ labRep.targetSource === 'budget' ? 'the budget' : labWeeksText(labRep.recentWeeks) }}</template>. Upload the week again once it is over to see actuals.</div>
         <div v-else-if="labRep.stage === 'partial'" class="banner warn">The week is not over yet: actuals run only to the upload.</div>
         <div v-if="!labRep.targetSource" class="banner warn">No budget for this property and no weeks on file in the 8 weeks before: labor % has no target yet.</div>

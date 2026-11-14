@@ -101,20 +101,13 @@
     .review-item:first-child{border-top:none;padding-top:0;}
     .review-item .track{font-size:12px;color:#3D434B;display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
     .sub-head{font-size:14px;margin:16px 0 4px;}
-    .qs-item{flex-direction:row;align-items:flex-start;gap:10px;cursor:pointer;}
-    .qs-item input{margin-top:3px;}
-    .qs-overview{font-size:15px;margin:0 0 6px;}
+    .qs-overview{font-size:14px;margin:0 0 6px;}
     button.qs-dot{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;min-height:0;padding:0;margin:-4px 2px -4px -4px;background:none;border:none;border-radius:50%;vertical-align:middle;flex:none;}
     button.qs-dot::before{content:'';width:12px;height:12px;border-radius:50%;border:2px solid var(--bad);background:#fff;box-sizing:border-box;}
     button.qs-dot.on::before{background:var(--bad);}
     button.qs-dot:hover:not(:disabled){background:var(--bad-soft);}
     button.qs-dot:focus-visible{outline:2px solid var(--brand);}
     .qs-dot-legend{display:inline-block;width:12px;height:12px;border-radius:50%;background:var(--bad);vertical-align:-1px;}
-    .qs-inline .qs-overview{font-size:14px;}
-    .qs-mode{display:inline-flex;border:1px solid #C9CCD1;border-radius:8px;overflow:hidden;align-self:flex-end;}
-    .qs-mode button{background:#fff;color:var(--ink);border-radius:0;min-height:38px;padding:0 12px;font-size:13px;font-weight:500;}
-    .qs-mode button.on{background:var(--brand-soft);color:var(--brand-dark);font-weight:600;}
-    .qs-mode button:hover:not(:disabled){background:#F1F2EF;}
     .mark-word{font-size:11px;font-weight:600;color:var(--bad);text-transform:uppercase;letter-spacing:.03em;margin-left:4px;}
     .badge.draft{background:#FFF7D6;color:#5C4400;border:1px solid #D9B648;}
     .badge.approved{background:var(--brand-soft);color:var(--brand-dark);}
@@ -266,8 +259,6 @@
               </select></div>
           </div>
           <div class="controls">
-            <qs-mode v-if="pnlQs"></qs-mode>
-            <button v-if="pnlQs && !qsInline()" class="ghost" @click="qsToggle(pnlQs)">{{ qsIsOpen(pnlQs) ? 'Hide the questions' : 'Choose the questions' }}</button>
             <button v-if="pnlQs" @click="qsCopy(pnlQs)">Copy the questions ({{ qsPickedItems(pnlQs).length }})</button>
             <button class="ghost" @click="printPage" :disabled="!report">Print / save as PDF</button>
           </div>
@@ -279,7 +270,7 @@
             <div class="muted">{{ stageSentence(report) }}</div>
             <h1>{{ propertyName(report.property) }} · {{ reportGrouped ? groupLabel(report.period, report.grouping) : monthLabel(report.period) }} <span :class="['badge', report.stage]">{{ stageLabel(report.stage) }}</span></h1>
           </div>
-          <question-panel :set="pnlQs"></question-panel>
+          <question-overview :set="pnlQs"></question-overview>
 
           <div class="banner info" v-if="report.stage === 'mtd' && reportGrouped">
             {{ monthLabel(report.months[report.months.length - 1]) }} is month to date through {{ dayLabel(report.asOf) }}. Its budget and last year
@@ -353,7 +344,7 @@
 
           <div class="card flush">
             <div class="head"><h2>Profit &amp; loss</h2>
-              <span class="muted"><span class="good"><b>Blue</b></span> = better · <span class="bad"><b>orange</b></span> = worse<template v-if="!qsInline()"> · ● flagged · ○ missing</template><template v-else> · <span class="qs-dot-legend"></span> in the questions (click a circle to add or leave out)</template></span></div>
+              <span class="muted"><span class="good"><b>Blue</b></span> = better · <span class="bad"><b>orange</b></span> = worse · <span class="qs-dot-legend"></span> in the questions (click a circle to add or leave out)</span></div>
             <div class="pl-scroll">
               <table :style="{ minWidth: (lineColWidth + (reportGrouped ? 6 : 8) * 100) + 'px' }">
                 <thead><tr>
@@ -368,9 +359,8 @@
                     <tr v-if="r.head" class="sec"><td :colspan="reportGrouped ? 7 : 9"><span class="sec-label">{{ r.head }}</span></td></tr>
                     <tr v-else :class="{ total: r.kind === 'sectionTotal' || (r.kind === 'computed' && r.key !== 'OPERATING_INCOME'), key: r.key === 'OPERATING_INCOME' }">
                       <td class="line-col" :style="lineColStyle" :class="{ indent: r.kind === 'line' || r.kind === 'group', indent2: r.kind === 'sub' }">
-                        {{ lineLabel(r) }}<template v-if="qsInline()"><span v-if="r.flag" class="mark-word">flagged</span><span v-if="r.missing" class="mark-word">missing</span>
-                          <qs-dot :set="pnlQs" :id="pnlRowId(r)"></qs-dot></template>
-                        <template v-else><span v-if="r.flag" class="bad"> ●</span><span v-if="r.missing" class="bad"> ○</span></template>
+                        {{ lineLabel(r) }}<span v-if="r.flag" class="mark-word">flagged</span><span v-if="r.missing" class="mark-word">missing</span>
+                        <qs-dot :set="pnlQs" :id="pnlRowId(r)"></qs-dot>
                       </td>
                       <td>{{ money(r.actual) }}</td>
                       <td class="muted" :title="'% of ' + r.pctOf">{{ pct(r.pct) }}</td>
@@ -486,8 +476,6 @@
           </div>
           <div class="controls">
             <button v-if="boot.isAdmin" class="ghost" @click="go('upload')">Upload a new version</button>
-            <qs-mode v-if="budgetQs"></qs-mode>
-            <button v-if="budgetQs && !qsInline()" class="ghost" @click="qsToggle(budgetQs)">{{ qsIsOpen(budgetQs) ? 'Hide the questions' : 'Choose the questions' }}</button>
             <button v-if="budgetQs" @click="qsCopy(budgetQs)">Copy the questions ({{ qsPickedItems(budgetQs).length }})</button>
             <button class="ghost" @click="printPage" :disabled="!review">Print / save as PDF</button>
           </div>
@@ -504,7 +492,7 @@
               · last budget: {{ review.track.year }}, {{ spanLabel([review.track.first, review.track.last]) }} on file</template><template v-else> · no {{ review.year - 1 }} budget on file to check the track record</template>.
             </div>
           </div>
-          <question-panel :set="budgetQs"></question-panel>
+          <question-overview :set="budgetQs"></question-overview>
           <div v-if="!review.basis.covered" class="banner warn">No months from {{ review.year - 1 }} or {{ review.year - 2 }} are on file for this property, so there is nothing to compare the budget with.</div>
 
           <div class="row" style="align-items:stretch">
@@ -1375,7 +1363,7 @@
         catch (err) { this.settings.error = err.message; }
       }
     }
-  }).component('question-panel', QuestionPanel).component('qs-dot', QsDot).component('qs-mode', QsMode).mount('#app');
+  }).component('question-overview', QuestionOverview).component('qs-dot', QsDot).mount('#app');
 </script>
 </body>
 </html>

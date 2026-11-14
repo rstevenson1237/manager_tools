@@ -459,33 +459,25 @@ groups or remove a week. The inventory-only role does not see this tab.
 ## 8. Questions for the property
 
 The period report, budget review, inventory report and labor week each
-have **Choose the questions** and **Copy the questions** at the top. The
-copied text starts with one sentence on how the property did on what that
-page covers, then lists the issues that page noted, ready to paste into an
-email. Tick the issues to include: **major** issues start ticked, **minor**
-ones unticked.
+have **Copy the questions** at the top. The copied text starts with one
+sentence on how the property did on what that page covers (shown under the
+page title), then lists the issues chosen, ready to paste into an email.
 
-| Page | Overview sentence | Major (ticked) | Minor (unticked) |
+A circle sits next to each issue where the page already shows it (flag
+cards, P&L table rows, budget lists, inventory items, labor findings).
+Filled = in the questions, empty = left out; click to change. **Major**
+issues start filled, **minor** ones empty. On the P&L table, flagged and
+missing lines are marked with the words *flagged* and *missing*.
+
+| Page | Overview sentence | Major (filled) | Minor (empty) |
 |---|---|---|---|
 | Period report, month | Operating income against budget and last year, and net sales against budget | Flags; lines that posted nothing once the month is settled | Flags tagged as timing; lines not posted yet; other cost lines worse than budget by `driverMin` ($1,000) |
 | Period report, quarter / YTD | The same, for the span | Cost lines worse than budget by the flag rule (`minDollar` and `minPct`) | Other cost lines worse than budget by `driverMin` |
 | Budget review | Budgeted operating income and sales growth against last year, and how last year's budget is tracking | Likely errors; where the budget pushes | Checks; room in the budget |
-| Inventory report | Value and change on the last count, days on hand, and how many items need an answer | Questions for the store | Smaller items the rules picked (also tickable in place) |
+| Inventory report | Value and change on the last count, days on hand, and how many items need an answer | Questions for the store | Smaller items the rules picked  |
 | Labor week | Sales against forecast, hourly labor against target, and overtime (for a schedule: scheduled labor against the forecast) | Findings marked bad or warn | Other findings |
 
-Two ways to pick are offered while they are compared (the switch next to
-**Copy the questions**; each browser remembers its choice):
-
-- **In place:** a circle next to each issue where the page already shows
-  it (flag cards, P&L table rows, budget lists, inventory items, labor
-  findings). Filled = in the questions; click to change. The overview
-  sentence sits under the page title. On the P&L table the flagged and
-  missing markers become the words *flagged* and *missing*, so they are not
-  mistaken for the circles.
-- **As a list:** **Choose the questions** opens a panel listing every issue
-  with a tick box, under the overview.
-
-The ticks are kept only in the open page, per report, until it is
+The choices are kept only in the open page, per report, until it is
 reloaded. Nothing is saved, so the data workbook does not grow.
 
 ## 9. Code layout
