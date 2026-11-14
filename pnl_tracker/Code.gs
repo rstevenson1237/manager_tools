@@ -26,8 +26,8 @@
  *   Parse/Budget/Store/Analysis/Review/InventoryRules/InventoryCheck/Labor use no
  *   Apps Script services,
  *   so tests/ runs them in Node against sample exports. Index.html pulls in
- *   InventoryView.html, InventoryScript.html, LaborView.html and
- *   LaborScript.html with include().
+ *   QuestionsScript.html, InventoryView.html, InventoryScript.html,
+ *   LaborView.html and LaborScript.html with include().
  *
  * ACCESS
  *   Global admins (Script Properties, same list mechanism as the sibling

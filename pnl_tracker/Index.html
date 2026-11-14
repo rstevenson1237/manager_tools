@@ -101,6 +101,14 @@
     .review-item:first-child{border-top:none;padding-top:0;}
     .review-item .track{font-size:12px;color:#3D434B;display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
     .sub-head{font-size:14px;margin:16px 0 4px;}
+    .qs-overview{font-size:14px;margin:0 0 6px;}
+    button.qs-dot{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;min-height:0;padding:0;margin:-4px 2px -4px -4px;background:none;border:none;border-radius:50%;vertical-align:middle;flex:none;}
+    button.qs-dot::before{content:'';width:12px;height:12px;border-radius:50%;border:2px solid var(--bad);background:#fff;box-sizing:border-box;}
+    button.qs-dot.on::before{background:var(--bad);}
+    button.qs-dot:hover:not(:disabled){background:var(--bad-soft);}
+    button.qs-dot:focus-visible{outline:2px solid var(--brand);}
+    .qs-dot-legend{display:inline-block;width:12px;height:12px;border-radius:50%;background:var(--bad);vertical-align:-1px;}
+    .mark-word{font-size:11px;font-weight:600;color:var(--bad);text-transform:uppercase;letter-spacing:.03em;margin-left:4px;}
     .badge.draft{background:#FFF7D6;color:#5C4400;border:1px solid #D9B648;}
     .badge.approved{background:var(--brand-soft);color:var(--brand-dark);}
     /* P&L table: header row and line column stay put while the numbers scroll */
@@ -250,7 +258,10 @@
                 <option v-for="o in periodOptions(periodsFor(property))" :key="o.value" :value="o.value">{{ o.label }}</option>
               </select></div>
           </div>
-          <button class="ghost" @click="printPage" :disabled="!report">Print / save as PDF</button>
+          <div class="controls">
+            <button v-if="pnlQs" @click="qsCopy(pnlQs)">Copy the questions ({{ qsPickedItems(pnlQs).length }})</button>
+            <button class="ghost" @click="printPage" :disabled="!report">Print / save as PDF</button>
+          </div>
         </div>
         <div v-if="loading.report" class="muted"><span class="spin"></span>Loading…</div>
         <div v-else-if="reportError" class="banner warn">{{ reportError }}</div>
@@ -259,6 +270,7 @@
             <div class="muted">{{ stageSentence(report) }}</div>
             <h1>{{ propertyName(report.property) }} · {{ reportGrouped ? groupLabel(report.period, report.grouping) : monthLabel(report.period) }} <span :class="['badge', report.stage]">{{ stageLabel(report.stage) }}</span></h1>
           </div>
+          <question-overview :set="pnlQs"></question-overview>
 
           <div class="banner info" v-if="report.stage === 'mtd' && reportGrouped">
             {{ monthLabel(report.months[report.months.length - 1]) }} is month to date through {{ dayLabel(report.asOf) }}. Its budget and last year
@@ -304,7 +316,7 @@
             <div class="grid wide">
               <div v-for="f in report.flags" :key="f.key" :class="['flag-card', { tagged: f.tagged }]">
                 <div class="row" style="align-items:baseline">
-                  <b>{{ f.key }} {{ f.name }}</b>
+                  <b><qs-dot :set="pnlQs" :id="'f' + f.key"></qs-dot>{{ f.key }} {{ f.name }}</b>
                   <span class="bad" style="font-weight:700">{{ money(f.actual) }}</span>
                 </div>
                 <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
@@ -332,7 +344,7 @@
 
           <div class="card flush">
             <div class="head"><h2>Profit &amp; loss</h2>
-              <span class="muted"><span class="good"><b>Blue</b></span> = better · <span class="bad"><b>orange</b></span> = worse · ● flagged · ○ missing</span></div>
+              <span class="muted"><span class="good"><b>Blue</b></span> = better · <span class="bad"><b>orange</b></span> = worse · <span class="qs-dot-legend"></span> in the questions (click a circle to add or leave out)</span></div>
             <div class="pl-scroll">
               <table :style="{ minWidth: (lineColWidth + (reportGrouped ? 6 : 8) * 100) + 'px' }">
                 <thead><tr>
@@ -347,7 +359,8 @@
                     <tr v-if="r.head" class="sec"><td :colspan="reportGrouped ? 7 : 9"><span class="sec-label">{{ r.head }}</span></td></tr>
                     <tr v-else :class="{ total: r.kind === 'sectionTotal' || (r.kind === 'computed' && r.key !== 'OPERATING_INCOME'), key: r.key === 'OPERATING_INCOME' }">
                       <td class="line-col" :style="lineColStyle" :class="{ indent: r.kind === 'line' || r.kind === 'group', indent2: r.kind === 'sub' }">
-                        {{ lineLabel(r) }}<span v-if="r.flag" class="bad"> ●</span><span v-if="r.missing" class="bad"> ○</span>
+                        {{ lineLabel(r) }}<span v-if="r.flag" class="mark-word">flagged</span><span v-if="r.missing" class="mark-word">missing</span>
+                        <qs-dot :set="pnlQs" :id="pnlRowId(r)"></qs-dot>
                       </td>
                       <td>{{ money(r.actual) }}</td>
                       <td class="muted" :title="'% of ' + r.pctOf">{{ pct(r.pct) }}</td>
@@ -463,6 +476,7 @@
           </div>
           <div class="controls">
             <button v-if="boot.isAdmin" class="ghost" @click="go('upload')">Upload a new version</button>
+            <button v-if="budgetQs" @click="qsCopy(budgetQs)">Copy the questions ({{ qsPickedItems(budgetQs).length }})</button>
             <button class="ghost" @click="printPage" :disabled="!review">Print / save as PDF</button>
           </div>
         </div>
@@ -478,6 +492,7 @@
               · last budget: {{ review.track.year }}, {{ spanLabel([review.track.first, review.track.last]) }} on file</template><template v-else> · no {{ review.year - 1 }} budget on file to check the track record</template>.
             </div>
           </div>
+          <question-overview :set="budgetQs"></question-overview>
           <div v-if="!review.basis.covered" class="banner warn">No months from {{ review.year - 1 }} or {{ review.year - 2 }} are on file for this property, so there is nothing to compare the budget with.</div>
 
           <div class="row" style="align-items:stretch">
@@ -511,8 +526,8 @@
               <div class="review-list">
                 <div v-for="x in review.pushes" :key="'p' + x.key" class="review-item">
                   <div class="row" style="align-items:baseline;gap:8px">
-                    <b v-if="x.kind === 'sales'">Net sales {{ signedPct(x.growthPct) }} on last year</b>
-                    <b v-else>{{ lineName(x) }} · {{ pct(x.budgetPct) }} of {{ x.pctOf || 'sales' }} <span class="muted">vs {{ pct(x.pyPct) }} last year</span></b>
+                    <b v-if="x.kind === 'sales'"><qs-dot :set="budgetQs" :id="'p' + x.key"></qs-dot>Net sales {{ signedPct(x.growthPct) }} on last year</b>
+                    <b v-else><qs-dot :set="budgetQs" :id="'p' + x.key"></qs-dot>{{ lineName(x) }} · {{ pct(x.budgetPct) }} of {{ x.pctOf || 'sales' }} <span class="muted">vs {{ pct(x.pyPct) }} last year</span></b>
                     <b class="good">{{ signed(x.impact) }}</b>
                   </div>
                   <div class="muted" v-if="x.kind === 'sales' && x.months.length">Most of the change: <span v-for="(m, i) in x.months" :key="m.month">{{ i ? ', ' : '' }}{{ monthLabel(m.month, true) }} {{ signed(m.change) }}</span></div>
@@ -530,8 +545,8 @@
                 <div class="review-list">
                   <div v-for="x in review.room" :key="'r' + x.key" class="review-item">
                     <div class="row" style="align-items:baseline;gap:8px">
-                      <b v-if="x.kind === 'sales'">Net sales {{ signedPct(x.growthPct) }} on last year</b>
-                      <b v-else>{{ lineName(x) }} · {{ pct(x.budgetPct) }} of {{ x.pctOf || 'sales' }} <span class="muted">vs {{ pct(x.pyPct) }} last year</span></b>
+                      <b v-if="x.kind === 'sales'"><qs-dot :set="budgetQs" :id="'r' + x.key"></qs-dot>Net sales {{ signedPct(x.growthPct) }} on last year</b>
+                      <b v-else><qs-dot :set="budgetQs" :id="'r' + x.key"></qs-dot>{{ lineName(x) }} · {{ pct(x.budgetPct) }} of {{ x.pctOf || 'sales' }} <span class="muted">vs {{ pct(x.pyPct) }} last year</span></b>
                       <b class="bad">{{ signed(x.impact) }}</b>
                     </div>
                   </div>
@@ -545,8 +560,8 @@
               <div class="review-list">
                 <div v-for="(x, i) in review.issues" :key="'i' + i" class="review-item">
                   <div class="row" style="align-items:baseline;gap:8px">
-                    <span><span :class="['badge', x.severity === 'error' ? 'trend' : 'spike']">{{ x.severity === 'error' ? 'Likely error' : 'Check' }}</span>
-                      <b> {{ x.key && x.name && x.title.indexOf(x.name) === -1 ? lineName(x) + ': ' : '' }}{{ x.title }}</b></span>
+                    <span><qs-dot :set="budgetQs" :id="'i' + i"></qs-dot><span :class="['badge', x.severity === 'error' ? 'trend' : 'spike']">{{ x.severity === 'error' ? 'Likely error' : 'Check' }}</span>
+                      <b style="margin-left:4px">{{ x.key && x.name && x.title.indexOf(x.name) === -1 ? lineName(x) + ': ' : '' }}{{ x.title }}</b></span>
                     <b v-if="x.impact" class="muted" style="font-size:13px">{{ money(x.impact) }}</b>
                   </div>
                   <div class="muted">{{ x.detail }}</div>
@@ -807,6 +822,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/vue@3.4.31/dist/vue.global.prod.js"></script>
+<?!= include('QuestionsScript'); ?>
 <?!= include('InventoryScript'); ?>
 <?!= include('LaborScript'); ?>
 <script>
@@ -853,7 +869,7 @@
   const addMonths = (p, n) => { const y = +p.slice(0, 4), m = +p.slice(5, 7) - 1 + n; const yy = y + Math.floor(m / 12), mm = ((m % 12) + 12) % 12 + 1; return yy + '-' + String(mm).padStart(2, '0'); };
 
   Vue.createApp({
-    mixins: [InventoryMixin, LaborMixin],
+    mixins: [QuestionsMixin, InventoryMixin, LaborMixin],
     data() {
       return {
         VIEWS, TREND_KEYS, GROUPINGS, LINE_COL_MIN, LINE_COL_MAX,
@@ -957,6 +973,77 @@
           xLabels: t.points.map((p, i) => ({ x: X(i), label: i % 3 === 0 || i === n - 1 ? this.monthLabel(p.period, true) : '' }))
         };
       },
+      /* ---------- questions for the property (see QuestionsScript) ---------- */
+      /** Period report. Month: flags and lines that posted nothing are major (timing-tagged flags and
+       *  lines "not posted yet" are minor); any other cost line worse than budget by driverMin is minor.
+       *  Quarter / YTD have no flags: a cost line worse than budget by the flag rule is major. */
+      pnlQs() {
+        const r = this.report; if (!r || this.loading.report) return null;
+        const grouped = this.reportGrouped, R = this.rules, small = R.driverMin || 1000;
+        const span = grouped ? this.groupLabel(r.period, r.grouping) : this.monthLabel(r.period);
+        const items = [];
+        r.flags.forEach(f => {
+          const lines = [this.flagTypeLabel(f.type) + ': ' + f.reason + (f.tagged ? ' (tagged as timing / accrual)' : '') + '.'];
+          if (f.drivers) {
+            f.drivers.lines.forEach(d => lines.push(d.code + ' ' + d.name + ': ' + this.money(d.actual) + ' vs ' + this.money(d.ref) + ' ' + f.drivers.basis + ' (' + this.signed(-d.worseBy) + ')'));
+            if (f.drivers.offset) { const o = f.drivers.offset; lines.push(o.code + ' ' + o.name + ' offset: ' + this.money(o.actual) + ' vs ' + this.money(o.ref) + ' (' + this.signed(-o.worseBy) + ')'); }
+          }
+          items.push({ id: 'f' + f.key, major: !f.tagged, title: f.key + ' ' + f.name, amount: f.overBy || null, lines: lines });
+        });
+        r.missing.forEach(m => items.push({ id: 'm' + m.key, major: m.severity === 'warning', amount: m.expected,
+          title: m.key + ' ' + m.name + (m.severity === 'warning' ? ' (nothing posted)' : ' (not posted yet)'),
+          lines: ['Posted in each of the last ' + m.monthsPosted + ' months; expected about $' + this.money(m.expected) + ' (' + m.basis + '). Was it missed?'] }));
+        r.rows.forEach(row => {
+          if ((row.kind !== 'line' && row.kind !== 'group') || ['5000', '6000', '7000', '8000'].indexOf(row.section) === -1) return;
+          if (row.flag || row.missing || row.varBudget == null || -row.varBudget < small) return;
+          const worse = -row.varBudget;
+          const major = grouped && worse >= R.minDollar && (row.budget <= 0 || worse / Math.abs(row.budget) >= R.minPct);
+          items.push({ id: 'v' + row.key, major: major, title: this.lineLabel(row), amount: worse,
+            lines: ['$' + this.money(row.actual) + ' against $' + this.money(row.budget) + ' budgeted' + (row.ly != null ? ' and $' + this.money(row.ly) + ' last year' : '') +
+              (row.pct != null ? '; ' + this.pct(row.pct) + ' of ' + row.pctOf + (row.budgetPct != null ? ' vs ' + this.pct(row.budgetPct) + ' budgeted' : '') : '') + '.'] });
+        });
+        items.sort((a, b) => (b.major - a.major) || (a.id[0] === 'v' && b.id[0] === 'v' ? b.amount - a.amount : 0));
+        const h = r.headline, ns = r.rows.filter(x => x.key === 'NET_SALES')[0];
+        const mtd = r.stage === 'mtd';
+        const cmp = [];
+        if (h.operatingIncome != null && h.budget != null) cmp.push(this.qsVs(h.operatingIncome - h.budget, 'budget'));
+        if (h.operatingIncome != null && h.ly != null) cmp.push(this.qsVs(h.operatingIncome - h.ly, 'last year'));
+        let overview = (mtd ? 'Month to date through ' + this.dayLabel(r.asOf) + ', operating income is ' : (grouped ? span + ' operating income was ' : 'Operating income was '))
+          + '$' + this.money(h.operatingIncome) + ' (' + this.pct(h.operatingIncomePct) + ' of sales)' + (cmp.length ? ', ' + cmp.join(' and ') : '');
+        if (ns) overview += ', on net sales of $' + this.money(ns.actual) + (ns.budget ? ' (' + this.qsPct((ns.actual / ns.budget - 1) * 100) + ' against budget)' : '');
+        if (r.stage === 'preliminary') overview += '; the figures are preliminary';
+        return { mod: 'pnl', key: 'pnl|' + r.property + '|' + r.period + '|' + (r.grouping || 'month'),
+          heading: this.propertyName(r.property) + ' · ' + span + ' P&L: questions', overview: overview + '.', notes: [],
+          minorLabel: 'Minor', empty: 'Nothing flagged and no cost line over budget.', items: items };
+      },
+      /** Budget review. Likely errors and where the budget pushes are major; checks and room are minor. */
+      budgetQs() {
+        const r = this.review; if (!r || this.loading.review) return null;
+        const items = [];
+        const xTitle = x => x.kind === 'sales' ? 'Net sales ' + this.signedPct(x.growthPct) + ' on last year'
+          : this.lineName(x) + ' at ' + this.pct(x.budgetPct) + ' of ' + (x.pctOf || 'sales') + ' vs ' + this.pct(x.pyPct) + ' last year';
+        const track = x => !x.track ? '' : (x.kind === 'sales'
+          ? r.track.year + ' budget assumed ' + this.signedPct(x.track.assumedPct) + '; ' + x.track.months + ' months in, it is ' + this.signedPct(x.track.deliveredPct) + '.'
+          : r.track.year + ' budget asked for ' + this.pct(x.track.budgetPct) + '; it ran ' + this.pct(x.track.actualPct) + '.') + (x.repeat ? ' Missed last year.' : '');
+        const issue = (x, i) => ({ id: 'i' + i, major: x.severity === 'error', amount: x.impact || null,
+          title: (x.key && x.name && x.title.indexOf(x.name) === -1 ? this.lineName(x) + ': ' : '') + x.title + (x.severity === 'error' ? ' (likely error)' : ' (check)'),
+          lines: [x.detail] });
+        r.issues.forEach((x, i) => { if (x.severity === 'error') items.push(issue(x, i)); });
+        r.pushes.forEach(x => items.push({ id: 'p' + x.key, major: true, title: xTitle(x), amount: x.impact,
+          lines: [x.kind === 'sales' ? (x.months.length ? 'Most of the change: ' + x.months.map(m => this.monthLabel(m.month, true) + ' ' + this.signed(m.change)).join(', ') + '.' : '')
+            : '$' + this.money(x.impact) + ' less than running at last year\'s rate on the budgeted sales. How will it be reached?', track(x)] }));
+        r.issues.forEach((x, i) => { if (x.severity !== 'error') items.push(issue(x, i)); });
+        r.room.forEach(x => items.push({ id: 'r' + x.key, major: false, title: xTitle(x), amount: x.impact,
+          lines: ['Budgeted $' + this.money(Math.abs(x.impact)) + ' worse than last year. Planned, or a cushion?'] }));
+        const h = r.headline;
+        let overview = 'The ' + r.year + ' budget plans operating income of $' + this.money(h.budOi) + ' (' + this.pct(h.budOiPct) + ' of sales) on net sales of $' + this.money(h.budNet)
+          + (h.growthPct != null ? ', ' + this.signedPct(h.growthPct) + ' on last year' : '')
+          + (h.pyOi != null ? ', against $' + this.money(h.pyOi) + ' (' + this.pct(h.pyOiPct) + ') last year' : '');
+        if (h.trackOi) overview += '; ' + r.track.year + ' is running $' + this.money(Math.abs(h.trackOi.variance)) + (h.trackOi.variance >= 0 ? ' ahead of' : ' behind') + ' its budgeted operating income so far';
+        return { mod: 'budget', key: 'budget|' + r.property + '|' + r.year,
+          heading: this.propertyName(r.property) + ' · ' + r.year + ' budget: questions', overview: overview + '.', notes: [],
+          minorLabel: 'Minor', empty: 'Nothing in the budget looks out of place.', items: items };
+      },
       matrixPeriods() { if (!this.trends) return []; return this.trends[1] ? this.trends[1].points.slice(-12).map(p => p.period) : []; },
       matrix() {
         if (!this.trends) return [];
@@ -1053,6 +1140,8 @@
       signedPct(v) { if (v == null || isNaN(v)) return '—'; return (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1) + '%'; },
       lineName(x) { return (/^\d/.test(x.key) ? x.key + ' ' : '') + x.name; },
       direction(r) { return r.section === '4000' || HIGHER_BETTER[r.key] || ['GROSS_PROFIT', 'PROFIT_AFTER_PRIME_COST', 'CONTROLLABLE_PROFIT', 'NET_PROFIT'].indexOf(r.key) !== -1 ? 1 : -1; },
+      /** The question a P&L table row stands for, if any (a flag, a missing line or a line over budget). */
+      pnlRowId(r) { return ['f', 'm', 'v'].map(p => p + r.key).filter(id => this.qsItem(this.pnlQs, id))[0] || ''; },
       lineLabel(r) { return (/^\d/.test(r.key) ? r.key + ' ' : '') + r.name; },
       propertyName(code) { const p = (this.boot.properties || []).filter(x => x.code === code)[0]; return p ? p.name : code; },
       stageSentence(r) {
@@ -1274,7 +1363,7 @@
         catch (err) { this.settings.error = err.message; }
       }
     }
-  }).mount('#app');
+  }).component('question-overview', QuestionOverview).component('qs-dot', QsDot).mount('#app');
 </script>
 </body>
 </html>

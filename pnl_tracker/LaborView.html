@@ -158,6 +158,7 @@
           <button class="ghost" @click="labStepWeek(1)" :disabled="!labHasStep(1)" aria-label="Next week">›</button>
         </div>
         <div class="controls">
+          <button v-if="labQs" @click="qsCopy(labQs)">Copy the questions ({{ qsPickedItems(labQs).length }})</button>
           <button class="ghost" @click="printPage" :disabled="!labRep">Print / save as PDF</button>
         </div>
       </div>
@@ -169,6 +170,7 @@
           <h1>{{ propertyName(labRep.property) }} · week of {{ weekLabel(labRep.week) }}
             <span :class="['badge', labStageClass(labRep.stage)]">{{ labStage(labRep.stage) }}</span></h1>
         </div>
+        <question-overview :set="labQs"></question-overview>
         <div v-if="labRep.stage === 'schedule'" class="banner info">The week has not started: this is the schedule as written, judged against the forecast<template v-if="labRep.targetSource"> and {{ labRep.targetSource === 'budget' ? 'the budget' : labWeeksText(labRep.recentWeeks) }}</template>. Upload the week again once it is over to see actuals.</div>
         <div v-else-if="labRep.stage === 'partial'" class="banner warn">The week is not over yet: actuals run only to the upload.</div>
         <div v-if="!labRep.targetSource" class="banner warn">No budget for this property and no weeks on file in the 8 weeks before: labor % has no target yet.</div>
@@ -205,7 +207,7 @@
           <p v-if="!labRep.findings.length" class="muted">Nothing outside the rules: sales within {{ labRep.rules.salesMissPct }}% of forecast, labor within {{ labRep.rules.overTargetPts }} pt of target, no overtime and no shifts added to the schedule.</p>
           <div class="grid wide">
             <div v-for="(f, i) in labRep.findings" :key="i" :class="['flag-card', { 'act-adjust': f.severity === 'bad' }]">
-              <div class="row" style="align-items:baseline"><b>{{ f.title }}</b>
+              <div class="row" style="align-items:baseline"><b><qs-dot :set="labQs" :id="f.kind + i"></qs-dot>{{ f.title }}</b>
                 <span v-if="f.impact" :class="f.severity === 'bad' ? 'bad' : 'muted'" style="font-weight:700">${{ money(f.impact) }}</span></div>
               <div class="muted" style="font-size:13px">{{ f.detail }}</div>
             </div>

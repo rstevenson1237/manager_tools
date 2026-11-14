@@ -1,0 +1,97 @@
+<script>
+  /* Questions for the property (included by Index.html before the main script).
+   * The period report, budget review, inventory report and labor week each
+   * build a "question set": a one-sentence overview plus the issues they
+   * noted, each marked major or minor. A circle sits next to each issue where
+   * the page shows it: filled = in the text copied into an email, empty =
+   * left out; click to change. Major issues start filled, minor ones empty.
+   *
+   * The choices live only in this page (they are lost on reload). Nothing is
+   * saved, so the data file does not grow.
+   *
+   * A question set: { mod, key, heading, overview, notes: [text],
+   *   minorLabel, empty, items: [{ id, major, title, amount, lines: [text] }] }
+   *   mod   which module it is ('pnl', 'budget', 'inv', 'lab')
+   *   key   the report it describes; choices are kept per report */
+  const QuestionsMixin = {
+    data() {
+      return { qs: { picks: {}, copied: {} } };
+    },
+    methods: {
+      qsItem(set, id) { return set && id ? set.items.filter(it => it.id === id)[0] || null : null; },
+      qsPickKey(set, item) { return set.key + '|' + item.id; },
+      qsPicked(set, item) {
+        if (!set) return false;
+        const k = this.qsPickKey(set, item);
+        return k in this.qs.picks ? this.qs.picks[k] : !!item.major;
+      },
+      qsSetPick(set, item, on) { this.qs.picks[this.qsPickKey(set, item)] = on; this.qs.copied[set.mod] = null; },
+      qsSetAll(set, items, on) { items.forEach(it => { this.qs.picks[this.qsPickKey(set, it)] = on; }); this.qs.copied[set.mod] = null; },
+      qsPickedItems(set) { return set ? set.items.filter(it => this.qsPicked(set, it)) : []; },
+      qsMajor(set) { return set ? set.items.filter(it => it.major) : []; },
+      qsMinor(set) { return set ? set.items.filter(it => !it.major) : []; },
+      qsCopiedText(set) { const c = set && this.qs.copied[set.mod]; return c && c.key === set.key ? c.text : ''; },
+      /** The overview and the chosen issues as plain text, to paste into an email. */
+      qsText(set) {
+        const lines = [set.heading, '', set.overview, ''];
+        (set.notes || []).forEach(x => lines.push('! ' + x));
+        if ((set.notes || []).length) lines.push('');
+        const major = set.items.filter(it => it.major && this.qsPicked(set, it));
+        const minor = set.items.filter(it => !it.major && this.qsPicked(set, it));
+        let n = 0;
+        const add = it => {
+          lines.push((++n) + '. ' + it.title + (it.amount != null && Math.abs(it.amount) >= 0.5 ? ': $' + this.money(Math.abs(it.amount)) : ''));
+          it.lines.forEach(x => { if (x) lines.push('   ' + x); });
+        };
+        major.forEach(add);
+        if (minor.length) {
+          if (major.length) lines.push('');
+          lines.push(set.minorLabel + ':');
+          minor.forEach(add);
+        }
+        if (!set.items.length) lines.push(set.empty);
+        else if (!n) lines.push('No questions selected.');
+        while (lines[lines.length - 1] === '') lines.pop();
+        return lines.join('\n');
+      },
+      async qsCopy(set) {
+        const text = this.qsText(set);
+        this.qs.copied[set.mod] = { key: set.key, text: text };
+        try { await navigator.clipboard.writeText(text); this.toast('Questions copied. Paste them into an email to the property.', 'success'); }
+        catch (e) { this.$nextTick(() => { const el = document.getElementById('qs-copy-' + set.mod); if (el) { el.focus(); el.select(); } }); }
+      },
+      /** "+3.2%" style, for sentences. */
+      qsPct(v) { return v == null || isNaN(v) ? '' : (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1) + '%'; },
+      /** "$1,200 better than budget" or "$800 worse than last year". */
+      qsVs(diff, what) { return '$' + this.money(Math.abs(diff)) + ' ' + (diff >= 0 ? 'better' : 'worse') + ' than ' + what; }
+    }
+  };
+
+  /** The circle next to an issue: empty = left out, filled = in the questions. Not printed. */
+  const QsDot = {
+    props: { set: Object, id: String },
+    computed: {
+      item() { return this.$root.qsItem(this.set, this.id); },
+      on() { return !!this.item && this.$root.qsPicked(this.set, this.item); }
+    },
+    template: `<button v-if="item" type="button" class="qs-dot no-print" :class="{ on: on }" :aria-pressed="on ? 'true' : 'false'"
+      :title="on ? 'In the questions: click to leave out' : 'Not in the questions: click to add'"
+      :aria-label="(on ? 'Leave out of' : 'Add to') + ' the questions: ' + item.title"
+      @click.stop.prevent="$root.qsSetPick(set, item, !on)"></button>`
+  };
+
+  /** Under the page title: the overview sentence, and the copied text once copied. Not printed. */
+  const QuestionOverview = {
+    props: { set: Object },
+    template: `
+      <div v-if="set" class="no-print">
+        <p class="qs-overview"><span class="qs-dot-legend"></span> {{ set.overview }}
+          <span class="muted">· {{ $root.qsPickedItems(set).length }} of {{ set.items.length }} issues marked for the questions</span></p>
+        <div v-if="$root.qsCopiedText(set)" class="card">
+          <div class="row" style="margin-bottom:6px"><label :for="'qs-copy-' + set.mod" class="muted">The questions as text: copy them into an email to the property</label>
+            <button class="link small" @click="$root.qs.copied[set.mod] = null">Close</button></div>
+          <textarea :id="'qs-copy-' + set.mod" readonly :value="$root.qsCopiedText(set)" style="min-height:180px;font-size:12px"></textarea>
+        </div>
+      </div>`
+  };
+</script>
