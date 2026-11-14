@@ -21,7 +21,7 @@ embeddable in Google Sites.
    folder: `Code.gs`, `Import.gs`, `Parse.gs`, `Budget.gs`, `Store.gs`,
    `Analysis.gs`, `Review.gs`, `InventoryRules.gs`, `InventoryCheck.gs`,
    `InventoryApi.gs`, `Labor.gs`, `LaborApi.gs`, and the HTML
-   files `Index`, `InventoryView`, `InventoryScript`, `LaborView` and
+   files `Index`, `QuestionsScript`, `InventoryView`, `InventoryScript`, `LaborView` and
    `LaborScript` (named exactly so, without `.html`). Replace `appsscript.json` with the one here
    (Project Settings → "Show appsscript.json"). It turns on the **Drive**
    advanced service (v3), which converts uploaded budget .xlsx files.
@@ -44,6 +44,10 @@ embeddable in Google Sites.
    `Store.gs`, `Index`, then run **`setup()`** once more. It adds the
    *Labor Weeks*, *Labor Jobs* and *Labor Items* tabs and
    changes nothing else.
+7. Adding the questions for the property: add the HTML file
+   `QuestionsScript`, and replace `Index`, `InventoryView`,
+   `InventoryScript`, `LaborView` and `LaborScript`. Nothing to run: the
+   questions are built in the page and nothing new is stored.
 
 Properties register themselves the first time an upload contains them
 (code and name come from R365, e.g. `ARG1M - Bygone`). Rename or hide them
@@ -293,7 +297,8 @@ One report per property and month covers every count for that month:
   - *A cost problem in September too.*
   - *Also picked in September: …*
 - **Copy the questions:** the list as plain text, ready to paste into an
-  email to the store manager. Also **Print / save as PDF**.
+  email to the store manager (see [Questions for the property](#questions-for-the-property)).
+  Also **Print / save as PDF**.
 - **Problems with the file:** totals that do not add up, or a count that
   does not follow last month's.
 - Inventory value against the last count, split into price and quantity,
@@ -451,7 +456,27 @@ All thresholds are in `LABOR_RULES` at the top of `Labor.gs`.
 Admins and viewers read everything. Only admins upload, change job code
 groups or remove a week. The inventory-only role does not see this tab.
 
-## 8. Code layout
+## 8. Questions for the property
+
+The period report, budget review, inventory report and labor week each
+have **Choose the questions** and **Copy the questions** at the top. The
+copied text starts with one sentence on how the property did on what that
+page covers, then lists the issues that page noted, ready to paste into an
+email. Tick the issues to include: **major** issues start ticked, **minor**
+ones unticked.
+
+| Page | Overview sentence | Major (ticked) | Minor (unticked) |
+|---|---|---|---|
+| Period report, month | Operating income against budget and last year, and net sales against budget | Flags; lines that posted nothing once the month is settled | Flags tagged as timing; lines not posted yet; other cost lines worse than budget by `driverMin` ($1,000) |
+| Period report, quarter / YTD | The same, for the span | Cost lines worse than budget by the flag rule (`minDollar` and `minPct`) | Other cost lines worse than budget by `driverMin` |
+| Budget review | Budgeted operating income and sales growth against last year, and how last year's budget is tracking | Likely errors; where the budget pushes | Checks; room in the budget |
+| Inventory report | Value and change on the last count, days on hand, and how many items need an answer | Questions for the store | Smaller items the rules picked (also tickable in place) |
+| Labor week | Sales against forecast, hourly labor against target, and overtime (for a schedule: scheduled labor against the forecast) | Findings marked bad or warn | Other findings |
+
+The ticks are kept only in the open page, per report, until it is
+reloaded. Nothing is saved, so the data workbook does not grow.
+
+## 9. Code layout
 
 | File | Role | Uses Apps Script services? |
 |---|---|---|
@@ -470,6 +495,7 @@ groups or remove a week. The inventory-only role does not see this tab.
 | `Index.html` | Portfolio, Period report, Trends, Budget review, Upload & settings | — |
 | `InventoryView.html`, `InventoryScript.html` | The Inventory tab (pulled into `Index.html` with `include()`) | — |
 | `LaborView.html`, `LaborScript.html` | The Labor tab (likewise) | — |
+| `QuestionsScript.html` | Questions for the property: tick boxes, overview and copied text, shared by four pages (likewise) | — |
 
 ### Tests
 

@@ -128,6 +128,28 @@
       labTable() { return this.labRows.slice().sort((a, b) => b.week.localeCompare(a.week) || this.propertyName(a.property).localeCompare(this.propertyName(b.property))); },
       labWeekOptions() { return this.labAllRows.map(r => ({ key: r.property + '|' + r.week, property: r.property, week: r.week, stage: r.stage })); },
       labRep() { return this.lab.rep && this.lab.rep.report; },
+      /** Questions for the property: findings marked bad or warn are major, the rest (info) minor. */
+      labQs() {
+        const r = this.labRep; if (!r || this.lab.repLoading) return null;
+        const H = r.groups.filter(g => g.key === 'HOURLY')[0] || {}, s = r.sales;
+        const target = H.targetPct != null ? ' against a ' + this.pct(H.targetPct) + ' target' : ' (no target on file)';
+        let overview;
+        if (r.stage === 'schedule') {
+          const over = r.people.scheduledOver.reduce((t, x) => t + x.overHrs, 0);
+          overview = 'The schedule puts hourly labor at ' + this.pct(H.schPct) + ' of ' + (s.forecast ? 'the $' + this.money(s.forecast) + ' forecast' : 'a missing forecast') + target
+            + (over ? ', with ' + this.hrs(over) + ' hours scheduled past overtime' : ', with no overtime scheduled') + '.';
+        } else {
+          const ot = r.people.otTotals.hrs;
+          overview = (r.stage === 'partial' ? 'So far this week, net sales are $' : 'Net sales were $') + this.money(s.net)
+            + (s.forecast ? ', ' + this.qsPct(s.vsForecastPct) + ' against the $' + this.money(s.forecast) + ' forecast' : ' with no forecast on file')
+            + '; hourly labor ran ' + this.pct(H.actPct) + ' of sales' + target
+            + (ot ? ', with ' + this.hrs(ot) + ' overtime hours (about $' + this.money(r.people.otTotals.premium) + ' premium).' : ', with no overtime.');
+        }
+        return { mod: 'lab', key: 'lab|' + r.property + '|' + r.week + '|' + r.stage,
+          heading: this.propertyName(r.property) + ' · week of ' + this.weekLabel(r.week) + ' labor: questions', overview: overview, notes: [],
+          minorLabel: 'Minor', empty: 'Nothing outside the rules this week.',
+          items: r.findings.map((f, i) => ({ id: f.kind + i, major: f.severity === 'bad' || f.severity === 'warn', title: f.title, amount: f.impact || null, lines: [f.detail] })) };
+      },
       labOff() {
         const r = this.labRep; if (!r) return null;
         return r.people.off;

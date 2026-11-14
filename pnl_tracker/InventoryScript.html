@@ -18,7 +18,7 @@
       return {
         inv: {
           sub: 'dashboard', dash: null, dashLoading: false, dashError: '',
-          repKey: null, rep: null, repLoading: false, repError: '', showOthers: false, copyText: '', pick: {},
+          repKey: null, rep: null, repLoading: false, repError: '', showOthers: false,
           up: { period: invDefaultPeriod(), files: [], saving: false, seq: 0 }
         }
       };
@@ -55,6 +55,24 @@
       invReportOptions() { return this.invMonths.map(m => ({ key: m.key, property: m.property, period: m.period })); },
       invRep() { return this.inv.rep && this.inv.rep.report; },
       invUpReady() { return this.inv.up.files.filter(f => f.stage === 'preview' && !f.preview.duplicateOf); },
+      /** Questions for the store: items still worth highImpact or more are major, the smaller picked items minor. */
+      invQs() {
+        const r = this.invRep; if (!r || this.inv.repLoading) return null;
+        const item = (q, major) => Object.assign(this.invQ(q, major), {
+          title: q.item + (r.counts.length > 1 ? ' (' + q.countLabel + ')' : ''), amount: q.impact,
+          lines: q.reasons.concat(q.history ? [q.history] : []) });
+        const h = r.headline, n = r.questions.length, days = r.pnl && r.pnl.total ? r.pnl.total.days : null;
+        const overview = 'Inventory is $' + this.money(h.value) + ', ' + (h.change >= 0 ? 'up' : 'down') + ' $' + this.money(Math.abs(h.change))
+          + (h.changePct != null ? ' (' + this.qsPct(h.changePct) + ')' : '') + ' on the last count'
+          + (days != null ? ', about ' + Math.round(days) + ' days of cost of sales on hand' : '')
+          + (n ? '; ' + n + ' item' + (n === 1 ? '' : 's') + ' of $' + this.money(r.highImpact) + ' or more ' + (n === 1 ? 'needs' : 'need') + ' an answer.'
+            : '; nothing of $' + this.money(r.highImpact) + ' or more needs an answer.');
+        return { mod: 'inv', key: 'inv|' + r.property + '|' + r.period,
+          heading: this.propertyName(r.property) + ' · ' + this.monthLabel(r.period) + ' inventory: questions', overview: overview, notes: r.issues,
+          minorLabel: 'Smaller items (under $' + this.money(r.highImpact) + ' each)', empty: 'No items of $' + this.money(r.highImpact) + ' or more to ask about.',
+          items: r.questions.map(q => item(q, true)).concat(r.others.map(q => item(q, false))) };
+      },
+      invOthersTicked() { return this.qsMinor(this.invQs).filter(it => this.qsPicked(this.invQs, it)).length; },
       invLabelChoices() {
         const out = ['Food', 'Beverage', 'Full count'];
         this.invChecks.forEach(c => { if (!out.some(l => l.toLowerCase() === c.label.toLowerCase())) out.push(c.label); });
@@ -102,50 +120,13 @@
         if (!opts.length) { this.inv.rep = null; return; }
         if (!opts.some(o => o.key === this.inv.repKey)) this.inv.repKey = opts[0].key;
         const i = this.inv.repKey.lastIndexOf('|');
-        this.inv.repLoading = true; this.inv.repError = ''; this.inv.showOthers = false; this.inv.copyText = ''; this.inv.pick = {};
+        this.inv.repLoading = true; this.inv.repError = ''; this.inv.showOthers = false;
         try { this.inv.rep = await gas('getInventoryReport', this.inv.repKey.slice(0, i), this.inv.repKey.slice(i + 1)); }
         catch (err) { this.inv.rep = null; this.inv.repError = err.message; }
         this.inv.repLoading = false;
       },
-      /* What goes into the copied text. Questions start ticked, smaller items
-       * unticked. The choice lives only in this page and resets with the report:
-       * nothing is saved, so the data file does not grow. */
-      invPickKey(q) { return q.countId + '|' + q.key; },
-      invPicked(q, isQuestion) { const k = this.invPickKey(q); return k in this.inv.pick ? this.inv.pick[k] : isQuestion; },
-      invSetPick(q, on) { this.inv.pick[this.invPickKey(q)] = on; this.inv.copyText = ''; },
-      invSetAllPicks(list, on) { list.forEach(q => { this.inv.pick[this.invPickKey(q)] = on; }); this.inv.copyText = ''; },
-      invPickedQuestions() { const r = this.invRep; return r ? r.questions.filter(q => this.invPicked(q, true)) : []; },
-      invPickedOthers() { const r = this.invRep; return r ? r.others.filter(q => this.invPicked(q, false)) : []; },
-      invPickedCount() { return this.invPickedQuestions().length + this.invPickedOthers().length; },
-      /** The ticked items as plain text, to paste into an email to the store manager. */
-      invQuestionsText() {
-        const r = this.invRep;
-        const lines = [this.propertyName(r.property) + ' · ' + this.monthLabel(r.period) + ' inventory: questions', ''];
-        r.issues.forEach(x => lines.push('! ' + x));
-        if (r.issues.length) lines.push('');
-        const qs = this.invPickedQuestions(), others = this.invPickedOthers();
-        let n = 0;
-        const add = q => {
-          lines.push((++n) + '. ' + q.item + (r.counts.length > 1 ? ' (' + q.countLabel + ')' : '') + ': $' + this.money(q.impact));
-          q.reasons.forEach(x => lines.push('   ' + x));
-          if (q.history) lines.push('   ' + q.history);
-        };
-        qs.forEach(add);
-        if (others.length) {
-          if (qs.length) lines.push('');
-          lines.push('Smaller items (under $' + this.money(r.highImpact) + ' each):');
-          others.forEach(add);
-        }
-        if (!r.questions.length && !others.length) lines.push('No items of $' + this.money(r.highImpact) + ' or more to ask about.');
-        else if (!qs.length && !others.length) lines.push('No items selected.');
-        return lines.join('\n');
-      },
-      async invCopy() {
-        const text = this.invQuestionsText();
-        this.inv.copyText = text;
-        try { await navigator.clipboard.writeText(text); this.toast('Questions copied. Paste them into an email to the store.', 'success'); }
-        catch (e) { this.$nextTick(() => { const el = document.getElementById('inv-copy'); if (el) { el.focus(); el.select(); } }); }
-      },
+      /** A report item as a question-set item (see QuestionsScript): questions are major, smaller items minor. */
+      invQ(q, major) { return { id: q.countId + '|' + q.key, major: major }; },
 
       /* ---------- upload (several files at once) ---------- */
       /** The property a file name points to: a property name or code inside it, longest match first. */

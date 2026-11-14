@@ -1,0 +1,112 @@
+<script>
+  /* Questions for the property (included by Index.html before the main script).
+   * The period report, budget review, inventory report and labor week each
+   * build a "question set": a one-sentence overview plus the issues they
+   * noted, each marked major or minor. The reviewer ticks which issues go
+   * into the text they copy into an email: major issues start ticked, minor
+   * ones unticked.
+   *
+   * The ticks live only in this page (they are lost on reload). Nothing is
+   * saved, so the data file does not grow.
+   *
+   * A question set: { mod, key, heading, overview, notes: [text],
+   *   minorLabel, empty, items: [{ id, major, title, amount, lines: [text] }] }
+   *   mod   which module it is ('pnl', 'budget', 'inv', 'lab'); one panel each
+   *   key   the report it describes; ticks are kept per report */
+  const QuestionsMixin = {
+    data() {
+      return { qs: { picks: {}, open: {}, copied: {} } };
+    },
+    methods: {
+      qsPickKey(set, item) { return set.key + '|' + item.id; },
+      qsPicked(set, item) {
+        if (!set) return false;
+        const k = this.qsPickKey(set, item);
+        return k in this.qs.picks ? this.qs.picks[k] : !!item.major;
+      },
+      qsSetPick(set, item, on) { this.qs.picks[this.qsPickKey(set, item)] = on; this.qs.copied[set.mod] = null; },
+      qsSetAll(set, items, on) { items.forEach(it => { this.qs.picks[this.qsPickKey(set, it)] = on; }); this.qs.copied[set.mod] = null; },
+      qsPickedItems(set) { return set ? set.items.filter(it => this.qsPicked(set, it)) : []; },
+      qsMajor(set) { return set ? set.items.filter(it => it.major) : []; },
+      qsMinor(set) { return set ? set.items.filter(it => !it.major) : []; },
+      qsToggle(set) { this.qs.open[set.mod] = !this.qs.open[set.mod]; },
+      qsIsOpen(set) { return !!set && !!this.qs.open[set.mod]; },
+      qsCopiedText(set) { const c = set && this.qs.copied[set.mod]; return c && c.key === set.key ? c.text : ''; },
+      /** The overview and the ticked issues as plain text, to paste into an email. */
+      qsText(set) {
+        const lines = [set.heading, '', set.overview, ''];
+        (set.notes || []).forEach(x => lines.push('! ' + x));
+        if ((set.notes || []).length) lines.push('');
+        const major = set.items.filter(it => it.major && this.qsPicked(set, it));
+        const minor = set.items.filter(it => !it.major && this.qsPicked(set, it));
+        let n = 0;
+        const add = it => {
+          lines.push((++n) + '. ' + it.title + (it.amount != null && Math.abs(it.amount) >= 0.5 ? ': $' + this.money(Math.abs(it.amount)) : ''));
+          it.lines.forEach(x => { if (x) lines.push('   ' + x); });
+        };
+        major.forEach(add);
+        if (minor.length) {
+          if (major.length) lines.push('');
+          lines.push(set.minorLabel + ':');
+          minor.forEach(add);
+        }
+        if (!set.items.length) lines.push(set.empty);
+        else if (!n) lines.push('No questions selected.');
+        while (lines[lines.length - 1] === '') lines.pop();
+        return lines.join('\n');
+      },
+      async qsCopy(set) {
+        const text = this.qsText(set);
+        this.qs.copied[set.mod] = { key: set.key, text: text };
+        this.qs.open[set.mod] = true;
+        try { await navigator.clipboard.writeText(text); this.toast('Questions copied. Paste them into an email to the property.', 'success'); }
+        catch (e) { this.$nextTick(() => { const el = document.getElementById('qs-copy-' + set.mod); if (el) { el.focus(); el.select(); } }); }
+      },
+      /** "+3.2%" style, for sentences. */
+      qsPct(v) { return v == null || isNaN(v) ? '' : (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1) + '%'; },
+      qsCap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; },
+      /** "$1,200 better than budget" or "$800 worse than last year". */
+      qsVs(diff, what) { return '$' + this.money(Math.abs(diff)) + ' ' + (diff >= 0 ? 'better' : 'worse') + ' than ' + what; }
+    }
+  };
+
+  /** The panel each module shows: overview, tick boxes, copy. Not printed. */
+  const QuestionPanel = {
+    props: { set: Object },
+    template: `
+      <div v-if="set && $root.qsIsOpen(set)" class="card no-print qs-panel">
+        <div class="row" style="margin-bottom:8px">
+          <h2>Questions for the property · {{ $root.qsPickedItems(set).length }} ticked</h2>
+          <div class="controls">
+            <button @click="$root.qsCopy(set)">Copy the questions</button>
+            <button class="ghost" @click="$root.qsToggle(set)">Close</button>
+          </div>
+        </div>
+        <p class="qs-overview">{{ set.overview }}</p>
+        <div v-for="x in set.notes" :key="x" class="muted">! {{ x }}</div>
+        <p v-if="!set.items.length" class="muted">{{ set.empty }}</p>
+        <template v-for="grp in [{ major: true, label: 'Major', hint: 'ticked to start', items: $root.qsMajor(set) }, { major: false, label: set.minorLabel, hint: 'unticked to start', items: $root.qsMinor(set) }]" :key="grp.label">
+          <template v-if="grp.items.length">
+            <h3 class="sub-head">{{ grp.label }} · {{ grp.items.length }}
+              <span class="muted" style="font-weight:400">· {{ grp.hint }} ·
+                <button class="link small" @click="$root.qsSetAll(set, grp.items, true)">Tick all</button> ·
+                <button class="link small" @click="$root.qsSetAll(set, grp.items, false)">Untick all</button></span></h3>
+            <div class="review-list">
+              <label v-for="it in grp.items" :key="it.id" class="review-item qs-item">
+                <input type="checkbox" :checked="$root.qsPicked(set, it)" @change="$root.qsSetPick(set, it, $event.target.checked)">
+                <span style="flex:1;min-width:0">
+                  <span class="row" style="align-items:baseline;gap:8px"><b>{{ it.title }}</b>
+                    <b v-if="it.amount != null && Math.abs(it.amount) >= 0.5" :class="grp.major ? 'bad' : 'muted'">\${{ $root.money(Math.abs(it.amount)) }}</b></span>
+                  <span v-for="(l, i) in it.lines.filter(Boolean)" :key="i" class="muted" style="display:block">{{ l }}</span>
+                </span>
+              </label>
+            </div>
+          </template>
+        </template>
+        <div v-if="$root.qsCopiedText(set)" style="margin-top:12px">
+          <label :for="'qs-copy-' + set.mod" class="muted">The questions as text: copy them into an email to the property</label>
+          <textarea :id="'qs-copy-' + set.mod" readonly :value="$root.qsCopiedText(set)" style="min-height:180px;font-size:12px"></textarea>
+        </div>
+      </div>`
+  };
+</script>
