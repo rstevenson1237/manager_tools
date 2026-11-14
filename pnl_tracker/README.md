@@ -473,6 +473,18 @@ ones unticked.
 | Inventory report | Value and change on the last count, days on hand, and how many items need an answer | Questions for the store | Smaller items the rules picked (also tickable in place) |
 | Labor week | Sales against forecast, hourly labor against target, and overtime (for a schedule: scheduled labor against the forecast) | Findings marked bad or warn | Other findings |
 
+Two ways to pick are offered while they are compared (the switch next to
+**Copy the questions**; each browser remembers its choice):
+
+- **In place:** a circle next to each issue where the page already shows
+  it (flag cards, P&L table rows, budget lists, inventory items, labor
+  findings). Filled = in the questions; click to change. The overview
+  sentence sits under the page title. On the P&L table the flagged and
+  missing markers become the words *flagged* and *missing*, so they are not
+  mistaken for the circles.
+- **As a list:** **Choose the questions** opens a panel listing every issue
+  with a tick box, under the overview.
+
 The ticks are kept only in the open page, per report, until it is
 reloaded. Nothing is saved, so the data workbook does not grow.
 

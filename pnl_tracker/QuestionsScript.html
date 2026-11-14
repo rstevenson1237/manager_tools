@@ -12,12 +12,21 @@
    * A question set: { mod, key, heading, overview, notes: [text],
    *   minorLabel, empty, items: [{ id, major, title, amount, lines: [text] }] }
    *   mod   which module it is ('pnl', 'budget', 'inv', 'lab'); one panel each
-   *   key   the report it describes; ticks are kept per report */
+   *   key   the report it describes; ticks are kept per report
+   *
+   * Two ways to pick (being compared; the choice is remembered per browser):
+   *   inline  a circle next to each issue where the page shows it, filled when included
+   *   list    a separate panel listing every issue with a tick box */
+  const QS_MODE_KEY = 'pnl.questionsMode';
+  const qsStoredMode = () => { try { return localStorage.getItem(QS_MODE_KEY) === 'list' ? 'list' : 'inline'; } catch (e) { return 'inline'; } };
   const QuestionsMixin = {
     data() {
-      return { qs: { picks: {}, open: {}, copied: {} } };
+      return { qs: { picks: {}, open: {}, copied: {}, mode: qsStoredMode() } };
     },
     methods: {
+      qsSetMode(m) { this.qs.mode = m; try { localStorage.setItem(QS_MODE_KEY, m); } catch (e) { /* storage blocked */ } },
+      qsItem(set, id) { return set && id ? set.items.filter(it => it.id === id)[0] || null : null; },
+      qsInline() { return this.qs.mode === 'inline'; },
       qsPickKey(set, item) { return set.key + '|' + item.id; },
       qsPicked(set, item) {
         if (!set) return false;
@@ -29,7 +38,7 @@
       qsPickedItems(set) { return set ? set.items.filter(it => this.qsPicked(set, it)) : []; },
       qsMajor(set) { return set ? set.items.filter(it => it.major) : []; },
       qsMinor(set) { return set ? set.items.filter(it => !it.major) : []; },
-      qsToggle(set) { this.qs.open[set.mod] = !this.qs.open[set.mod]; },
+      qsToggle(set) { this.qs.open[set.mod] = !this.qs.open[set.mod]; this.qs.copied[set.mod] = null; },
       qsIsOpen(set) { return !!set && !!this.qs.open[set.mod]; },
       qsCopiedText(set) { const c = set && this.qs.copied[set.mod]; return c && c.key === set.key ? c.text : ''; },
       /** The overview and the ticked issues as plain text, to paste into an email. */
@@ -58,7 +67,7 @@
       async qsCopy(set) {
         const text = this.qsText(set);
         this.qs.copied[set.mod] = { key: set.key, text: text };
-        this.qs.open[set.mod] = true;
+        if (this.qs.mode === 'list') this.qs.open[set.mod] = true;
         try { await navigator.clipboard.writeText(text); this.toast('Questions copied. Paste them into an email to the property.', 'success'); }
         catch (e) { this.$nextTick(() => { const el = document.getElementById('qs-copy-' + set.mod); if (el) { el.focus(); el.select(); } }); }
       },
@@ -70,11 +79,40 @@
     }
   };
 
-  /** The panel each module shows: overview, tick boxes, copy. Not printed. */
+  /** The circle next to an issue (inline mode): empty = left out, filled = in the questions. */
+  const QsDot = {
+    props: { set: Object, id: String },
+    computed: {
+      item() { return this.$root.qsInline() ? this.$root.qsItem(this.set, this.id) : null; },
+      on() { return !!this.item && this.$root.qsPicked(this.set, this.item); }
+    },
+    template: `<button v-if="item" type="button" class="qs-dot no-print" :class="{ on: on }" :aria-pressed="on ? 'true' : 'false'"
+      :title="on ? 'In the questions: click to leave out' : 'Not in the questions: click to add'"
+      :aria-label="(on ? 'Leave out of' : 'Add to') + ' the questions: ' + item.title"
+      @click.stop.prevent="$root.qsSetPick(set, item, !on)"></button>`
+  };
+
+  /** The switch between the two ways to pick, for the comparison. */
+  const QsMode = {
+    template: `<span class="qs-mode no-print" role="group" aria-label="How to pick the questions">
+      <button type="button" :class="{ on: $root.qs.mode === 'inline' }" @click="$root.qsSetMode('inline')">In place</button>
+      <button type="button" :class="{ on: $root.qs.mode === 'list' }" @click="$root.qsSetMode('list')">As a list</button></span>`
+  };
+
+  /** Inline mode: the overview line, and the copied text once copied. List mode: the panel when open. Not printed. */
   const QuestionPanel = {
     props: { set: Object },
     template: `
-      <div v-if="set && $root.qsIsOpen(set)" class="card no-print qs-panel">
+      <div v-if="set && $root.qsInline()" class="no-print qs-inline">
+        <p class="qs-overview"><span class="qs-dot-legend"></span> {{ set.overview }}
+          <span class="muted">· {{ $root.qsPickedItems(set).length }} of {{ set.items.length }} issues marked for the questions</span></p>
+        <div v-if="$root.qsCopiedText(set)" class="card">
+          <div class="row" style="margin-bottom:6px"><label :for="'qs-copy-' + set.mod" class="muted">The questions as text: copy them into an email to the property</label>
+            <button class="link small" @click="$root.qs.copied[set.mod] = null">Close</button></div>
+          <textarea :id="'qs-copy-' + set.mod" readonly :value="$root.qsCopiedText(set)" style="min-height:180px;font-size:12px"></textarea>
+        </div>
+      </div>
+      <div v-else-if="set && $root.qsIsOpen(set)" class="card no-print qs-panel">
         <div class="row" style="margin-bottom:8px">
           <h2>Questions for the property · {{ $root.qsPickedItems(set).length }} ticked</h2>
           <div class="controls">

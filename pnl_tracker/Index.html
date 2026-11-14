@@ -104,6 +104,18 @@
     .qs-item{flex-direction:row;align-items:flex-start;gap:10px;cursor:pointer;}
     .qs-item input{margin-top:3px;}
     .qs-overview{font-size:15px;margin:0 0 6px;}
+    button.qs-dot{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;min-height:0;padding:0;margin:-4px 2px -4px -4px;background:none;border:none;border-radius:50%;vertical-align:middle;flex:none;}
+    button.qs-dot::before{content:'';width:12px;height:12px;border-radius:50%;border:2px solid var(--bad);background:#fff;box-sizing:border-box;}
+    button.qs-dot.on::before{background:var(--bad);}
+    button.qs-dot:hover:not(:disabled){background:var(--bad-soft);}
+    button.qs-dot:focus-visible{outline:2px solid var(--brand);}
+    .qs-dot-legend{display:inline-block;width:12px;height:12px;border-radius:50%;background:var(--bad);vertical-align:-1px;}
+    .qs-inline .qs-overview{font-size:14px;}
+    .qs-mode{display:inline-flex;border:1px solid #C9CCD1;border-radius:8px;overflow:hidden;align-self:flex-end;}
+    .qs-mode button{background:#fff;color:var(--ink);border-radius:0;min-height:38px;padding:0 12px;font-size:13px;font-weight:500;}
+    .qs-mode button.on{background:var(--brand-soft);color:var(--brand-dark);font-weight:600;}
+    .qs-mode button:hover:not(:disabled){background:#F1F2EF;}
+    .mark-word{font-size:11px;font-weight:600;color:var(--bad);text-transform:uppercase;letter-spacing:.03em;margin-left:4px;}
     .badge.draft{background:#FFF7D6;color:#5C4400;border:1px solid #D9B648;}
     .badge.approved{background:var(--brand-soft);color:var(--brand-dark);}
     /* P&L table: header row and line column stay put while the numbers scroll */
@@ -254,7 +266,8 @@
               </select></div>
           </div>
           <div class="controls">
-            <button v-if="pnlQs" class="ghost" @click="qsToggle(pnlQs)">{{ qsIsOpen(pnlQs) ? 'Hide the questions' : 'Choose the questions' }}</button>
+            <qs-mode v-if="pnlQs"></qs-mode>
+            <button v-if="pnlQs && !qsInline()" class="ghost" @click="qsToggle(pnlQs)">{{ qsIsOpen(pnlQs) ? 'Hide the questions' : 'Choose the questions' }}</button>
             <button v-if="pnlQs" @click="qsCopy(pnlQs)">Copy the questions ({{ qsPickedItems(pnlQs).length }})</button>
             <button class="ghost" @click="printPage" :disabled="!report">Print / save as PDF</button>
           </div>
@@ -312,7 +325,7 @@
             <div class="grid wide">
               <div v-for="f in report.flags" :key="f.key" :class="['flag-card', { tagged: f.tagged }]">
                 <div class="row" style="align-items:baseline">
-                  <b>{{ f.key }} {{ f.name }}</b>
+                  <b><qs-dot :set="pnlQs" :id="'f' + f.key"></qs-dot>{{ f.key }} {{ f.name }}</b>
                   <span class="bad" style="font-weight:700">{{ money(f.actual) }}</span>
                 </div>
                 <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
@@ -340,7 +353,7 @@
 
           <div class="card flush">
             <div class="head"><h2>Profit &amp; loss</h2>
-              <span class="muted"><span class="good"><b>Blue</b></span> = better · <span class="bad"><b>orange</b></span> = worse · ● flagged · ○ missing</span></div>
+              <span class="muted"><span class="good"><b>Blue</b></span> = better · <span class="bad"><b>orange</b></span> = worse<template v-if="!qsInline()"> · ● flagged · ○ missing</template><template v-else> · <span class="qs-dot-legend"></span> in the questions (click a circle to add or leave out)</template></span></div>
             <div class="pl-scroll">
               <table :style="{ minWidth: (lineColWidth + (reportGrouped ? 6 : 8) * 100) + 'px' }">
                 <thead><tr>
@@ -355,7 +368,9 @@
                     <tr v-if="r.head" class="sec"><td :colspan="reportGrouped ? 7 : 9"><span class="sec-label">{{ r.head }}</span></td></tr>
                     <tr v-else :class="{ total: r.kind === 'sectionTotal' || (r.kind === 'computed' && r.key !== 'OPERATING_INCOME'), key: r.key === 'OPERATING_INCOME' }">
                       <td class="line-col" :style="lineColStyle" :class="{ indent: r.kind === 'line' || r.kind === 'group', indent2: r.kind === 'sub' }">
-                        {{ lineLabel(r) }}<span v-if="r.flag" class="bad"> ●</span><span v-if="r.missing" class="bad"> ○</span>
+                        {{ lineLabel(r) }}<template v-if="qsInline()"><span v-if="r.flag" class="mark-word">flagged</span><span v-if="r.missing" class="mark-word">missing</span>
+                          <qs-dot :set="pnlQs" :id="pnlRowId(r)"></qs-dot></template>
+                        <template v-else><span v-if="r.flag" class="bad"> ●</span><span v-if="r.missing" class="bad"> ○</span></template>
                       </td>
                       <td>{{ money(r.actual) }}</td>
                       <td class="muted" :title="'% of ' + r.pctOf">{{ pct(r.pct) }}</td>
@@ -471,7 +486,8 @@
           </div>
           <div class="controls">
             <button v-if="boot.isAdmin" class="ghost" @click="go('upload')">Upload a new version</button>
-            <button v-if="budgetQs" class="ghost" @click="qsToggle(budgetQs)">{{ qsIsOpen(budgetQs) ? 'Hide the questions' : 'Choose the questions' }}</button>
+            <qs-mode v-if="budgetQs"></qs-mode>
+            <button v-if="budgetQs && !qsInline()" class="ghost" @click="qsToggle(budgetQs)">{{ qsIsOpen(budgetQs) ? 'Hide the questions' : 'Choose the questions' }}</button>
             <button v-if="budgetQs" @click="qsCopy(budgetQs)">Copy the questions ({{ qsPickedItems(budgetQs).length }})</button>
             <button class="ghost" @click="printPage" :disabled="!review">Print / save as PDF</button>
           </div>
@@ -522,8 +538,8 @@
               <div class="review-list">
                 <div v-for="x in review.pushes" :key="'p' + x.key" class="review-item">
                   <div class="row" style="align-items:baseline;gap:8px">
-                    <b v-if="x.kind === 'sales'">Net sales {{ signedPct(x.growthPct) }} on last year</b>
-                    <b v-else>{{ lineName(x) }} · {{ pct(x.budgetPct) }} of {{ x.pctOf || 'sales' }} <span class="muted">vs {{ pct(x.pyPct) }} last year</span></b>
+                    <b v-if="x.kind === 'sales'"><qs-dot :set="budgetQs" :id="'p' + x.key"></qs-dot>Net sales {{ signedPct(x.growthPct) }} on last year</b>
+                    <b v-else><qs-dot :set="budgetQs" :id="'p' + x.key"></qs-dot>{{ lineName(x) }} · {{ pct(x.budgetPct) }} of {{ x.pctOf || 'sales' }} <span class="muted">vs {{ pct(x.pyPct) }} last year</span></b>
                     <b class="good">{{ signed(x.impact) }}</b>
                   </div>
                   <div class="muted" v-if="x.kind === 'sales' && x.months.length">Most of the change: <span v-for="(m, i) in x.months" :key="m.month">{{ i ? ', ' : '' }}{{ monthLabel(m.month, true) }} {{ signed(m.change) }}</span></div>
@@ -541,8 +557,8 @@
                 <div class="review-list">
                   <div v-for="x in review.room" :key="'r' + x.key" class="review-item">
                     <div class="row" style="align-items:baseline;gap:8px">
-                      <b v-if="x.kind === 'sales'">Net sales {{ signedPct(x.growthPct) }} on last year</b>
-                      <b v-else>{{ lineName(x) }} · {{ pct(x.budgetPct) }} of {{ x.pctOf || 'sales' }} <span class="muted">vs {{ pct(x.pyPct) }} last year</span></b>
+                      <b v-if="x.kind === 'sales'"><qs-dot :set="budgetQs" :id="'r' + x.key"></qs-dot>Net sales {{ signedPct(x.growthPct) }} on last year</b>
+                      <b v-else><qs-dot :set="budgetQs" :id="'r' + x.key"></qs-dot>{{ lineName(x) }} · {{ pct(x.budgetPct) }} of {{ x.pctOf || 'sales' }} <span class="muted">vs {{ pct(x.pyPct) }} last year</span></b>
                       <b class="bad">{{ signed(x.impact) }}</b>
                     </div>
                   </div>
@@ -556,8 +572,8 @@
               <div class="review-list">
                 <div v-for="(x, i) in review.issues" :key="'i' + i" class="review-item">
                   <div class="row" style="align-items:baseline;gap:8px">
-                    <span><span :class="['badge', x.severity === 'error' ? 'trend' : 'spike']">{{ x.severity === 'error' ? 'Likely error' : 'Check' }}</span>
-                      <b> {{ x.key && x.name && x.title.indexOf(x.name) === -1 ? lineName(x) + ': ' : '' }}{{ x.title }}</b></span>
+                    <span><qs-dot :set="budgetQs" :id="'i' + i"></qs-dot><span :class="['badge', x.severity === 'error' ? 'trend' : 'spike']">{{ x.severity === 'error' ? 'Likely error' : 'Check' }}</span>
+                      <b style="margin-left:4px">{{ x.key && x.name && x.title.indexOf(x.name) === -1 ? lineName(x) + ': ' : '' }}{{ x.title }}</b></span>
                     <b v-if="x.impact" class="muted" style="font-size:13px">{{ money(x.impact) }}</b>
                   </div>
                   <div class="muted">{{ x.detail }}</div>
@@ -1136,6 +1152,8 @@
       signedPct(v) { if (v == null || isNaN(v)) return '—'; return (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1) + '%'; },
       lineName(x) { return (/^\d/.test(x.key) ? x.key + ' ' : '') + x.name; },
       direction(r) { return r.section === '4000' || HIGHER_BETTER[r.key] || ['GROSS_PROFIT', 'PROFIT_AFTER_PRIME_COST', 'CONTROLLABLE_PROFIT', 'NET_PROFIT'].indexOf(r.key) !== -1 ? 1 : -1; },
+      /** The question a P&L table row stands for, if any (a flag, a missing line or a line over budget). */
+      pnlRowId(r) { return ['f', 'm', 'v'].map(p => p + r.key).filter(id => this.qsItem(this.pnlQs, id))[0] || ''; },
       lineLabel(r) { return (/^\d/.test(r.key) ? r.key + ' ' : '') + r.name; },
       propertyName(code) { const p = (this.boot.properties || []).filter(x => x.code === code)[0]; return p ? p.name : code; },
       stageSentence(r) {
@@ -1357,7 +1375,7 @@
         catch (err) { this.settings.error = err.message; }
       }
     }
-  }).component('question-panel', QuestionPanel).mount('#app');
+  }).component('question-panel', QuestionPanel).component('qs-dot', QsDot).component('qs-mode', QsMode).mount('#app');
 </script>
 </body>
 </html>

@@ -158,7 +158,8 @@
           <button class="ghost" @click="labStepWeek(1)" :disabled="!labHasStep(1)" aria-label="Next week">›</button>
         </div>
         <div class="controls">
-          <button v-if="labQs" class="ghost" @click="qsToggle(labQs)">{{ qsIsOpen(labQs) ? 'Hide the questions' : 'Choose the questions' }}</button>
+          <qs-mode v-if="labQs"></qs-mode>
+          <button v-if="labQs && !qsInline()" class="ghost" @click="qsToggle(labQs)">{{ qsIsOpen(labQs) ? 'Hide the questions' : 'Choose the questions' }}</button>
           <button v-if="labQs" @click="qsCopy(labQs)">Copy the questions ({{ qsPickedItems(labQs).length }})</button>
           <button class="ghost" @click="printPage" :disabled="!labRep">Print / save as PDF</button>
         </div>
@@ -208,7 +209,7 @@
           <p v-if="!labRep.findings.length" class="muted">Nothing outside the rules: sales within {{ labRep.rules.salesMissPct }}% of forecast, labor within {{ labRep.rules.overTargetPts }} pt of target, no overtime and no shifts added to the schedule.</p>
           <div class="grid wide">
             <div v-for="(f, i) in labRep.findings" :key="i" :class="['flag-card', { 'act-adjust': f.severity === 'bad' }]">
-              <div class="row" style="align-items:baseline"><b>{{ f.title }}</b>
+              <div class="row" style="align-items:baseline"><b><qs-dot :set="labQs" :id="f.kind + i"></qs-dot>{{ f.title }}</b>
                 <span v-if="f.impact" :class="f.severity === 'bad' ? 'bad' : 'muted'" style="font-weight:700">${{ money(f.impact) }}</span></div>
               <div class="muted" style="font-size:13px">{{ f.detail }}</div>
             </div>

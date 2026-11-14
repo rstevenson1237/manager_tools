@@ -138,7 +138,8 @@
             </select></div>
         </div>
         <div class="controls">
-          <button v-if="invQs" class="ghost" @click="qsToggle(invQs)">{{ qsIsOpen(invQs) ? 'Hide the questions' : 'Choose the questions' }}</button>
+          <qs-mode v-if="invQs"></qs-mode>
+          <button v-if="invQs && !qsInline()" class="ghost" @click="qsToggle(invQs)">{{ qsIsOpen(invQs) ? 'Hide the questions' : 'Choose the questions' }}</button>
           <button v-if="invQs" @click="qsCopy(invQs)">Copy the questions ({{ qsPickedItems(invQs).length }})</button>
           <button class="ghost" @click="printPage" :disabled="!invRep">Print / save as PDF</button>
         </div>
@@ -179,16 +180,14 @@
             <h2>Questions for the store · {{ invRep.questions.length }}</h2>
             <span class="muted">Items still worth ${{ money(invRep.highImpact) }} or more after the store's review, largest dollar impact first</span>
           </div>
-          <div v-if="invRep.questions.length" class="muted no-print" style="margin:-6px 0 10px">Ticked items go into the copied questions.
+          <div v-if="invRep.questions.length && qsInline()" class="muted no-print" style="margin:-6px 0 10px"><span class="qs-dot-legend"></span> = in the copied questions; click a circle to add or leave out.
             <button class="link" @click="qsSetAll(invQs, qsMajor(invQs), true)">Tick all</button> ·
             <button class="link" @click="qsSetAll(invQs, qsMajor(invQs), false)">Untick all</button></div>
           <p v-if="!invRep.questions.length" class="muted">Nothing of ${{ money(invRep.highImpact) }} or more. The count looks properly audited.</p>
           <div class="grid wide">
             <div v-for="q in invRep.questions" :key="q.countId + q.key" class="flag-card act-adjust">
               <div class="row" style="align-items:baseline">
-                <label style="display:flex;gap:8px;align-items:baseline;cursor:pointer">
-                  <input type="checkbox" class="no-print" :checked="qsPicked(invQs, invQ(q, true))" @change="qsSetPick(invQs, invQ(q, true), $event.target.checked)" :aria-label="'Include ' + q.item + ' in the copied questions'">
-                  <b>{{ q.item }}</b></label>
+                <b><qs-dot :set="invQs" :id="q.countId + '|' + q.key"></qs-dot>{{ q.item }}</b>
                 <span class="bad" style="font-weight:700">${{ money(q.impact) }}</span>
               </div>
               <div class="muted">{{ q.uom }} · {{ q.inventoryAcct }}<template v-if="invRep.counts.length > 1"> · {{ q.countLabel }}</template></div>
@@ -201,16 +200,14 @@
         </div>
 
         <div class="card flush" v-if="invRep.others.length">
-          <div class="head"><h2>Smaller items the rules picked · {{ invRep.others.length }}<span v-if="invOthersTicked" class="muted no-print" style="font-weight:400;font-size:13px"> · {{ invOthersTicked }} ticked to copy</span></h2>
+          <div class="head"><h2>Smaller items the rules picked · {{ invRep.others.length }}<span v-if="invOthersTicked && qsInline()" class="muted no-print" style="font-weight:400;font-size:13px"> · {{ invOthersTicked }} in the questions</span></h2>
             <button class="link no-print" @click="inv.showOthers = !inv.showOthers">{{ inv.showOthers ? 'Hide' : 'Show' }}</button></div>
           <div class="scroll" v-if="inv.showOthers">
             <table style="min-width:760px">
-              <thead><tr><th class="no-print" style="width:1%"><input type="checkbox" :checked="invOthersTicked === invRep.others.length"
-                :indeterminate.prop="invOthersTicked > 0 && invOthersTicked < invRep.others.length"
-                @change="qsSetAll(invQs, qsMinor(invQs), $event.target.checked)" aria-label="Include all smaller items in the copied questions"></th><th>Item</th><th>Dollar impact</th><th style="text-align:left;width:60%">Why</th></tr></thead>
+              <thead><tr><th v-if="qsInline()" class="no-print" style="width:1%"></th><th>Item</th><th>Dollar impact</th><th style="text-align:left;width:60%">Why</th></tr></thead>
               <tbody>
                 <tr v-for="q in invRep.others" :key="q.countId + q.key">
-                  <td class="no-print"><input type="checkbox" :checked="qsPicked(invQs, invQ(q, false))" @change="qsSetPick(invQs, invQ(q, false), $event.target.checked)" :aria-label="'Include ' + q.item + ' in the copied questions'"></td>
+                  <td v-if="qsInline()" class="no-print"><qs-dot :set="invQs" :id="q.countId + '|' + q.key"></qs-dot></td>
                   <td style="white-space:normal"><b>{{ q.item }}</b><div class="muted">{{ q.uom }}<template v-if="invRep.counts.length > 1"> · {{ q.countLabel }}</template></div></td>
                   <td>{{ money(q.impact) }}</td>
                   <td style="text-align:left;white-space:normal">{{ q.reasons[0] }}<div v-if="q.history" class="muted">{{ q.history }}</div></td>
